@@ -56,6 +56,12 @@ The repository contains application code and tests only. A private corpus may be
 used locally through source versions and content hashes, but it is not published or
 required for the test suite.
 
+## Security
+
+See [SECURITY.md](SECURITY.md) for vulnerability reporting and repository security
+guidelines. Do not commit private corpus content, review ledgers, provider tokens,
+or local environment files.
+
 ## Status
 
 Foundation work is in progress. Retrieval evaluation, Qdrant indexing, grounded
