@@ -1,0 +1,30 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.pytest_cache/
+.DS_Store
+
+# Virtual environments
+.venv
+.env
+
+# IDEs and editors Workspace files
+*.code-workspace
+.ipynb_checkpoints/
+
+# Private corpus and all of its derived artifacts
+knowledge/
+
+# Local learning artifacts and captured provider output
+notebooks/
+sample_response.json
+main.py
+src/agent.py
+src/agent_graph.py
+src/test.ipynb
+docs/script-srt-speaker-alignment.md
+cinegraph-production-implementation-plan_7769.md
