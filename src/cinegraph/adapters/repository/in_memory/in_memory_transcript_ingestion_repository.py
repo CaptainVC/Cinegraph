@@ -6,9 +6,11 @@ from uuid import UUID
 
 from cinegraph.common.error_messages import SourceErrorMessages
 from cinegraph.domain.enums.enum import SourceVersionStatus
+from cinegraph.domain.models.source.review_status import is_source_version_approved
 from cinegraph.domain.models.source.source_document import SourceDocument
 from cinegraph.domain.models.source.source_version import SourceVersion
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
+from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 
 
 class InMemoryTranscriptIngestionRepository:
@@ -88,6 +90,36 @@ class InMemoryTranscriptIngestionRepository:
         self._active_versions[source_document.source_document_id] = source_version.source_version_id
         self._segments_by_version[source_version.source_version_id] = segments
 
+    def get_active_reviewed_segments(
+        self,
+        episode: EpisodeRef,
+    ) -> tuple[TranscriptSegment, ...]:
+
+        # 1. Resolve every active source version.
+        active_source_version_ids = self._active_versions.values()
+
+        # 2. Keep approved segments for the requested episode.
+        segments = tuple(
+            segment
+            for source_version_id in active_source_version_ids
+            if is_source_version_approved(
+                self._versions[source_version_id].review_status
+            )
+            for segment in self._segments_by_version[source_version_id]
+            if segment.episode == episode
+        )
+
+        # 3. Return deterministic transcript order.
+        return tuple(
+            sorted(
+                segments,
+                key=lambda segment: (
+                    segment.start_ms,
+                    segment.end_ms,
+                    str(segment.segment_id),
+                ),
+            )
+        )
 
     @property
     def source_versions(self) -> tuple[SourceVersion, ...]:

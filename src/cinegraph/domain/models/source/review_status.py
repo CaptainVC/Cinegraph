@@ -11,3 +11,7 @@ FINAL_SOURCE_REVIEW_STATUSES = frozenset(
 
 def is_final_source_review_status(status: SourceReviewStatus) -> bool:
     return status in FINAL_SOURCE_REVIEW_STATUSES
+
+
+def is_source_version_approved(status: SourceReviewStatus) -> bool:
+    return status is SourceReviewStatus.REVIEWED
