@@ -84,10 +84,7 @@ class IngestReviewedSubtitleService:
             reviewed_at=command.reviewed_at,
         )
 
-        # 6. Canonicalize the subtitle text to produce segments and a report
-        # Canonicalization here means transforming the raw subtitle text into a structured format
-        # that can be stored and queried efficiently, while also generating a report that
-        # summarizes the canonicalization process.
+        # 6. Canonicalize the subtitle into persisted transcript segments.
         canonical_result = self._canonicalizer.canonicalize(
             source_text=source_text,
             source_locator=command.source_locator,

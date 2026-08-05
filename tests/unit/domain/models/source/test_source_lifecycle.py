@@ -138,6 +138,16 @@ def test_allows_pending_source_version_without_review_metadata() -> None:
     assert source_version.parent_source_version_id == PARENT_SOURCE_VERSION_ID
 
 
+def test_allows_rejected_source_version_with_review_metadata() -> None:
+    source_version = make_source_version(
+        review_status=SourceReviewStatus.REJECTED,
+    )
+
+    assert source_version.review_status is SourceReviewStatus.REJECTED
+    assert source_version.reviewed_by == "local-corpus-owner"
+    assert source_version.reviewed_at == REVIEWED_AT
+
+
 @pytest.mark.parametrize(
     "overrides",
     [

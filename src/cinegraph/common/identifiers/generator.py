@@ -70,3 +70,30 @@ class IdentifierGenerator:
                 language=language.value,
             ),
         )
+
+    @staticmethod
+    def episode_summary_document_id(
+        source_version_id: UUID,
+        episode_id: UUID,
+        language: Language,
+    ) -> UUID:
+        return IdentifierGenerator.episode_summary_id(
+            source_version_id,
+            episode_id,
+            language,
+        )
+
+    @staticmethod
+    def episode_summary_source_document_id(
+        episode_id: UUID,
+        language: Language,
+        origin: str,
+    ) -> UUID:
+        return uuid5(
+            IdentifierTemplates.NAMESPACE,
+            IdentifierTemplates.EPISODE_SUMMARY_SOURCE_DOCUMENT.format(
+                episode_id=episode_id,
+                language=language.value,
+                origin=origin.casefold(),
+            ),
+        )

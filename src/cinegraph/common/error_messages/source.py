@@ -27,13 +27,20 @@ class SourceErrorMessages:
         "Source version reviewed_by cannot be empty or have leading/trailing whitespace."
     )
     SOURCE_VERSION_REVIEWED_REQUIRES_REVIEW_METADATA = (
-        "A reviewed source version requires reviewed_by and reviewed_at."
+        "A final source review requires reviewed_by and reviewed_at."
     )
     SOURCE_VERSION_NON_REVIEWED_CANNOT_HAVE_REVIEW_METADATA = (
         "A non-reviewed source version cannot have review metadata."
     )
     SOURCE_VERSION_PARENT_CANNOT_EQUAL_SELF = (
         "A source version cannot name itself as its parent version."
+    )
+    SOURCE_VERSION_NOT_FOUND = "Source version was not found: {source_version_id}"
+    SOURCE_VERSION_REVIEW_REQUIRES_FINAL_DECISION = (
+        "Source versions can only be reviewed or rejected."
+    )
+    EPISODE_SUMMARY_SOURCE_VERSION_MISMATCH = (
+        "Episode summary must reference the persisted source version."
     )
     MEDIAWIKI_PAGE_TITLE_MUST_BE_TRIMMED = (
         "MediaWiki page title cannot be empty or have leading/trailing whitespace."

@@ -5,6 +5,7 @@ from uuid import UUID
 
 from cinegraph.common.error_messages import SourceErrorMessages
 from cinegraph.domain.enums.enum import RightsStatus, SourceAcquisitionMethod, SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.models.source.review_status import is_final_source_review_status
 
 from cinegraph.domain.exceptions.errors import InvalidModelError
 
@@ -50,7 +51,7 @@ class SourceVersion:
         has_reviewer = self.reviewed_by is not None
         was_reviewed_at = self.reviewed_at is not None
 
-        if self.review_status == SourceReviewStatus.REVIEWED:
+        if is_final_source_review_status(self.review_status):
             if not has_reviewer or not was_reviewed_at:
                 raise InvalidModelError(
                     SourceErrorMessages.SOURCE_VERSION_REVIEWED_REQUIRES_REVIEW_METADATA

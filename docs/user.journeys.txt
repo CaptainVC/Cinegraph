@@ -1,0 +1,20 @@
+Given Maya has watched Episode 1 only
+When she asks about an event explained in Episode 3
+Then CineGraph does not retrieve Episode 3 evidence
+And it responds with a spoiler-safe refusal or an answer limited to Episode 1
+
+Given Anil has watched all three Episodes
+When he asks about an event explained in Episode 2
+Then CineGraph does retrieve Episode 2 evidence
+And it responds with an answer with proper connecting dots to related events if any
+
+Given Shaurya has logged in
+And connected his jellyfin
+When he ask about an event in the show
+Then it responds in polite refusal about that event but actually responds with some general synopsis about the show
+
+Given Arya has logged in
+And connected her jellyfin
+And she has watched Episodes 1 and 2
+When she ask about an event in the episode 2
+And it responds with a spoiler free answer with proper connecting dots to related events if any

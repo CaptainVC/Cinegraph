@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from cinegraph.common.identifiers import IdentifierGenerator
+from cinegraph.domain.enums.enum import Language
 
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
@@ -64,4 +65,24 @@ def test_generates_deterministic_transcript_segment_id() -> None:
         1_000,
         2_000,
         "Different dialogue.",
+    )
+
+
+def test_generates_case_insensitive_episode_summary_source_document_id() -> None:
+    first_id = IdentifierGenerator.episode_summary_source_document_id(
+        EPISODE_ID,
+        Language.ENGLISH,
+        "Wikipedia",
+    )
+    second_id = IdentifierGenerator.episode_summary_source_document_id(
+        EPISODE_ID,
+        Language.ENGLISH,
+        "wikipedia",
+    )
+
+    assert first_id == second_id
+    assert first_id != IdentifierGenerator.episode_summary_source_document_id(
+        EPISODE_ID,
+        Language.ENGLISH,
+        "another-provider",
     )
