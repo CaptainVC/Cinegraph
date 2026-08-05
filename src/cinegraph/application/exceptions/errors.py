@@ -1,7 +1,7 @@
 
 from uuid import UUID
 
-from cinegraph.common.error_messages import WatchErrorMessages
+from cinegraph.common.error_messages import SourceErrorMessages, WatchErrorMessages
 
 
 class ProfileWatchStateNotFoundError(LookupError):
@@ -20,5 +20,13 @@ class SeasonNotFoundError(LookupError):
             WatchErrorMessages.NO_SEASON_FOUND_FOR_SERIES_ID.format(
                 series_id=series_id,
                 season_id=season_id,
+            )
+        )
+
+class SourceVersionNotFoundError(LookupError):
+    def __init__(self, source_version_id: UUID) -> None:
+        super().__init__(
+            SourceErrorMessages.SOURCE_VERSION_NOT_FOUND.format(
+                source_version_id=source_version_id,
             )
         )

@@ -13,3 +13,7 @@ class IdentifierTemplates:
     EPISODE_SUMMARY = (
         "cinegraph:episode-summary:{source_version_id}:{episode_id}:{language}"
     )
+    EPISODE_SUMMARY_SOURCE_DOCUMENT = (
+        "cinegraph:source-document:episode-summary:"
+        "{episode_id}:{language}:{origin}"
+    )
