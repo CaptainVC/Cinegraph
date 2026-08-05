@@ -6,6 +6,7 @@ from cinegraph.common.error_messages.subtitle import SubtitleErrorMessages
 from cinegraph.common.error_messages.summary import SummaryErrorMessages
 from cinegraph.common.error_messages.transcript import TranscriptErrorMessages
 from cinegraph.common.error_messages.watch import WatchErrorMessages
+from cinegraph.common.error_messages.workflow import WorkflowErrorMessages
 
 __all__ = [
     "CatalogueErrorMessages",
@@ -16,4 +17,5 @@ __all__ = [
     "SummaryErrorMessages",
     "TranscriptErrorMessages",
     "WatchErrorMessages",
+    "WorkflowErrorMessages",
 ]
