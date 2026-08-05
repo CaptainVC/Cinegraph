@@ -4,6 +4,7 @@ from cinegraph.application.models.grounded_answer import (
     GroundedAnswerQuery,
     GroundedAnswerResult,
     ModelEvidence,
+    ModelDraft,
     ModelRequest,
 )
 from cinegraph.application.models.search_visible_episode_segments import (
@@ -26,9 +27,9 @@ class GroundedAnswerService:
         self._search_service = search_service
         self._chat_model_gateway = chat_model_gateway
 
-    def execute(self, query: GroundedAnswerQuery) -> GroundedAnswerResult:
-
-        # 1. Map onto the shared visible-segment search contract.
+    def retrieve_visible_segments(
+        self, query: GroundedAnswerQuery
+    ) -> tuple[TranscriptSegment, ...]:
         search_result = self._search_service.execute(
             SearchVisibleEpisodeSegmentsQuery(
                 query=query.question,
@@ -38,25 +39,16 @@ class GroundedAnswerService:
                 limit=query.limit,
             )
         )
+        return tuple(match.segment for match in search_result.matches)
 
-        # 2. Build evidence only from ranked transcript segments actually returned.
-        evidence_by_segment_id: dict[UUID, TranscriptSegment] = {
-            match.segment.segment_id: match.segment
-            for match in search_result.matches
-        }
-
-        # 3. No visible matching evidence: refuse deterministically, no gateway call.
-        if not evidence_by_segment_id:
-            return GroundedAnswerResult(
-                answer=None,
-                citations=(),
-                is_safe_refusal=True,
-            )
-
-        # 4. Call the gateway with transcript evidence only; summaries stay context-only.
-        draft = self._chat_model_gateway.generate_answer(
+    def draft_answer(
+        self,
+        question: str,
+        visible_segments: tuple[TranscriptSegment, ...],
+    ) -> ModelDraft:
+        return self._chat_model_gateway.generate_answer(
             ModelRequest(
-                question=query.question,
+                question=question,
                 evidence=tuple(
                     ModelEvidence(
                         segment_id=segment.segment_id,
@@ -65,12 +57,20 @@ class GroundedAnswerService:
                         end_ms=segment.end_ms,
                         text=segment.text,
                     )
-                    for segment in evidence_by_segment_id.values()
+                    for segment in visible_segments
                 ),
             )
         )
 
-        # 5. Reject drafts citing an unknown or repeated transcript segment.
+    def validate_draft(
+        self,
+        visible_segments: tuple[TranscriptSegment, ...],
+        draft: ModelDraft,
+    ) -> GroundedAnswerResult:
+        evidence_by_segment_id: dict[UUID, TranscriptSegment] = {
+            segment.segment_id: segment for segment in visible_segments
+        }
+
         seen_segment_ids: set[UUID] = set()
         for segment_id in draft.cited_segment_ids:
             if segment_id not in evidence_by_segment_id:
@@ -91,3 +91,19 @@ class GroundedAnswerService:
             ),
             is_safe_refusal=False,
         )
+
+    def execute(self, query: GroundedAnswerQuery) -> GroundedAnswerResult:
+        # 1. Retrieve ranked visible transcript segments.
+        visible_segments = self.retrieve_visible_segments(query)
+
+        # 2. No visible matching evidence: refuse deterministically, no gateway call.
+        if not visible_segments:
+            return GroundedAnswerResult(
+                answer=None,
+                citations=(),
+                is_safe_refusal=True,
+            )
+
+        # 3. Draft from visible evidence, then validate cited segments.
+        draft = self.draft_answer(query.question, visible_segments)
+        return self.validate_draft(visible_segments, draft)

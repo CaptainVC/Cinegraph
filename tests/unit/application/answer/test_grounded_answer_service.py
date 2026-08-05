@@ -107,6 +107,44 @@ def test_visible_evidence_is_sole_model_input_and_produces_matched_citations() -
     assert result.is_safe_refusal is False
 
 
+def test_retrieve_visible_segments_preserves_ranked_order_without_gateway_call() -> None:
+    first_match = segment(segment_id=1, start_ms=10_000, text="First match.")
+    second_match = segment(segment_id=2, start_ms=20_000, text="Second match.")
+    search_service = StubSearchVisibleEpisodeSegmentsService(
+        search_result(first_match, second_match)
+    )
+    gateway = StubChatModelGateway(
+        ModelDraft(answer="should not be produced", cited_segment_ids=())
+    )
+    service = GroundedAnswerService(search_service, gateway)
+
+    visible_segments = service.retrieve_visible_segments(query())
+
+    assert visible_segments == (first_match, second_match)
+    assert gateway.requests == []
+
+
+def test_validate_draft_maps_citations_to_visible_segments() -> None:
+    first_match = segment(segment_id=1, start_ms=10_000, text="First match.")
+    second_match = segment(segment_id=2, start_ms=20_000, text="Second match.")
+    service = GroundedAnswerService(
+        StubSearchVisibleEpisodeSegmentsService(search_result()),
+        StubChatModelGateway(ModelDraft(answer="unused", cited_segment_ids=())),
+    )
+
+    result = service.validate_draft(
+        (first_match, second_match),
+        ModelDraft(
+            answer="Both matches.",
+            cited_segment_ids=(second_match.segment_id, first_match.segment_id),
+        ),
+    )
+
+    assert result.answer == "Both matches."
+    assert result.citations == (second_match, first_match)
+    assert result.is_safe_refusal is False
+
+
 def test_gateway_not_called_when_no_safe_matches_exist() -> None:
     search_service = StubSearchVisibleEpisodeSegmentsService(search_result())
     gateway = StubChatModelGateway(
