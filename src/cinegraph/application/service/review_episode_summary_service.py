@@ -6,12 +6,14 @@ from cinegraph.ports.repository.episode_summary_ingestion_repository import Epis
 
 class ReviewEpisodeSummaryService:
 
+    # Initializes the object with its required state.
     def __init__(
             self,
             repository: EpisodeSummaryIngestionRepository,
     ) -> None:
         self._repository = repository
 
+    # Executes the operation and returns its result.
     def execute(
             self,
             command: ReviewEpisodeSummaryCommand,

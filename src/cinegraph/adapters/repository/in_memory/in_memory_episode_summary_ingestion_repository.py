@@ -21,6 +21,7 @@ class EpisodeSummaryIngestion:
 
 
 class InMemoryEpisodeSummaryIngestionRepository:
+    # Initializes the object with its required state.
     def __init__(self):
         self._documents: dict[UUID, SourceDocument] = {}
         self._versions: dict[UUID, SourceVersion] = {}
@@ -95,12 +96,14 @@ class InMemoryEpisodeSummaryIngestionRepository:
         )
         self._summaries_by_version[source_version.source_version_id] = summary
 
+    # Gets and returns the requested value.
     def get_source_version(
         self,
         source_version_id: UUID
     ) -> SourceVersion | None:
         return self._versions.get(source_version_id)
 
+    # Updates the requested value in the repository.
     def update_source_version_review_status(
         self,
         source_version_id: UUID,
@@ -130,6 +133,7 @@ class InMemoryEpisodeSummaryIngestionRepository:
         self._versions[source_version_id] = updated_source_version
         return updated_source_version
 
+    # Gets and returns the requested value.
     def get_active_reviewed_summary(
         self,
         source_document_id: UUID,
@@ -153,9 +157,11 @@ class InMemoryEpisodeSummaryIngestionRepository:
         )
 
     @property
+    # Processes the supplied source versions values.
     def source_versions(self) -> tuple[SourceVersion, ...]:
         return tuple(self._versions.values())
 
     @property
+    # Processes the supplied summaries values.
     def summaries(self) -> tuple[EpisodeSummaryDocument, ...]:
         return tuple(self._summaries_by_version.values())

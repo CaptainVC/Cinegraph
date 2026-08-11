@@ -11,6 +11,7 @@ class Series:
     series_name: str
     seasons: tuple[Season, ...]
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if not self.series_name or self.series_name.strip() != self.series_name:
             raise InvalidModelError(

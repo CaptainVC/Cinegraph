@@ -10,12 +10,15 @@ _SOURCE_STATUS_FIELD = "source_status"
 _REVIEW_STATUS_FIELD = "review_status"
 
 
+# Compiles the supplied domain scope into the adapter representation.
 def compile_retrieval_scope_filter(
     scope: RetrievalScope,
 ) -> models.Filter | None:
+    # Avoid emitting a filter that could match documents when no episode is visible.
     if not scope.episode_scopes:
         return None
 
+    # Build one episode-specific visibility branch for each permitted scope.
     visibility_filters = []
     for episode_scope in scope.episode_scopes:
         conditions = [
@@ -33,6 +36,7 @@ def compile_retrieval_scope_filter(
             )
         visibility_filters.append(models.Filter(must=conditions))
 
+    # Combine series, source, review, and episode visibility constraints.
     return models.Filter(
         must=[
             models.FieldCondition(

@@ -11,21 +11,25 @@ from cinegraph.domain.retrieval.retrieval_scope import (
 
 
 class RetrievalScopeCompiler:
+    # Initializes the object with its required state.
     def __init__(self, spoiler_policy: SpoilerPolicy) -> None:
         self._spoiler_policy = spoiler_policy
 
+    # Compiles the supplied domain scope into the adapter representation.
     def compile(
         self,
         series_id: UUID,
         candidate_episodes: tuple[EpisodeRef, ...],
         watch_state: ProfileWatchState | None,
     ) -> RetrievalScope:
+        # Reject candidate episodes that belong to a different series.
         for episode in candidate_episodes:
             if episode.series_id != series_id:
                 raise ValueError(
                     RetrievalErrorMessages.CANDIDATE_EPISODES_MUST_MATCH_SERIES
                 )
 
+        # Keep fully accessible episodes and bounded partial visibility scopes.
         episode_scopes = []
         for episode in candidate_episodes:
             if self._spoiler_policy.can_access((episode,), watch_state):
@@ -46,6 +50,7 @@ class RetrievalScopeCompiler:
                     )
                 )
 
+        # Return the compiled scope consumed by retrieval adapters.
         return RetrievalScope(
             series_id=series_id,
             episode_scopes=tuple(episode_scopes),

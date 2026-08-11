@@ -54,6 +54,7 @@ class AlignmentReport:
     fallback_labelled_lines: int
     unresolved_lines: tuple[UnresolvedLine, ...]
 
+    # Processes the supplied to json values.
     def to_json(self) -> str:
         return json.dumps(
             {

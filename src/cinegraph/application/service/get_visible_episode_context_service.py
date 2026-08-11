@@ -13,6 +13,7 @@ from cinegraph.ports.subtitle_processing.transcript_segment_reader import Transc
 
 
 class GetVisibleEpisodeContextService:
+    # Initializes the object with its required state.
     def __init__(
         self,
         summary_service: GetVisibleEpisodeSummaryService,
@@ -23,6 +24,7 @@ class GetVisibleEpisodeContextService:
         self._transcript_reader = transcript_reader
         self._spoiler_policy = spoiler_policy
 
+    # Executes the operation and returns its result.
     def execute(
         self,
         query: GetVisibleEpisodeContextQuery,

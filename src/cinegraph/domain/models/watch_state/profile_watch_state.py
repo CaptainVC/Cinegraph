@@ -16,6 +16,7 @@ class ProfileWatchState:
     spoiler_mode: SpoilerMode = SpoilerMode.STRICT
     version: int = 0
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if not self.profile_id:
             raise InvalidModelError(WatchErrorMessages.PROFILE_ID_CANNOT_BE_EMPTY)
@@ -39,6 +40,7 @@ class ProfileWatchState:
                 WatchErrorMessages.PROFILE_WATCH_STATE_VERSION_CANNOT_BE_NEGATIVE
             )
 
+    # Processes the supplied series watch state for values.
     def series_watch_state_for(self, series_id: UUID) -> SeriesWatchState | None:
         return next(
             (
@@ -49,15 +51,19 @@ class ProfileWatchState:
             None,
         )
 
+    # Checks whether the supplied value satisfies the condition.
     def is_episode_fully_watched(self, episode: EpisodeRef) -> bool:
         series_state = self.series_watch_state_for(episode.series_id)
         return series_state.is_fully_watched(episode) if series_state else False
 
+    # Processes the supplied has episode progress values.
     def has_episode_progress(self, episode: EpisodeRef) -> bool:
         series_state = self.series_watch_state_for(episode.series_id)
         return series_state.has_progress_for(episode) if series_state else False
 
+    # Marks the requested watch state and returns the updated value.
     def mark_episode_watched(self, episode: EpisodeRef) -> "ProfileWatchState":
+        # Locate or create the series state that owns the episode update.
         existing_series_state = self.series_watch_state_for(episode.series_id)
 
         if existing_series_state is None:
@@ -70,6 +76,7 @@ class ProfileWatchState:
                 updated_series_state,
             )
         else:
+            # Replace the changed series state while preserving collection order.
             updated_series_state = existing_series_state.mark_episode_watched(episode)
             if updated_series_state is existing_series_state:
                 return self
@@ -82,13 +89,16 @@ class ProfileWatchState:
                 for state in self.series_watch_states
             )
 
+        # Return a new profile value with an incremented optimistic version.
         return replace(
                 self,
             series_watch_states=updated_series_states,
             version=self.version + 1,
         )
 
+    # Marks the requested watch state and returns the updated value.
     def mark_episode_unwatched(self, episode: EpisodeRef) -> "ProfileWatchState":
+        # Leave the immutable profile unchanged when no matching series exists.
         existing_series_state = self.series_watch_state_for(episode.series_id)
         if existing_series_state is None:
             return self
@@ -97,6 +107,7 @@ class ProfileWatchState:
         if updated_series_state is existing_series_state:
             return self
 
+        # Remove the episode progress and increment the profile version.
         return replace(
             self,
             series_watch_states=tuple(
@@ -106,10 +117,12 @@ class ProfileWatchState:
             version=self.version + 1,
         )
 
+    # Marks the requested watch state and returns the updated value.
     def mark_season_watched(
         self,
         episodes: tuple[EpisodeRef, ...],
     ) -> "ProfileWatchState":
+        # Validate that all supplied episodes identify one season before mutating state.
         series_id = self._validate_season_episodes(episodes)
         existing_series_state = self.series_watch_state_for(series_id)
         if existing_series_state is None:
@@ -135,10 +148,12 @@ class ProfileWatchState:
             version=self.version + 1,
         )
 
+    # Marks the requested watch state and returns the updated value.
     def mark_season_unwatched(
         self,
         episodes: tuple[EpisodeRef, ...],
     ) -> "ProfileWatchState":
+        # Validate the season request before locating its existing series state.
         series_id = self._validate_season_episodes(episodes)
         existing_series_state = self.series_watch_state_for(series_id)
         if existing_series_state is None:
@@ -157,6 +172,7 @@ class ProfileWatchState:
             version=self.version + 1,
         )
 
+    # Validates the supplied data against the domain rules.
     def _validate_season_episodes(self, episodes: tuple[EpisodeRef, ...]) -> UUID:
         if not episodes:
             raise InvalidModelError(

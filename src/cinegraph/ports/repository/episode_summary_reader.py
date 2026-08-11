@@ -7,6 +7,7 @@ from cinegraph.domain.models.episode_summary.episode_summary_document import (
 
 
 class EpisodeSummaryReader(Protocol):
+    # Gets and returns the requested value.
     def get_active_reviewed_summary(
         self,
         source_document_id: UUID,

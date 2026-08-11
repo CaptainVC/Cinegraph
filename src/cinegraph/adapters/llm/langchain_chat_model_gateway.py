@@ -17,6 +17,7 @@ class AnswerSchema(BaseModel):
     cited_segment_ids: tuple[UUID, ...]
 
 
+# Renders the supplied model data into text.
 def _render_evidence(evidence: ModelEvidence) -> str:
     return (
         "BEGIN_UNTRUSTED_TRANSCRIPT_EVIDENCE\n"
@@ -29,19 +30,25 @@ def _render_evidence(evidence: ModelEvidence) -> str:
     )
 
 
+# Renders the supplied model data into text.
 def _render_all_evidence(request: ModelRequest) -> str:
+    # Render each evidence item independently before joining the prompt sections.
     return "\n\n".join(_render_evidence(evidence) for evidence in request.evidence)
 
 
 class LangChainChatModelGateway:
+    # Initializes the object with its required state.
     def __init__(self, structured_runnable: Runnable) -> None:
         self._structured_runnable = structured_runnable
 
     @classmethod
+    # Processes the supplied from chat model values.
     def from_chat_model(cls, model: BaseChatModel) -> "LangChainChatModelGateway":
         return cls(build_prompt() | model.with_structured_output(AnswerSchema))
 
+    # Processes the supplied generate answer values.
     def generate_answer(self, request: ModelRequest) -> ModelDraft:
+        # Invoke the structured LangChain runnable with the question and rendered evidence.
         result = self._structured_runnable.invoke(
             {
                 "question": request.question,

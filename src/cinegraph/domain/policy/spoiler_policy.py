@@ -7,6 +7,7 @@ from cinegraph.domain.models.watch_state.profile_watch_state import EpisodeRef, 
 
 class SpoilerPolicy:
 
+    # Checks whether the requested operation is permitted.
     def can_access(
             self,
             evidence_episode_refs: Collection[EpisodeRef],
@@ -21,6 +22,7 @@ class SpoilerPolicy:
             watch_state=watch_state,
         )
 
+    # Processes the supplied accessible episode refs values.
     def accessible_episode_refs(
             self,
             evidence_episode_refs: Collection[EpisodeRef],
@@ -34,6 +36,7 @@ class SpoilerPolicy:
             if self._can_access_episode(episode_ref, watch_state)
         )
 
+    # Processes the supplied partial safe until ms for values.
     def partial_safe_until_ms_for(
             self,
             episode_ref: EpisodeRef,
@@ -49,6 +52,7 @@ class SpoilerPolicy:
             return None
         return series_watch_state.safe_until_ms_for(episode_ref)
 
+    # Processes the supplied can access episode values.
     def _can_access_episode(
             self,
             episode_ref: EpisodeRef,

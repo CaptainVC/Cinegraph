@@ -17,6 +17,7 @@ class RetrievedSegment:
 
 
 class VectorIndex(Protocol):
+    # Processes the supplied search hybrid values.
     def search_hybrid(
         self,
         query: str,

@@ -6,6 +6,7 @@ from cinegraph.common.error_messages import SourceErrorMessages, WatchErrorMessa
 
 class ProfileWatchStateNotFoundError(LookupError):
 
+    # Initializes the object with its required state.
     def __init__(self, profile_id: UUID) -> None:
         super().__init__(
             WatchErrorMessages
@@ -15,6 +16,7 @@ class ProfileWatchStateNotFoundError(LookupError):
 
 
 class SeasonNotFoundError(LookupError):
+    # Initializes the object with its required state.
     def __init__(self, series_id: UUID, season_id: UUID) -> None:
         super().__init__(
             WatchErrorMessages.NO_SEASON_FOUND_FOR_SERIES_ID.format(
@@ -24,6 +26,7 @@ class SeasonNotFoundError(LookupError):
         )
 
 class SourceVersionNotFoundError(LookupError):
+    # Initializes the object with its required state.
     def __init__(self, source_version_id: UUID) -> None:
         super().__init__(
             SourceErrorMessages.SOURCE_VERSION_NOT_FOUND.format(

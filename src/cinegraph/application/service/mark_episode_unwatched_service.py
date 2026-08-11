@@ -10,6 +10,7 @@ from cinegraph.ports.repository.watch_progress_repository import WatchProgressRe
 
 
 class MarkEpisodeUnwatchedService:
+    # Initializes the object with its required state.
     def __init__(
         self,
         repository: WatchProgressRepository,
@@ -18,6 +19,7 @@ class MarkEpisodeUnwatchedService:
         self._repository = repository
         self._clock = clock
 
+    # Executes the operation and returns its result.
     def execute(
         self,
         command: MarkEpisodeUnwatchedCommand,

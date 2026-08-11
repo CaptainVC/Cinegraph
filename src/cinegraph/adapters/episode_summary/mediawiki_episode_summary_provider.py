@@ -17,6 +17,7 @@ from cinegraph.ports.episode_summary.episode_summary_provider import (
 
 class MediaWikiEpisodeSummaryProvider(EpisodeSummaryProvider):
 
+    # Initializes the object with its required state.
     def __init__(
         self,
         client: httpx.Client,
@@ -26,6 +27,7 @@ class MediaWikiEpisodeSummaryProvider(EpisodeSummaryProvider):
         self._clock = clock
 
 
+    # Processes the supplied fetch values.
     def fetch(
         self,
         *,

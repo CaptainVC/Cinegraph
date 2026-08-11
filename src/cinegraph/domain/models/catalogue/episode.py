@@ -13,6 +13,7 @@ class Episode:
     synopsis: str | None = None
     runtime_seconds: int | None = None
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if self.episode_number < 1:
             raise InvalidModelError(

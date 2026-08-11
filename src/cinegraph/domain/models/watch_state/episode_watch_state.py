@@ -9,6 +9,7 @@ class EpisodePosition:
     season_number: int
     episode_number: int
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if self.season_number < 1:
             raise InvalidModelError(
@@ -32,6 +33,7 @@ class EpisodeWatchProgress:
     is_completed: bool = False
     safe_until_ms: int | None = None
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if self.safe_until_ms is not None and self.safe_until_ms < 0:
             raise InvalidModelError(

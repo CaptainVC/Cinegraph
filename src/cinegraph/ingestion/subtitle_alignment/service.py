@@ -27,6 +27,7 @@ FALLBACK_SKIP_PENALTY = 125.0
 FALLBACK_REASON = "Assigned by ordered fallback below the confidence threshold."
 
 
+# Processes the supplied annotate subtitle file values.
 def annotate_subtitle_file(
     *,
     source_pdf: Path,
@@ -35,6 +36,7 @@ def annotate_subtitle_file(
     report_path: Path,
     minimum_score: float = DEFAULT_MINIMUM_SCORE,
 ) -> AlignmentReport:
+    # Resolve the episode and load the script dialogue used as the alignment reference.
     episode_key = episode_key_from_subtitle_path(source_subtitle)
     dialogue_by_episode = extract_script_dialogue(source_pdf)
     script_dialogue = dialogue_by_episode.get(episode_key)
@@ -46,6 +48,7 @@ def annotate_subtitle_file(
             )
         )
 
+    # Extract subtitle dialogue while retaining the original lines for output updates.
     source_lines = read_subtitle_text(source_subtitle).splitlines(keepends=True)
     output_lines = source_lines.copy()
     subtitle_lines = _extract_dialogue_lines(source_lines)
@@ -59,6 +62,7 @@ def annotate_subtitle_file(
         )
         for line in subtitle_lines
     )
+    # Produce strict matches first, then an ordered fallback for unresolved dialogue.
     matches = align_dialogue_lines(match_inputs, script_dialogue, minimum_score)
     fallback_matches = align_dialogue_lines(
         match_inputs,
@@ -68,6 +72,7 @@ def annotate_subtitle_file(
         skip_penalty=FALLBACK_SKIP_PENALTY,
     )
 
+    # Apply labels or fallback markers while recording unresolved lines for the report.
     unresolved_lines: list[UnresolvedLine] = []
     labelled_lines = 0
     fallback_labelled_lines = 0
@@ -108,6 +113,7 @@ def annotate_subtitle_file(
         )
         labelled_lines += 1
 
+    # Persist the canonicalized subtitle and its alignment report.
     output_subtitle.parent.mkdir(parents=True, exist_ok=True)
     report_path.parent.mkdir(parents=True, exist_ok=True)
     output_subtitle.write_text("".join(remove_noise_cues(output_lines)), encoding="utf-8")
@@ -125,7 +131,9 @@ def annotate_subtitle_file(
     return report
 
 
+# Extracts the relevant values from the supplied source.
 def _extract_dialogue_lines(source_lines: list[str]) -> list[SubtitleDialogueLine]:
+    # Scan subtitle cues and retain only dialogue lines with normalized match text.
     subtitle_lines: list[SubtitleDialogueLine] = []
     cue_number = 0
     for line_number, source_line in enumerate(source_lines, start=1):

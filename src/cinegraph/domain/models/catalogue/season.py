@@ -14,6 +14,7 @@ class Season:
     season_number: int
     episodes: tuple[Episode, ...]
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if self.season_number < 1:
             raise InvalidModelError(

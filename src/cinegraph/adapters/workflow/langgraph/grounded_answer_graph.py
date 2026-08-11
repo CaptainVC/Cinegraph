@@ -26,6 +26,7 @@ class GroundedAnswerGraphState(TypedDict):
 
 
 class GroundedAnswerGraphWorkflow:
+    # Initializes the object with its required state.
     def __init__(
         self,
         service: GroundedAnswerService,
@@ -39,7 +40,9 @@ class GroundedAnswerGraphWorkflow:
         self._max_regeneration_attempts = max_regeneration_attempts
         self._graph = self._build_graph().compile()
 
+    # Executes the operation and returns its result.
     def execute(self, query: GroundedAnswerQuery) -> GroundedAnswerResult:
+        # Start the graph with an empty result and no regeneration attempts.
         final_state = self._graph.invoke(
             GroundedAnswerGraphState(
                 query=query,
@@ -57,7 +60,9 @@ class GroundedAnswerGraphWorkflow:
             )
         return result
 
+    # Builds and returns the requested structure.
     def _build_graph(self) -> StateGraph:
+        # Register workflow nodes and connect retrieval, drafting, verification, and refusal paths.
         graph = StateGraph(GroundedAnswerGraphState)
         graph.add_node("retrieve", self._retrieve)
         graph.add_node("draft", self._draft)
@@ -85,6 +90,7 @@ class GroundedAnswerGraphWorkflow:
         graph.add_edge("safe_refusal", END)
         return graph
 
+    # Processes the supplied retrieve values.
     def _retrieve(
         self, state: GroundedAnswerGraphState
     ) -> dict[str, tuple[TranscriptSegment, ...]]:
@@ -94,9 +100,11 @@ class GroundedAnswerGraphWorkflow:
             )
         }
 
+    # Processes the supplied route after retrieve values.
     def _route_after_retrieve(self, state: GroundedAnswerGraphState) -> str:
         return "draft" if state["visible_segments"] else "safe_refusal"
 
+    # Processes the supplied draft values.
     def _draft(self, state: GroundedAnswerGraphState) -> dict[str, ModelDraft]:
         return {
             "draft": self._service.draft_answer(
@@ -104,25 +112,31 @@ class GroundedAnswerGraphWorkflow:
             )
         }
 
+    # Processes the supplied verify values.
     def _verify(self, state: GroundedAnswerGraphState) -> dict[str, object]:
         draft = state["draft"]
         assert draft is not None
+        # Convert citation validation failures into graph state for routing.
         try:
             result = self._service.validate_draft(state["visible_segments"], draft)
         except ValueError:
             return {"validation_failed": True}
         return {"result": result, "validation_failed": False}
 
+    # Processes the supplied route after verify values.
     def _route_after_verify(self, state: GroundedAnswerGraphState) -> str:
+        # End valid drafts, retry failed drafts while allowed, and then refuse safely.
         if not state["validation_failed"]:
             return "end"
         if state["retry_count"] < self._max_regeneration_attempts:
             return "regenerate"
         return "safe_refusal"
 
+    # Processes the supplied regenerate values.
     def _regenerate(self, state: GroundedAnswerGraphState) -> dict[str, int]:
         return {"retry_count": state["retry_count"] + 1}
 
+    # Processes the supplied safe refusal values.
     def _safe_refusal(
         self, state: GroundedAnswerGraphState
     ) -> dict[str, GroundedAnswerResult]:

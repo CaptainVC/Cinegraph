@@ -19,6 +19,7 @@ from cinegraph.ports.llm.chat_model_gateway import ChatModelGateway
 
 
 class GroundedAnswerService:
+    # Initializes the object with its required state.
     def __init__(
         self,
         search_service: SearchVisibleEpisodeSegmentsService,
@@ -27,6 +28,7 @@ class GroundedAnswerService:
         self._search_service = search_service
         self._chat_model_gateway = chat_model_gateway
 
+    # Processes the supplied retrieve visible segments values.
     def retrieve_visible_segments(
         self, query: GroundedAnswerQuery
     ) -> tuple[TranscriptSegment, ...]:
@@ -41,6 +43,7 @@ class GroundedAnswerService:
         )
         return tuple(match.segment for match in search_result.matches)
 
+    # Processes the supplied draft answer values.
     def draft_answer(
         self,
         question: str,
@@ -62,15 +65,18 @@ class GroundedAnswerService:
             )
         )
 
+    # Validates the supplied data against the domain rules.
     def validate_draft(
         self,
         visible_segments: tuple[TranscriptSegment, ...],
         draft: ModelDraft,
     ) -> GroundedAnswerResult:
+        # Index visible evidence so cited identifiers can be checked and resolved.
         evidence_by_segment_id: dict[UUID, TranscriptSegment] = {
             segment.segment_id: segment for segment in visible_segments
         }
 
+        # Reject citations that are unknown or repeated before constructing the result.
         seen_segment_ids: set[UUID] = set()
         for segment_id in draft.cited_segment_ids:
             if segment_id not in evidence_by_segment_id:
@@ -92,6 +98,7 @@ class GroundedAnswerService:
             is_safe_refusal=False,
         )
 
+    # Executes the operation and returns its result.
     def execute(self, query: GroundedAnswerQuery) -> GroundedAnswerResult:
         # 1. Retrieve ranked visible transcript segments.
         visible_segments = self.retrieve_visible_segments(query)

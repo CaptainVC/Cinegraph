@@ -7,8 +7,10 @@ from cinegraph.domain.models.watch_state.profile_watch_state import ProfileWatch
 
 class WatchProgressRepository(Protocol):
 
+    # Gets and returns the requested value.
     def get(self, profile_id: UUID) -> ProfileWatchState | None: ...
 
+    # Persists the supplied value in the repository.
     def persist_state_change(
             self,
             watch_state: ProfileWatchState,

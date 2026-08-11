@@ -12,6 +12,7 @@ class SourceDocument:
     kind: SourceKind
     origin: str
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if not self.title or self.title.strip() != self.title:
             raise InvalidModelError(

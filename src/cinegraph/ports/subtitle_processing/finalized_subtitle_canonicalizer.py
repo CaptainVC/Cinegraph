@@ -9,6 +9,7 @@ from cinegraph.ingestion.transcript_srt.models import TranscriptIngestionResult
 
 
 class FinalizedSubtitleCanonicalizer(Protocol):
+    # Processes the supplied canonicalize values.
     def canonicalize(
             self,
             source_text: str,

@@ -9,6 +9,7 @@ from cinegraph.ports.repository.episode_summary_reader import (
 
 
 class GetVisibleEpisodeSummaryService:
+    # Initializes the object with its required state.
     def __init__(
         self,
         reader: EpisodeSummaryReader,
@@ -17,6 +18,7 @@ class GetVisibleEpisodeSummaryService:
         self._reader = reader
         self._spoiler_policy = spoiler_policy
 
+    # Executes the operation and returns its result.
     def execute(
         self,
         query: GetVisibleEpisodeSummaryQuery,

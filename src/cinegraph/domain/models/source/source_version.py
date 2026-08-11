@@ -23,6 +23,7 @@ class SourceVersion:
     reviewed_by: str | None = None
     reviewed_at: datetime | None = None
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if fullmatch(r"[0-9a-f]{64}", self.content_hash) is None:
             raise InvalidModelError(
@@ -46,6 +47,7 @@ class SourceVersion:
 
         self.validate_review_metadata()
 
+    # Validates the supplied data against the domain rules.
     def validate_review_metadata(self) -> None:
 
         has_reviewer = self.reviewed_by is not None

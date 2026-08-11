@@ -10,6 +10,7 @@ from cinegraph.ports.errors.error import ConcurrentWatchProgressUpdateError
 
 class InMemoryWatchProgressRepository:
 
+    # Initializes the object with its required state.
     def __init__(
             self,
             initial_watch_states: Iterable[ProfileWatchState] = ()
@@ -29,9 +30,11 @@ class InMemoryWatchProgressRepository:
             )
 
 
+    # Gets and returns the requested value.
     def get(self, profile_id: UUID) -> ProfileWatchState | None:
         return self._watch_states.get(profile_id)
 
+    # Persists the supplied value in the repository.
     def persist_state_change(
         self,
         watch_state: ProfileWatchState,
@@ -80,5 +83,6 @@ class InMemoryWatchProgressRepository:
         self._watch_events.extend(watch_events)
 
     @property
+    # Processes the supplied watch events values.
     def watch_events(self) -> tuple[WatchEvent, ...]:
         return tuple(self._watch_events)

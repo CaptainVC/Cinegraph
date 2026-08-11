@@ -14,12 +14,14 @@ from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 
 
 class InMemoryTranscriptIngestionRepository:
+    # Initializes the object with its required state.
     def __init__(self) -> None:
         self._documents: dict[UUID, SourceDocument] = {}
         self._versions: dict[UUID, SourceVersion] = {}
         self._active_versions: dict[UUID, UUID] = {}
         self._segments_by_version: dict[UUID, tuple[TranscriptSegment, ...]] = {}
 
+    # Finds and returns the matching value when available.
     def find_active_version_by_content_hash(
             self,
             source_document_id: UUID,
@@ -34,6 +36,7 @@ class InMemoryTranscriptIngestionRepository:
 
         return active_version
 
+    # Gets and returns the requested value.
     def get_active_version(
             self,
             source_document_id: UUID
@@ -43,6 +46,7 @@ class InMemoryTranscriptIngestionRepository:
             return None
         return self._versions[source_version_id]
 
+    # Persists the supplied value in the repository.
     def persist_new_subtitle_ingestion(
             self,
             source_document: SourceDocument,
@@ -90,6 +94,7 @@ class InMemoryTranscriptIngestionRepository:
         self._active_versions[source_document.source_document_id] = source_version.source_version_id
         self._segments_by_version[source_version.source_version_id] = segments
 
+    # Gets and returns the requested value.
     def get_active_reviewed_segments(
         self,
         episode: EpisodeRef,
@@ -122,10 +127,12 @@ class InMemoryTranscriptIngestionRepository:
         )
 
     @property
+    # Processes the supplied source versions values.
     def source_versions(self) -> tuple[SourceVersion, ...]:
         return tuple(self._versions.values())
 
     @property
+    # Processes the supplied segments values.
     def segments(self) -> tuple[TranscriptSegment, ...]:
         return tuple(
             segment

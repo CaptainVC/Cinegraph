@@ -17,6 +17,7 @@ from cinegraph.ports.subtitle_processing.subtitle_text_reader import SubtitleTex
 
 class IngestReviewedSubtitleService:
 
+    # Initializes the object with its required state.
     def __init__(
             self,
             repository: TranscriptIngestionRepository,
@@ -30,6 +31,7 @@ class IngestReviewedSubtitleService:
         self._clock = clock
 
 
+    # Executes the operation and returns its result.
     def execute(
             self,
             command: IngestReviewedSubtitleCommand

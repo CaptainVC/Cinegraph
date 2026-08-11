@@ -6,10 +6,12 @@ from cinegraph.domain.enums.enum import Language
 
 class IdentifierGenerator:
     @staticmethod
+    # Processes the supplied new id values.
     def new_id() -> UUID:
         return uuid4()
 
     @staticmethod
+    # Processes the supplied source version id values.
     def source_version_id(
         source_document_id: UUID,
         content_hash: str,
@@ -23,6 +25,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Processes the supplied speaker id values.
     def speaker_id(
         series_id: UUID,
         speaker_name: str,
@@ -36,6 +39,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Processes the supplied transcript segment id values.
     def transcript_segment_id(
         source_version_id: UUID,
         episode_id: UUID,
@@ -57,6 +61,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Processes the supplied episode summary id values.
     def episode_summary_id(
         source_version_id: UUID,
         episode_id: UUID,
@@ -72,6 +77,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Processes the supplied episode summary document id values.
     def episode_summary_document_id(
         source_version_id: UUID,
         episode_id: UUID,
@@ -84,6 +90,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Processes the supplied episode summary source document id values.
     def episode_summary_source_document_id(
         episode_id: UUID,
         language: Language,

@@ -18,6 +18,7 @@ class WatchEvent:
     source: WatchEventSource
     occurred_at: datetime
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if self.occurred_at.tzinfo is None:
             raise InvalidModelError(

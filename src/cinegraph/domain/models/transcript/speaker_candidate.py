@@ -12,6 +12,7 @@ class SpeakerCandidate:
     name: str
     confidence: float
 
+    # Validates the initialized value after construction.
     def __post_init__(self) -> None:
         if not self.name or self.name.strip() != self.name:
             raise InvalidModelError(

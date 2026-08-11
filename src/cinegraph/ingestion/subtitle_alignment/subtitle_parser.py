@@ -13,6 +13,7 @@ from cinegraph.ingestion.subtitle_alignment.patterns import (
 from cinegraph.ingestion.subtitle_alignment.text import normalize_text
 
 
+# Reads and returns the requested source content.
 def read_subtitle_text(subtitle_path: Path) -> str:
     for encoding in SUBTITLE_ENCODINGS:
         try:
@@ -26,6 +27,7 @@ def read_subtitle_text(subtitle_path: Path) -> str:
     )
 
 
+# Processes the supplied episode key from subtitle path values.
 def episode_key_from_subtitle_path(subtitle_path: Path) -> EpisodeKey:
     match = SUBTITLE_EPISODE_PATTERN.search(subtitle_path.name)
     if match is None:
@@ -40,6 +42,7 @@ def episode_key_from_subtitle_path(subtitle_path: Path) -> EpisodeKey:
     )
 
 
+# Checks whether the supplied value satisfies the condition.
 def is_dialogue_line(line: str) -> bool:
     text = EXISTING_LABEL_PATTERN.sub("", line).strip()
     if not text or is_non_dialogue_noise(text):
@@ -53,6 +56,7 @@ def is_dialogue_line(line: str) -> bool:
     return not _is_episode_title(normalized)
 
 
+# Checks whether the supplied value satisfies the condition.
 def is_non_dialogue_noise(line: str) -> bool:
     text = EXISTING_LABEL_PATTERN.sub("", line).strip()
     if not text:
@@ -73,10 +77,13 @@ def is_non_dialogue_noise(line: str) -> bool:
     return normalized.startswith("modern family") or _is_episode_title(normalized)
 
 
+# Processes the supplied remove noise cues values.
 def remove_noise_cues(lines: list[str]) -> list[str]:
+    # Buffer complete cues so noise can be removed without breaking cue structure.
     filtered_lines: list[str] = []
     cue: list[str] = []
 
+    # Processes the supplied append cue values.
     def append_cue() -> None:
         if not cue:
             return
@@ -89,6 +96,7 @@ def remove_noise_cues(lines: list[str]) -> list[str]:
         if retained_content:
             filtered_lines.extend([*cue[:2], *retained_content])
 
+    # Flush each cue at its blank separator and retain spacing between output cues.
     for line in lines:
         if not line.strip():
             append_cue()
@@ -102,6 +110,7 @@ def remove_noise_cues(lines: list[str]) -> list[str]:
     return filtered_lines
 
 
+# Processes the supplied clean generated dialogue line values.
 def _clean_generated_dialogue_line(line: str) -> str | None:
     line_ending = line[len(line.rstrip("\r\n")):]
     text = line.rstrip("\r\n")
@@ -114,12 +123,14 @@ def _clean_generated_dialogue_line(line: str) -> str | None:
     return f"{prefix}{dialogue}{line_ending}"
 
 
+# Processes the supplied is episode title values.
 def _is_episode_title(normalized: str) -> bool:
     import re
 
     return re.fullmatch(r"season \d+ episode \d+", normalized) is not None
 
 
+# Processes the supplied remove markup values.
 def _remove_markup(text: str) -> str:
     import re
 

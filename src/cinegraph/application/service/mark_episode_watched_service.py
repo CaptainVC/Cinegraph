@@ -8,6 +8,7 @@ from cinegraph.application.service.watch_event_factory import create_watch_event
 
 class MarkEpisodeWatchedService:
 
+    # Initializes the object with its required state.
     def __init__(
             self,
             repository: WatchProgressRepository,
@@ -16,6 +17,7 @@ class MarkEpisodeWatchedService:
         self._repository = repository
         self._clock = clock
 
+    # Executes the operation and returns its result.
     def execute(
             self,
             command: MarkEpisodeWatchedCommand

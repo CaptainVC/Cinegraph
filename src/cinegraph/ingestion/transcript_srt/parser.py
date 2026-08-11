@@ -5,6 +5,7 @@ from cinegraph.common.error_messages import SubtitleErrorMessages
 from cinegraph.ingestion.transcript_srt.models import ParsedSrtCue
 from cinegraph.ingestion.transcript_srt.patterns import SrtPatterns
 
+# Reads and returns the requested source content.
 def read_srt_text(source_path: Path) -> str:
     for encoding in SrtConstants.SRT_ENCODINGS:
         try:
@@ -19,6 +20,7 @@ def read_srt_text(source_path: Path) -> str:
     )
 
 
+# Parses the supplied text into structured values.
 def parse_srt(text: str) -> tuple[ParsedSrtCue, ...]:
     return tuple(
         _parse_cue(block)
@@ -27,6 +29,7 @@ def parse_srt(text: str) -> tuple[ParsedSrtCue, ...]:
     )
 
 
+# Parses the supplied text into structured values.
 def _parse_cue(block: str) -> ParsedSrtCue:
 
     # 1. Split the block into lines and extract the cue number
@@ -84,6 +87,7 @@ def _parse_cue(block: str) -> ParsedSrtCue:
     )
 
 
+# Parses the supplied text into structured values.
 def _parse_cue_number(value: str) -> int:
     try:
         cue_number = int(value.strip())
@@ -98,6 +102,7 @@ def _parse_cue_number(value: str) -> int:
     return cue_number
 
 
+# Processes the supplied timestamp ms values.
 def _timestamp_ms(value: str, cue_number: int) -> int:
     hours, minutes, seconds_and_ms = value.split(":")
     seconds, milliseconds = seconds_and_ms.split(",")

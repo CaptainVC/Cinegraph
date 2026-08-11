@@ -7,6 +7,7 @@ from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 
 
 class TranscriptSegmentReader(Protocol):
+    # Gets and returns the requested value.
     def get_active_reviewed_segments(
         self,
         episode: EpisodeRef,
