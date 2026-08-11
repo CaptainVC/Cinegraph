@@ -14,14 +14,14 @@ from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 
 
 class InMemoryTranscriptIngestionRepository:
-    # Initializes the object with its required state.
+    # Initialize in-memory source-document, version, active-version, and segment stores.
     def __init__(self) -> None:
         self._documents: dict[UUID, SourceDocument] = {}
         self._versions: dict[UUID, SourceVersion] = {}
         self._active_versions: dict[UUID, UUID] = {}
         self._segments_by_version: dict[UUID, tuple[TranscriptSegment, ...]] = {}
 
-    # Finds and returns the matching value when available.
+    # Return the active transcript version only when its content hash matches.
     def find_active_version_by_content_hash(
             self,
             source_document_id: UUID,
@@ -36,7 +36,7 @@ class InMemoryTranscriptIngestionRepository:
 
         return active_version
 
-    # Gets and returns the requested value.
+    # Return the currently active transcript version for a source document.
     def get_active_version(
             self,
             source_document_id: UUID
@@ -46,7 +46,7 @@ class InMemoryTranscriptIngestionRepository:
             return None
         return self._versions[source_version_id]
 
-    # Persists the supplied value in the repository.
+    # Validate and persist a new subtitle version and its transcript segments.
     def persist_new_subtitle_ingestion(
             self,
             source_document: SourceDocument,
@@ -55,25 +55,21 @@ class InMemoryTranscriptIngestionRepository:
             segments: tuple[TranscriptSegment, ...],
     ) -> None:
 
-        # 1. Try to get the stored document by its ID.
-        # If it doesn't exist, store it.
-        # If it does exist, check if it's the same as the one being persisted.
+        # Preserve the stable document record and reject metadata conflicts.
         stored_document = self._documents.get(source_document.source_document_id)
         if stored_document is None:
             self._documents[source_document.source_document_id] = source_document
         elif stored_document != source_document:
             raise ValueError(SourceErrorMessages.SOURCE_DOCUMENT_ID_METADATA_CONFLICT)
 
-        # 2. Store the new version.
-        # If a version with the same ID already exists, raise an error.
+        # Reject writes based on an active version that changed since the caller read it.
         current_active_version = self.get_active_version(
             source_document.source_document_id
         )
         if current_active_version != previous_active_version:
             raise RuntimeError(SourceErrorMessages.ACTIVE_SOURCE_VERSION_CONFLICT)
 
-        # 3. Store the new version and update the active version mapping.
-        # If a version with the same ID already exists, raise an error.
+        # Ensure every segment belongs to the version being persisted.
         if any(
             segment.source_version_id != source_version.source_version_id
             for segment in segments
@@ -82,28 +78,28 @@ class InMemoryTranscriptIngestionRepository:
                 SourceErrorMessages.TRANSCRIPT_SEGMENT_SOURCE_VERSION_MISMATCH
             )
 
-        # 4. Mark the previous active version as retired, if it exists.
+        # Retire the previous active version before activating the new one.
         if previous_active_version is not None:
             self._versions[previous_active_version.source_version_id] = replace(
                 previous_active_version,
                 status=SourceVersionStatus.RETIRED,
             )
 
-        # 5. Add the new version and its segments to the class object.
+        # Store the new version, active mapping, and segment tuple.
         self._versions[source_version.source_version_id] = source_version
         self._active_versions[source_document.source_document_id] = source_version.source_version_id
         self._segments_by_version[source_version.source_version_id] = segments
 
-    # Gets and returns the requested value.
+    # Return approved segments from active versions for one episode in time order.
     def get_active_reviewed_segments(
         self,
         episode: EpisodeRef,
     ) -> tuple[TranscriptSegment, ...]:
 
-        # 1. Resolve every active source version.
+        # Inspect segments belonging only to currently active source versions.
         active_source_version_ids = self._active_versions.values()
 
-        # 2. Keep approved segments for the requested episode.
+        # Keep approved segments belonging to the requested episode.
         segments = tuple(
             segment
             for source_version_id in active_source_version_ids
@@ -114,7 +110,7 @@ class InMemoryTranscriptIngestionRepository:
             if segment.episode == episode
         )
 
-        # 3. Return deterministic transcript order.
+        # Sort by cue timing and identifier for deterministic retrieval.
         return tuple(
             sorted(
                 segments,
@@ -127,12 +123,12 @@ class InMemoryTranscriptIngestionRepository:
         )
 
     @property
-    # Processes the supplied source versions values.
+    # Expose all stored transcript source versions in insertion order.
     def source_versions(self) -> tuple[SourceVersion, ...]:
         return tuple(self._versions.values())
 
     @property
-    # Processes the supplied segments values.
+    # Expose all stored transcript segments across source versions.
     def segments(self) -> tuple[TranscriptSegment, ...]:
         return tuple(
             segment

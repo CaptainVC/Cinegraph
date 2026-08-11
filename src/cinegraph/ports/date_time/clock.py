@@ -2,5 +2,5 @@ from typing import Protocol
 from datetime import datetime
 
 class Clock(Protocol):
-    # Processes the supplied now utc values.
+    # Return the current timezone-aware UTC timestamp.
     def now_utc(self) -> datetime: ...

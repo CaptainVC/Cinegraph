@@ -17,7 +17,7 @@ from cinegraph.ports.subtitle_processing.transcript_segment_reader import (
 
 
 class SearchVisibleSeasonSegmentsService:
-    # Initializes the object with its required state.
+    # Store the season catalogue, reviewed-segment reader, and spoiler policy.
     def __init__(
         self,
         catalogue: SeasonEpisodeCatalog,
@@ -28,7 +28,7 @@ class SearchVisibleSeasonSegmentsService:
         self._transcript_reader = transcript_reader
         self._spoiler_policy = spoiler_policy
 
-    # Executes the operation and returns its result.
+    # Filter a season's reviewed segments by visibility, score matches, and cap the results.
     def execute(
         self,
         query: SearchVisibleSeasonSegmentsQuery,

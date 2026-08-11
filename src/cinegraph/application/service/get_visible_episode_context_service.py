@@ -13,7 +13,7 @@ from cinegraph.ports.subtitle_processing.transcript_segment_reader import Transc
 
 
 class GetVisibleEpisodeContextService:
-    # Initializes the object with its required state.
+    # Store summary, transcript, and spoiler-policy services for context assembly.
     def __init__(
         self,
         summary_service: GetVisibleEpisodeSummaryService,
@@ -24,12 +24,12 @@ class GetVisibleEpisodeContextService:
         self._transcript_reader = transcript_reader
         self._spoiler_policy = spoiler_policy
 
-    # Executes the operation and returns its result.
+    # Combine visible summary and transcript context, applying a partial-watch cutoff when needed.
     def execute(
         self,
         query: GetVisibleEpisodeContextQuery,
     ) -> GetVisibleEpisodeContextResult:
-        # 1. Resolve summary visibility for this profile.
+        # Resolve summary visibility for this profile.
         summary_result = self._summary_service.execute(
             GetVisibleEpisodeSummaryQuery(
                 source_document_id=query.summary_source_document_id,
@@ -37,12 +37,12 @@ class GetVisibleEpisodeContextService:
             )
         )
 
-        # 2. Load approved transcript segments for the episode.
+        # Load approved transcript segments before applying episode visibility.
         segments = self._transcript_reader.get_active_reviewed_segments(
             query.episode
         )
 
-        # 3. Return all segments for a fully accessible episode.
+        # Fully accessible episodes expose every approved segment.
         if self._spoiler_policy.can_access(
             evidence_episode_refs=(query.episode,),
             watch_state=query.profile_watch_state,
@@ -54,7 +54,7 @@ class GetVisibleEpisodeContextService:
                 summary_is_model_context_only=False,
             )
 
-        # 4. Restrict partial watches to segments completed by the cutoff.
+        # Partial watches expose only segments ending at or before the safe cutoff.
         safe_until_ms = self._spoiler_policy.partial_safe_until_ms_for(
             query.episode,
             query.profile_watch_state,
@@ -73,7 +73,7 @@ class GetVisibleEpisodeContextService:
             if segment.end_ms <= safe_until_ms
         )
 
-        # 5. Keep the summary model-only for partial-watch context.
+        # Keep partially visible summaries available only to downstream model context.
         return GetVisibleEpisodeContextResult(
             summary=summary_result.summary,
             transcript_segments=visible_segments,

@@ -10,7 +10,7 @@ _SOURCE_STATUS_FIELD = "source_status"
 _REVIEW_STATUS_FIELD = "review_status"
 
 
-# Compiles the supplied domain scope into the adapter representation.
+# Compile visible episode scopes into a Qdrant filter with per-episode time bounds.
 def compile_retrieval_scope_filter(
     scope: RetrievalScope,
 ) -> models.Filter | None:

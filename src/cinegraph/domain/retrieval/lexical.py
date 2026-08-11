@@ -8,14 +8,14 @@ from cinegraph.domain.models.transcript.transcript_segment import (
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 
-# Normalizes the supplied value for consistent processing.
+# Normalize text into an accent-insensitive set of lowercase search tokens.
 def normalize_tokens(text: str) -> frozenset[str]:
     return frozenset(
         TOKEN_PATTERN.findall(text.casefold())
     )
 
 
-# Processes the supplied lexical score values.
+# Score query-token overlap against a transcript segment's normalized text.
 def lexical_score(
     query: str,
     segment: TranscriptSegment,

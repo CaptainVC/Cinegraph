@@ -6,7 +6,7 @@ from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 
 
 class InMemorySeasonEpisodeCatalog:
-    # Initializes the object with its required state.
+    # Index episode references by their series and season identifiers.
     def __init__(self, episode_refs: Iterable[EpisodeRef] = ()) -> None:
         episode_refs_by_season: dict[tuple[UUID, UUID], list[EpisodeRef]] = {}
         for episode_ref in episode_refs:
@@ -26,7 +26,7 @@ class InMemorySeasonEpisodeCatalog:
                 sorted(season_episode_refs, key=lambda episode_ref: episode_ref.position)
             )
 
-    # Gets and returns the requested value.
+    # Return the episode references catalogued for a series season, if indexed.
     def get_episode_refs(
         self,
         series_id: UUID,

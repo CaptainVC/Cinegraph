@@ -19,7 +19,7 @@ SYSTEM_PROMPT = (
 HUMAN_PROMPT = "Question: {question}\n\nEvidence:\n{evidence}"
 
 
-# Builds and returns the requested structure.
+# Build the system and human messages used for grounded, citation-bearing answers.
 def build_prompt() -> ChatPromptTemplate:
     return ChatPromptTemplate.from_messages(
         [

@@ -13,7 +13,7 @@ DEFAULT_SKIP_PENALTY = 40.0
 MINIMUM_MATCH_FLOOR = 65.0
 
 
-# Aligns the supplied source lines with the reference dialogue.
+# Align subtitle lines to script dialogue with dynamic-programming match and skip paths.
 def align_dialogue_lines(
     subtitle_lines: tuple[SubtitleDialogueLine, ...],
     script_dialogue: tuple[ScriptDialogue, ...],
@@ -21,13 +21,13 @@ def align_dialogue_lines(
     match_floor: float | None = None,
     skip_penalty: float = DEFAULT_SKIP_PENALTY,
 ) -> dict[int, AlignmentMatch]:
-    # Establish scoring thresholds before building the dynamic-programming table.
+    # Derive the minimum score accepted by match transitions.
     subtitle_count = len(subtitle_lines)
     script_count = len(script_dialogue)
     if match_floor is None:
         match_floor = max(MINIMUM_MATCH_FLOOR, minimum_score - 25.0)
 
-    # Precompute pairwise similarity scores for every subtitle and script line.
+    # Cache every subtitle-to-script similarity score used by the table.
     scores = [
         [score_match(subtitle.text, script.text) for script in script_dialogue]
         for subtitle in subtitle_lines
@@ -41,11 +41,11 @@ def align_dialogue_lines(
     ]
     values[0][0] = 0.0
 
-    # Initialize the boundary paths for skipping either input sequence.
+    # Seed paths that skip leading script or subtitle lines.
     for script_index in range(1, script_count + 1):
         values[0][script_index] = values[0][script_index - 1] - skip_penalty
         steps[0][script_index] = "skip_script"
-    # Select the best match-or-skip transition for each table cell.
+    # Choose the highest-scoring match, repeat, or skip transition for each cell.
     for subtitle_index in range(1, subtitle_count + 1):
         values[subtitle_index][0] = values[subtitle_index - 1][0] - skip_penalty
         steps[subtitle_index][0] = "skip_subtitle"
@@ -81,7 +81,7 @@ def align_dialogue_lines(
                 key=lambda candidate: candidate[0],
             )
 
-    # Backtrack the chosen transitions into subtitle-line to dialogue matches.
+    # Backtrack the optimal transitions into subtitle-line to dialogue matches.
     matches: dict[int, AlignmentMatch] = {}
     subtitle_index = subtitle_count
     script_index = script_count
@@ -116,12 +116,12 @@ def align_dialogue_lines(
     return matches
 
 
-# Scores the supplied values for their degree of correspondence.
+# Return the best normalized similarity score between subtitle and script text.
 def score_match(subtitle_text: str, script_text: str) -> float:
     return _match_scores(subtitle_text, script_text)[0]
 
 
-# Processes the supplied match scores values.
+# Compute partial and full normalized scores, short-circuiting empty inputs.
 def _match_scores(subtitle_text: str, script_text: str) -> tuple[float, float]:
     normalized_subtitle = normalize_text(subtitle_text)
     normalized_script = normalize_text(script_text)

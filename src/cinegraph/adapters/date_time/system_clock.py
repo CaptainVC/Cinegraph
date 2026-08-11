@@ -4,6 +4,6 @@ from datetime import UTC, datetime
 
 class SystemClock:
 
-    # Processes the supplied now utc values.
+    # Return the current timezone-aware UTC timestamp.
     def now_utc(self) -> datetime:
         return datetime.now(UTC)

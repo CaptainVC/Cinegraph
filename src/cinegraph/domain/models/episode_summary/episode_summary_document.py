@@ -22,7 +22,7 @@ class EpisodeSummaryDocument:
     revision_timestamp: datetime
     attribution: str
 
-    # Validates the initialized value after construction.
+    # Require trimmed summary text and metadata consistent with its episode and source.
     def __post_init__(self) -> None:
         if not self.text or self.text.strip() != self.text:
             raise InvalidModelError(

@@ -2,7 +2,7 @@ import re
 import unicodedata
 
 
-# Normalizes the supplied value for consistent processing.
+# Normalize text for case-insensitive, accent-insensitive dialogue matching.
 def normalize_text(value: str) -> str:
     normalized = unicodedata.normalize("NFKD", value).casefold()
     normalized = "".join(
@@ -11,6 +11,6 @@ def normalize_text(value: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", normalized).strip()
 
 
-# Normalizes the supplied value for consistent processing.
+# Collapse speaker whitespace and normalize names to uppercase for matching.
 def normalize_speaker(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip().upper()

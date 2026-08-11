@@ -26,7 +26,7 @@ class GroundedAnswerGraphState(TypedDict):
 
 
 class GroundedAnswerGraphWorkflow:
-    # Initializes the object with its required state.
+    # Validate retry settings and compile the grounded-answer workflow graph.
     def __init__(
         self,
         service: GroundedAnswerService,
@@ -40,7 +40,7 @@ class GroundedAnswerGraphWorkflow:
         self._max_regeneration_attempts = max_regeneration_attempts
         self._graph = self._build_graph().compile()
 
-    # Executes the operation and returns its result.
+    # Run retrieval, drafting, citation verification, retry, and refusal routing.
     def execute(self, query: GroundedAnswerQuery) -> GroundedAnswerResult:
         # Start the graph with an empty result and no regeneration attempts.
         final_state = self._graph.invoke(
@@ -60,7 +60,7 @@ class GroundedAnswerGraphWorkflow:
             )
         return result
 
-    # Builds and returns the requested structure.
+    # Connect workflow nodes for retrieval, drafting, verification, retry, and refusal.
     def _build_graph(self) -> StateGraph:
         # Register workflow nodes and connect retrieval, drafting, verification, and refusal paths.
         graph = StateGraph(GroundedAnswerGraphState)
@@ -90,7 +90,7 @@ class GroundedAnswerGraphWorkflow:
         graph.add_edge("safe_refusal", END)
         return graph
 
-    # Processes the supplied retrieve values.
+    # Retrieve the spoiler-safe transcript segments for the query.
     def _retrieve(
         self, state: GroundedAnswerGraphState
     ) -> dict[str, tuple[TranscriptSegment, ...]]:
@@ -100,11 +100,11 @@ class GroundedAnswerGraphWorkflow:
             )
         }
 
-    # Processes the supplied route after retrieve values.
+    # Select drafting when evidence exists; otherwise select the safe-refusal branch.
     def _route_after_retrieve(self, state: GroundedAnswerGraphState) -> str:
         return "draft" if state["visible_segments"] else "safe_refusal"
 
-    # Processes the supplied draft values.
+    # Draft an answer from the retrieved visible transcript segments.
     def _draft(self, state: GroundedAnswerGraphState) -> dict[str, ModelDraft]:
         return {
             "draft": self._service.draft_answer(
@@ -112,7 +112,7 @@ class GroundedAnswerGraphWorkflow:
             )
         }
 
-    # Processes the supplied verify values.
+    # Validate draft citations and store either the result or a retry signal.
     def _verify(self, state: GroundedAnswerGraphState) -> dict[str, object]:
         draft = state["draft"]
         assert draft is not None
@@ -123,7 +123,7 @@ class GroundedAnswerGraphWorkflow:
             return {"validation_failed": True}
         return {"result": result, "validation_failed": False}
 
-    # Processes the supplied route after verify values.
+    # End on a valid draft, retry within the limit, or refuse after exhausted retries.
     def _route_after_verify(self, state: GroundedAnswerGraphState) -> str:
         # End valid drafts, retry failed drafts while allowed, and then refuse safely.
         if not state["validation_failed"]:
@@ -132,11 +132,11 @@ class GroundedAnswerGraphWorkflow:
             return "regenerate"
         return "safe_refusal"
 
-    # Processes the supplied regenerate values.
+    # Increment the regeneration count before returning to the drafting node.
     def _regenerate(self, state: GroundedAnswerGraphState) -> dict[str, int]:
         return {"retry_count": state["retry_count"] + 1}
 
-    # Processes the supplied safe refusal values.
+    # Produce the deterministic result used when evidence or citations are unsafe.
     def _safe_refusal(
         self, state: GroundedAnswerGraphState
     ) -> dict[str, GroundedAnswerResult]:

@@ -12,7 +12,7 @@ from cinegraph.ingestion.subtitle_alignment.patterns import (
 from cinegraph.ingestion.subtitle_alignment.text import normalize_speaker
 
 
-# Extracts the relevant values from the supplied source.
+# Extract text from every PDF page and reject PDFs with no usable text.
 def extract_pdf_text(pdf_path: Path) -> str:
     reader = PdfReader(pdf_path)
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
@@ -23,11 +23,11 @@ def extract_pdf_text(pdf_path: Path) -> str:
     return text
 
 
-# Extracts the relevant values from the supplied source.
+# Parse episode headers and speaker dialogue, including continuation lines, from a script PDF.
 def extract_script_dialogue(
     pdf_path: Path,
 ) -> dict[EpisodeKey, tuple[ScriptDialogue, ...]]:
-    # Walk extracted script lines, switching episodes and accumulating dialogue.
+    # Walk script lines, switching episodes and accumulating ordered dialogue.
     dialogue_by_episode: dict[EpisodeKey, list[ScriptDialogue]] = {}
     current_episode: EpisodeKey | None = None
     last_dialogue: ScriptDialogue | None = None
@@ -71,7 +71,7 @@ def extract_script_dialogue(
     return {key: tuple(dialogue) for key, dialogue in dialogue_by_episode.items()}
 
 
-# Processes the supplied is stage direction values.
+# Return whether a script line is blank, bracketed stage direction, or title-card text.
 def _is_stage_direction(line: str) -> bool:
     stripped = line.strip()
     if not stripped:

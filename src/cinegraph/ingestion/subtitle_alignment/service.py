@@ -27,7 +27,7 @@ FALLBACK_SKIP_PENALTY = 125.0
 FALLBACK_REASON = "Assigned by ordered fallback below the confidence threshold."
 
 
-# Processes the supplied annotate subtitle file values.
+# Align a subtitle file to script dialogue, write labels and noise-free output, and report fallbacks.
 def annotate_subtitle_file(
     *,
     source_pdf: Path,
@@ -131,7 +131,7 @@ def annotate_subtitle_file(
     return report
 
 
-# Extracts the relevant values from the supplied source.
+# Scan subtitle text and retain dialogue lines with cue and source-label metadata.
 def _extract_dialogue_lines(source_lines: list[str]) -> list[SubtitleDialogueLine]:
     # Scan subtitle cues and retain only dialogue lines with normalized match text.
     subtitle_lines: list[SubtitleDialogueLine] = []

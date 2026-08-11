@@ -11,7 +11,7 @@ class EpisodeVisibilityScope:
     episode: EpisodeRef
     safe_until_ms: int | None
 
-    # Validates the initialized value after construction.
+    # Require a non-negative partial-visibility cutoff when one is present.
     def __post_init__(self) -> None:
         if self.safe_until_ms is not None and self.safe_until_ms < 0:
             raise InvalidModelError(
@@ -24,7 +24,7 @@ class RetrievalScope:
     series_id: UUID
     episode_scopes: tuple[EpisodeVisibilityScope, ...]
 
-    # Validates the initialized value after construction.
+    # Enforce immutable, unique episode scopes whose episodes belong to this series.
     def __post_init__(self) -> None:
         if not isinstance(self.episode_scopes, tuple):
             raise InvalidModelError(

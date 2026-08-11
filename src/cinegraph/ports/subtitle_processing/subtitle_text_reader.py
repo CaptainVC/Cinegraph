@@ -3,6 +3,6 @@ from typing import Protocol
 
 class SubtitleTextReader(Protocol):
 
-    # Reads and returns the requested source content.
+    # Read subtitle source text from the supplied locator.
     def read_text(self, source_locator: str) -> str:
         ...

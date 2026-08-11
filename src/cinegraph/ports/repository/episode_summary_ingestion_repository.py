@@ -10,20 +10,20 @@ from cinegraph.domain.models.source.source_version import SourceVersion
 
 class EpisodeSummaryIngestionRepository(Protocol):
 
-    # Finds and returns the matching value when available.
+        # Return the active version when its content hash matches the source document.
     def find_active_version_by_content_hash(
             self,
             source_document_id: UUID,
             content_hash: str,
     ) -> SourceVersion | None: ...
 
-    # Gets and returns the requested value.
+        # Return the active version for a source document, if present.
     def get_active_version(
             self,
             source_document_id: UUID,
     ) -> SourceVersion | None: ...
 
-    # Persists the supplied value in the repository.
+        # Persist a new summary version and summary while checking the previous active version.
     def persist_new_episode_summary_ingestion(
             self,
             source_document: SourceDocument,
@@ -32,13 +32,13 @@ class EpisodeSummaryIngestionRepository(Protocol):
             summary: EpisodeSummaryDocument,
     ) -> None: ...
 
-    # Gets and returns the requested value.
+        # Return a source version by its identifier, if present.
     def get_source_version(
             self,
             source_version_id: UUID
     ) -> SourceVersion | None: ...
 
-    # Updates the requested value in the repository.
+        # Persist review status and reviewer metadata for a source version.
     def update_source_version_review_status(
             self,
             source_version_id: UUID,

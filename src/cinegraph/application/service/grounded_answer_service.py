@@ -19,7 +19,7 @@ from cinegraph.ports.llm.chat_model_gateway import ChatModelGateway
 
 
 class GroundedAnswerService:
-    # Initializes the object with its required state.
+    # Store the visible-segment search service and structured answer gateway.
     def __init__(
         self,
         search_service: SearchVisibleEpisodeSegmentsService,
@@ -28,7 +28,7 @@ class GroundedAnswerService:
         self._search_service = search_service
         self._chat_model_gateway = chat_model_gateway
 
-    # Processes the supplied retrieve visible segments values.
+    # Retrieve ranked transcript segments already filtered by episode visibility.
     def retrieve_visible_segments(
         self, query: GroundedAnswerQuery
     ) -> tuple[TranscriptSegment, ...]:
@@ -43,7 +43,7 @@ class GroundedAnswerService:
         )
         return tuple(match.segment for match in search_result.matches)
 
-    # Processes the supplied draft answer values.
+    # Build model evidence from visible segments and request a structured draft.
     def draft_answer(
         self,
         question: str,
@@ -65,7 +65,7 @@ class GroundedAnswerService:
             )
         )
 
-    # Validates the supplied data against the domain rules.
+    # Reject unknown or duplicate citations and construct the grounded result.
     def validate_draft(
         self,
         visible_segments: tuple[TranscriptSegment, ...],
@@ -98,12 +98,12 @@ class GroundedAnswerService:
             is_safe_refusal=False,
         )
 
-    # Executes the operation and returns its result.
+    # Refuse without a model call when no evidence is visible; otherwise draft and validate.
     def execute(self, query: GroundedAnswerQuery) -> GroundedAnswerResult:
-        # 1. Retrieve ranked visible transcript segments.
+        # Retrieve ranked transcript segments already filtered by spoiler visibility.
         visible_segments = self.retrieve_visible_segments(query)
 
-        # 2. No visible matching evidence: refuse deterministically, no gateway call.
+        # Refuse deterministically when retrieval returns no visible evidence.
         if not visible_segments:
             return GroundedAnswerResult(
                 answer=None,
@@ -111,6 +111,6 @@ class GroundedAnswerService:
                 is_safe_refusal=True,
             )
 
-        # 3. Draft from visible evidence, then validate cited segments.
+        # Draft from visible evidence and validate every cited segment identifier.
         draft = self.draft_answer(query.question, visible_segments)
         return self.validate_draft(visible_segments, draft)

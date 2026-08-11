@@ -5,7 +5,7 @@ from cinegraph.ports.dto.fetched_episode_summary import FetchedEpisodeSummary
 
 
 class EpisodeSummaryProvider(Protocol):
-    # Processes the supplied fetch values.
+        # Fetch one localized episode summary with source and retrieval metadata.
     def fetch(
             self,
             *,

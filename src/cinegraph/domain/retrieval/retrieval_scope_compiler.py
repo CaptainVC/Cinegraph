@@ -11,11 +11,11 @@ from cinegraph.domain.retrieval.retrieval_scope import (
 
 
 class RetrievalScopeCompiler:
-    # Initializes the object with its required state.
+    # Store the spoiler policy used to compile visibility scopes.
     def __init__(self, spoiler_policy: SpoilerPolicy) -> None:
         self._spoiler_policy = spoiler_policy
 
-    # Compiles the supplied domain scope into the adapter representation.
+    # Validate candidate ownership and compile fully or partially visible episodes.
     def compile(
         self,
         series_id: UUID,

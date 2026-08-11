@@ -12,7 +12,7 @@ class SpeakerCandidate:
     name: str
     confidence: float
 
-    # Validates the initialized value after construction.
+    # Require a trimmed speaker name and a confidence value within the valid range.
     def __post_init__(self) -> None:
         if not self.name or self.name.strip() != self.name:
             raise InvalidModelError(

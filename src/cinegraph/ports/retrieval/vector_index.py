@@ -17,7 +17,7 @@ class RetrievedSegment:
 
 
 class VectorIndex(Protocol):
-    # Processes the supplied search hybrid values.
+    # Search indexed transcript evidence using lexical, vector, and visibility constraints.
     def search_hybrid(
         self,
         query: str,

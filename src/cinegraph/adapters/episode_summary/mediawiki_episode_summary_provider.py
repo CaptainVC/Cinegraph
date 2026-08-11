@@ -17,7 +17,7 @@ from cinegraph.ports.episode_summary.episode_summary_provider import (
 
 class MediaWikiEpisodeSummaryProvider(EpisodeSummaryProvider):
 
-    # Initializes the object with its required state.
+    # Store the HTTP client and clock used for MediaWiki retrieval metadata.
     def __init__(
         self,
         client: httpx.Client,
@@ -27,7 +27,7 @@ class MediaWikiEpisodeSummaryProvider(EpisodeSummaryProvider):
         self._clock = clock
 
 
-    # Processes the supplied fetch values.
+    # Fetch, validate, and map one localized MediaWiki episode summary.
     def fetch(
         self,
         *,

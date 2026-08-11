@@ -4,5 +4,5 @@ from cinegraph.application.models.grounded_answer import ModelDraft, ModelReques
 
 
 class ChatModelGateway(Protocol):
-    # Processes the supplied generate answer values.
+    # Generate a structured answer draft grounded in the supplied model evidence.
     def generate_answer(self, request: ModelRequest) -> ModelDraft: ...

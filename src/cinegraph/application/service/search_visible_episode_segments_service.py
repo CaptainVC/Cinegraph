@@ -14,14 +14,14 @@ from cinegraph.domain.retrieval.lexical import lexical_score
 
 
 class SearchVisibleEpisodeSegmentsService:
-    # Initializes the object with its required state.
+    # Store the context service that enforces episode and summary visibility.
     def __init__(
         self,
         context_service: GetVisibleEpisodeContextService,
     ) -> None:
         self._context_service = context_service
 
-    # Executes the operation and returns its result.
+    # Score visible transcript segments and return deterministic top matches with context metadata.
     def execute(
         self,
         query: SearchVisibleEpisodeSegmentsQuery,
