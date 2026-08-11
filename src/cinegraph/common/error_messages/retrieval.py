@@ -45,3 +45,15 @@ class RetrievalErrorMessages:
     CANDIDATE_EPISODES_MUST_MATCH_SERIES = (
         "Candidate episodes must match the requested series."
     )
+    QDRANT_RESULT_PAYLOAD_MUST_BE_COMPLETE = (
+        "Qdrant result payload must be present and complete."
+    )
+    QDRANT_RESULT_IDS_MUST_BE_VALID = "Qdrant result IDs must be valid UUIDs."
+    QDRANT_RESULT_SERIES_MUST_MATCH_SCOPE = (
+        "Qdrant result series must match the retrieval scope."
+    )
+    QDRANT_RESULT_NUMERIC_FIELDS_MUST_BE_VALID = (
+        "Qdrant result numeric fields must be valid integers."
+    )
+    QDRANT_RESULT_TEXT_MUST_BE_VALID = "Qdrant result text must be non-empty and trimmed."
+    QDRANT_RESULT_SCORE_MUST_BE_FINITE = "Qdrant result score must be finite numeric data."
