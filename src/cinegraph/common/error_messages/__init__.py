@@ -1,4 +1,5 @@
 from cinegraph.common.error_messages.catalogue import CatalogueErrorMessages
+from cinegraph.common.error_messages.conversation import ConversationErrorMessages
 from cinegraph.common.error_messages.grounded_answer import GroundedAnswerErrorMessages
 from cinegraph.common.error_messages.retrieval import RetrievalErrorMessages
 from cinegraph.common.error_messages.source import SourceErrorMessages
@@ -10,6 +11,7 @@ from cinegraph.common.error_messages.workflow import WorkflowErrorMessages
 
 __all__ = [
     "CatalogueErrorMessages",
+    "ConversationErrorMessages",
     "GroundedAnswerErrorMessages",
     "RetrievalErrorMessages",
     "SourceErrorMessages",

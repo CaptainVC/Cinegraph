@@ -1,7 +1,32 @@
 
 from uuid import UUID
 
-from cinegraph.common.error_messages import SourceErrorMessages, WatchErrorMessages
+from cinegraph.common.error_messages import (
+    ConversationErrorMessages,
+    SourceErrorMessages,
+    WatchErrorMessages,
+)
+
+
+class ConversationThreadProfileMismatchError(ValueError):
+
+    # Format the error identifying a thread bound to another profile.
+    def __init__(self, thread_id: UUID) -> None:
+        super().__init__(ConversationErrorMessages.THREAD_PROFILE_MISMATCH.format(thread_id=thread_id))
+
+
+class ConversationThreadWatchStateMismatchError(ValueError):
+
+    # Format the error identifying a thread bound to another watch-state version.
+    def __init__(self, thread_id: UUID) -> None:
+        super().__init__(ConversationErrorMessages.THREAD_WATCH_STATE_MISMATCH.format(thread_id=thread_id))
+
+
+class ConversationThreadScopeMismatchError(ValueError):
+
+    # Format the error identifying a thread bound to another permission scope.
+    def __init__(self, thread_id: UUID) -> None:
+        super().__init__(ConversationErrorMessages.THREAD_SCOPE_MISMATCH.format(thread_id=thread_id))
 
 
 class ProfileWatchStateNotFoundError(LookupError):

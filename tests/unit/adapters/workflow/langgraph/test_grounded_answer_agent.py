@@ -4,6 +4,8 @@ from uuid import UUID
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
+from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import PrivateAttr
 
 from cinegraph.adapters.workflow.langgraph.grounded_answer_agent import (
     GroundedAnswerAgent,
@@ -26,6 +28,12 @@ SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
 
 
 class DeterministicToolCallingModel(BaseChatModel):
+    _calls: list[list[BaseMessage]] = PrivateAttr(default_factory=list)
+
+    # Initialize the deterministic model's message-call recording.
+    def __init__(self) -> None:
+        super().__init__()
+
     # Return one grounded tool call, then a deterministic final response.
     def _generate(
         self,
@@ -34,6 +42,7 @@ class DeterministicToolCallingModel(BaseChatModel):
         run_manager: Any = None,
         **kwargs: Any,
     ) -> ChatResult:
+        self._calls.append(messages)
         if isinstance(messages[-1], ToolMessage):
             message = AIMessage(content="Grounded answer returned by the tool.")
         else:
@@ -147,3 +156,22 @@ def test_safe_refusal_is_preserved_without_citations() -> None:
     output = tool.func("Is this safe?", runtime)  # type: ignore[union-attr]
 
     assert output == {"answer": None, "is_safe_refusal": True, "citations": []}
+
+
+def test_checkpointed_agent_reuses_thread_history_without_serializing_context() -> None:
+    # Preserve prior messages for one thread while keeping runtime context invocation-only.
+    workflow = RecordingWorkflow(make_result())
+    model = DeterministicToolCallingModel()
+    agent = GroundedAnswerAgent(model, workflow, InMemorySaver())  # type: ignore[arg-type]
+    thread_id = UUID("00000000-0000-0000-0000-000000000701")
+
+    agent.invoke("First question", make_context(), thread_id)
+    agent.invoke("Second question", make_context(), thread_id)
+
+    assert len(model._calls) == 4
+    second_call_contents = [str(message.content) for message in model._calls[2]]
+    assert "First question" in second_call_contents
+    assert any(isinstance(message, ToolMessage) for message in model._calls[2])
+    assert str(SOURCE_DOCUMENT_ID) not in " ".join(second_call_contents)
+    assert str(make_context()["episode"].episode_id) not in " ".join(second_call_contents)
+    assert "Private transcript text." not in " ".join(second_call_contents)
