@@ -1,6 +1,8 @@
+from typing import Sequence
 from uuid import UUID
 
 from langchain.agents import create_agent
+from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
@@ -10,7 +12,9 @@ from cinegraph.adapters.workflow.langgraph.grounded_answer_graph import (
 from cinegraph.adapters.workflow.langgraph.grounded_episode_answer_tool import (
     build_grounded_episode_answer_tool,
 )
+from cinegraph.adapters.workflow.langgraph.agent_middleware import build_agent_middleware
 from cinegraph.application.models.agent_context import AgentRuntimeContext
+from cinegraph.common.prompts import GROUNDED_ANSWER_AGENT_SYSTEM_PROMPT
 
 
 class GroundedAnswerAgent:
@@ -20,18 +24,23 @@ class GroundedAnswerAgent:
         model: BaseChatModel,
         workflow: GroundedAnswerGraphWorkflow,
         checkpointer: BaseCheckpointSaver | None = None,
+        tool_selector_model: BaseChatModel | None = None,
+        middleware: Sequence[AgentMiddleware] | None = None,
     ) -> None:
+        # Resolve the production stack unless a caller explicitly supplies middleware.
+        agent_middleware = (
+            build_agent_middleware(tool_selector_model)
+            if middleware is None
+            else tuple(middleware)
+        )
         # Bind the deterministic workflow tool and invocation-only context schema.
         self._agent = create_agent(
             model=model,
             tools=[build_grounded_episode_answer_tool(workflow)],
             context_schema=AgentRuntimeContext,
-            system_prompt=(
-                "Use the grounded_episode_answer tool for episode-specific questions. "
-                "Do not invent profile or episode state. The tool output is the only "
-                "source of grounded answers and citations."
-            ),
+            system_prompt=GROUNDED_ANSWER_AGENT_SYSTEM_PROMPT,
             checkpointer=checkpointer,
+            middleware=agent_middleware,
         )
 
     # Invoke the agent; a thread ID enables checkpointed message history only when a saver was injected.

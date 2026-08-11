@@ -5,7 +5,15 @@ from cinegraph.common.error_messages import (
     ConversationErrorMessages,
     SourceErrorMessages,
     WatchErrorMessages,
+    WorkflowErrorMessages,
 )
+
+
+class AgentRuntimeContextInvalidError(ValueError):
+
+    # Format the stable error for malformed or missing agent runtime context.
+    def __init__(self) -> None:
+        super().__init__(WorkflowErrorMessages.AGENT_RUNTIME_CONTEXT_MUST_BE_VALID)
 
 
 class ConversationThreadProfileMismatchError(ValueError):

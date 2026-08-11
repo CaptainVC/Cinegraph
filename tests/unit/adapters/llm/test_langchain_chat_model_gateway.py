@@ -4,7 +4,11 @@ from cinegraph.adapters.llm.langchain_chat_model_gateway import (
     AnswerSchema,
     LangChainChatModelGateway,
 )
-from cinegraph.adapters.llm.prompts import INSTRUCTION_BOUNDARY, build_prompt
+from cinegraph.adapters.llm.prompts import build_prompt
+from cinegraph.common.prompts import (
+    GROUNDED_ANSWER_SYSTEM_PROMPT,
+    UNTRUSTED_TRANSCRIPT_EVIDENCE_BOUNDARY,
+)
 from cinegraph.application.models.grounded_answer import ModelEvidence, ModelRequest
 from tests.factories import make_episode_ref
 
@@ -131,6 +135,7 @@ def test_prompt_has_required_variables_and_instruction_boundary() -> None:
         {"question": "Why?", "evidence": "some transcript evidence"}
     ).to_string()
 
-    assert INSTRUCTION_BOUNDARY in rendered
+    assert GROUNDED_ANSWER_SYSTEM_PROMPT in rendered
+    assert UNTRUSTED_TRANSCRIPT_EVIDENCE_BOUNDARY in rendered
     assert "Why?" in rendered
     assert "some transcript evidence" in rendered
