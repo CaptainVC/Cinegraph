@@ -1,4 +1,7 @@
 class RetrievalErrorMessages:
+    VECTOR_ENCODER_BACKEND_RESULT_MUST_NOT_BE_EMPTY = (
+        "Vector encoder backend result must not be empty."
+    )
     DENSE_VECTOR_VALUES_MUST_BE_TUPLE = "Dense vector values must be a tuple."
     DENSE_VECTOR_VALUES_MUST_NOT_BE_EMPTY = "Dense vector values must not be empty."
     DENSE_VECTOR_VALUES_MUST_BE_NUMERIC = "Dense vector values must be numeric and not bool."
