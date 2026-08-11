@@ -1,7 +1,7 @@
+from typing import Protocol
 from uuid import UUID
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.runnables import Runnable
 from pydantic import BaseModel
 
 from cinegraph.adapters.llm.prompts import build_prompt
@@ -15,6 +15,11 @@ from cinegraph.application.models.grounded_answer import (
 class AnswerSchema(BaseModel):
     answer: str | None
     cited_segment_ids: tuple[UUID, ...]
+
+
+class StructuredAnswerInvoker(Protocol):
+    # Invoke structured answer generation with prompt variables.
+    def invoke(self, prompt_variables: dict[str, str]) -> AnswerSchema: ...
 
 
 # Render one evidence item with its citation metadata and untrusted-text markers.
@@ -37,9 +42,9 @@ def _render_all_evidence(request: ModelRequest) -> str:
 
 
 class LangChainChatModelGateway:
-    # Store the structured runnable used to generate validated model drafts.
-    def __init__(self, structured_runnable: Runnable) -> None:
-        self._structured_runnable = structured_runnable
+    # Store the structured invoker used to generate validated model drafts.
+    def __init__(self, structured_invoker: StructuredAnswerInvoker) -> None:
+        self._structured_invoker = structured_invoker
 
     @classmethod
     # Build a gateway that adds structured AnswerSchema output to the chat model.
@@ -48,8 +53,8 @@ class LangChainChatModelGateway:
 
     # Invoke the model with the question and rendered evidence, then map its output.
     def generate_answer(self, request: ModelRequest) -> ModelDraft:
-        # Invoke the structured LangChain runnable with the question and rendered evidence.
-        result = self._structured_runnable.invoke(
+        # Invoke the structured answer invoker with the question and rendered evidence.
+        result = self._structured_invoker.invoke(
             {
                 "question": request.question,
                 "evidence": _render_all_evidence(request),

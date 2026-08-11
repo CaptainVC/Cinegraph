@@ -13,7 +13,7 @@ SEGMENT_ID_1 = UUID(int=1)
 SEGMENT_ID_2 = UUID(int=2)
 
 
-class RecordingStructuredRunnable:
+class RecordingStructuredInvoker:
     def __init__(self, response: AnswerSchema) -> None:
         self._response = response
         self.invocations: list[dict] = []
@@ -42,7 +42,7 @@ def evidence(
     )
 
 
-def test_generate_answer_sends_only_question_and_rendered_evidence_to_runnable() -> (
+def test_generate_answer_sends_only_question_and_rendered_evidence_to_invoker() -> (
     None
 ):
     request = ModelRequest(
@@ -64,7 +64,7 @@ def test_generate_answer_sends_only_question_and_rendered_evidence_to_runnable()
             ),
         ),
     )
-    stub = RecordingStructuredRunnable(
+    stub = RecordingStructuredInvoker(
         AnswerSchema(answer="Answer.", cited_segment_ids=(SEGMENT_ID_1,))
     )
     gateway = LangChainChatModelGateway(stub)
@@ -95,7 +95,7 @@ def test_generate_answer_maps_structured_response_losslessly_to_model_draft() ->
         question="Q?",
         evidence=(evidence(segment_id=SEGMENT_ID_1, start_ms=0, text="Text."),),
     )
-    stub = RecordingStructuredRunnable(
+    stub = RecordingStructuredInvoker(
         AnswerSchema(
             answer="The answer.", cited_segment_ids=(SEGMENT_ID_1, SEGMENT_ID_2)
         )
@@ -113,7 +113,7 @@ def test_generate_answer_maps_null_answer_and_empty_citations() -> None:
         question="Q?",
         evidence=(evidence(segment_id=SEGMENT_ID_1, start_ms=0, text="Text."),),
     )
-    stub = RecordingStructuredRunnable(AnswerSchema(answer=None, cited_segment_ids=()))
+    stub = RecordingStructuredInvoker(AnswerSchema(answer=None, cited_segment_ids=()))
     gateway = LangChainChatModelGateway(stub)
 
     draft = gateway.generate_answer(request)
