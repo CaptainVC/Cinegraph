@@ -14,6 +14,7 @@ class Season:
     season_number: int
     episodes: tuple[Episode, ...]
 
+    # Require a positive season number and non-empty trimmed season title.
     def __post_init__(self) -> None:
         if self.season_number < 1:
             raise InvalidModelError(

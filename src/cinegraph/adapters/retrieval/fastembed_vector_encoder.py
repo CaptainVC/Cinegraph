@@ -1,0 +1,107 @@
+from collections.abc import Iterable
+from typing import Protocol, TypeVar
+
+from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.domain.retrieval.vector_data import (
+    DenseVector,
+    DocumentVector,
+    HybridVector,
+    QueryVector,
+    SparseVector,
+)
+
+
+class SparseEmbeddingResult(Protocol):
+    indices: Iterable[object]
+    values: Iterable[object]
+
+
+class DenseEmbeddingBackend(Protocol):
+    # Return dense query embeddings for one text.
+    def query_embed(self, text: str) -> Iterable[Iterable[object]]: ...
+
+    # Return dense passage embeddings for one batch of texts.
+    def passage_embed(self, texts: tuple[str, ...]) -> Iterable[Iterable[object]]: ...
+
+
+class SparseEmbeddingBackend(Protocol):
+    # Return sparse query embeddings for one text.
+    def query_embed(self, text: str) -> Iterable[SparseEmbeddingResult]: ...
+
+    # Return sparse passage embeddings for one batch of texts.
+    def passage_embed(self, texts: tuple[str, ...]) -> Iterable[SparseEmbeddingResult]: ...
+
+
+EmbeddingResult = TypeVar("EmbeddingResult")
+
+
+class FastEmbedVectorEncoder:
+    # Store injected dense and sparse FastEmbed-compatible backends.
+    def __init__(
+        self,
+        dense_backend: DenseEmbeddingBackend,
+        sparse_backend: SparseEmbeddingBackend,
+    ) -> None:
+        self._dense_backend = dense_backend
+        self._sparse_backend = sparse_backend
+
+    @classmethod
+    # Build an encoder using FastEmbed's configured dense and sparse models.
+    def from_default_models(cls) -> "FastEmbedVectorEncoder":
+        from fastembed import SparseTextEmbedding, TextEmbedding
+
+        return cls(
+            dense_backend=TextEmbedding(model_name="BAAI/bge-small-en-v1.5"),
+            sparse_backend=SparseTextEmbedding(model_name="Qdrant/bm25"),
+        )
+
+    # Encode query text into one validated hybrid query vector.
+    def encode_query(self, text: str) -> QueryVector:
+        # Invoke each backend once and consume only its first result.
+        dense_result = self._first_result(self._dense_backend.query_embed(text))
+        sparse_result = self._first_result(self._sparse_backend.query_embed(text))
+        return QueryVector(self._build_hybrid_vector(dense_result, sparse_result))
+
+    # Encode document text into one validated hybrid document vector.
+    def encode_document(self, text: str) -> DocumentVector:
+        # Preserve the single-document batch shape expected by passage encoders.
+        document_batch = (text,)
+        dense_result = self._first_result(self._dense_backend.passage_embed(document_batch))
+        sparse_result = self._first_result(self._sparse_backend.passage_embed(document_batch))
+        return DocumentVector(self._build_hybrid_vector(dense_result, sparse_result))
+
+    # Consume exactly one backend result or raise the adapter's empty-result error.
+    @staticmethod
+    def _first_result(results: Iterable[EmbeddingResult]) -> EmbeddingResult:
+        # Avoid consuming a second result from a backend iterable.
+        result = next(iter(results), None)
+        if result is None:
+            raise ValueError(
+                RetrievalErrorMessages.VECTOR_ENCODER_BACKEND_RESULT_MUST_NOT_BE_EMPTY
+            )
+        return result
+
+    # Convert backend outputs before constructing domain-owned vector types.
+    @staticmethod
+    def _build_hybrid_vector(
+        dense_result: Iterable[object], sparse_result: SparseEmbeddingResult
+    ) -> HybridVector:
+        # Convert dense values and materialize both sparse sequences before sorting.
+        dense_vector = DenseVector(tuple(float(value) for value in dense_result))
+        sparse_indices = tuple(int(index) for index in sparse_result.indices)
+        sparse_values = tuple(float(value) for value in sparse_result.values)
+        if len(sparse_indices) != len(sparse_values):
+            return HybridVector(
+                dense=dense_vector,
+                sparse=SparseVector(indices=sparse_indices, values=sparse_values),
+            )
+
+        # Pair equal-length sparse sequences so values stay attached to indices.
+        sparse_pairs = sorted(
+            zip(sparse_indices, sparse_values)
+        )
+        sparse_vector = SparseVector(
+            indices=tuple(index for index, _ in sparse_pairs),
+            values=tuple(value for _, value in sparse_pairs),
+        )
+        return HybridVector(dense=dense_vector, sparse=sparse_vector)

@@ -18,6 +18,7 @@ class WatchEvent:
     source: WatchEventSource
     occurred_at: datetime
 
+    # Require timezone-aware event time and metadata consistent with the event kind.
     def __post_init__(self) -> None:
         if self.occurred_at.tzinfo is None:
             raise InvalidModelError(

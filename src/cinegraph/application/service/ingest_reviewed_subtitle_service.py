@@ -17,6 +17,7 @@ from cinegraph.ports.subtitle_processing.subtitle_text_reader import SubtitleTex
 
 class IngestReviewedSubtitleService:
 
+    # Store the repository, subtitle reader, canonicalizer, and clock dependencies.
     def __init__(
             self,
             repository: TranscriptIngestionRepository,
@@ -30,26 +31,27 @@ class IngestReviewedSubtitleService:
         self._clock = clock
 
 
+    # Read, deduplicate, canonicalize, and persist a reviewed subtitle ingestion.
     def execute(
             self,
             command: IngestReviewedSubtitleCommand
     ) -> IngestReviewedSubtitleResult:
 
-        # 1. Load the subtitle text from the provided source locator
+        # Read subtitle text from the caller-provided source locator.
         source_text = self._subtitle_text_reader.read_text(
             command.source_locator
         )
 
-        # 2. Generate a content hash for the subtitle text to check for duplicates
+        # Hash the source text so identical active content is idempotent.
         content_hash = sha256(source_text.encode("utf-8")).hexdigest()
 
-        # 3. Check if a source version with the same content hash already exists
+        # Look for an active version with the same content hash.
         existing_version = self._repository.find_active_version_by_content_hash(
             source_document_id=command.source_document.source_document_id,
             content_hash=content_hash,
         )
 
-        # 4. If an existing version is found, return it without re-ingesting
+        # Return the existing version without canonicalizing duplicate content.
         if existing_version is not None:
             return IngestReviewedSubtitleResult(
                 source_version=existing_version,
@@ -58,7 +60,7 @@ class IngestReviewedSubtitleService:
                 was_already_ingested=True,
             )
 
-        # 5. If no existing version is found, create a new source version and persist it
+        # Create a reviewed active version linked to the previous active version.
         previous_active_version = self._repository.get_active_version(
             source_document_id=command.source_document.source_document_id
         )
@@ -84,7 +86,7 @@ class IngestReviewedSubtitleService:
             reviewed_at=command.reviewed_at,
         )
 
-        # 6. Canonicalize the subtitle into persisted transcript segments.
+        # Convert labeled subtitle text into canonical transcript segments and a report.
         canonical_result = self._canonicalizer.canonicalize(
             source_text=source_text,
             source_locator=command.source_locator,
@@ -94,7 +96,7 @@ class IngestReviewedSubtitleService:
             rights_status=command.rights_status,
         )
 
-        # 7. Persist the new source version and its segments in the repository
+        # Persist the new version and its canonical segments.
         self._repository.persist_new_subtitle_ingestion(
             source_document=command.source_document,
             source_version=source_version,

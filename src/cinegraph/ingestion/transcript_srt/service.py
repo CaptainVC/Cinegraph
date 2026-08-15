@@ -18,6 +18,7 @@ from cinegraph.ingestion.transcript_srt.parser import parse_srt, read_srt_text
 from cinegraph.ingestion.transcript_srt.patterns import SrtPatterns
 
 
+# Read, parse, canonicalize, and report a finalized SRT file.
 def ingest_finalized_srt(
      *,
      source_path: Path,
@@ -26,8 +27,10 @@ def ingest_finalized_srt(
      language: Language,
      rights_status: RightsStatus,
 ) -> TranscriptIngestionResult:
+     # Read the source file and parse its validated SRT cues.
     cues = parse_srt(read_srt_text(source_path))
 
+     # Convert each labeled cue into a canonical transcript segment.
     segments = tuple(
         _to_transcript_segment(
             cue=cue,
@@ -48,6 +51,7 @@ def ingest_finalized_srt(
           ),
     )
 
+# Canonicalize supplied finalized SRT text while retaining its source path in the report.
 def ingest_finalized_srt_text(
      *,
      source_text: str,
@@ -57,8 +61,10 @@ def ingest_finalized_srt_text(
      language: Language,
      rights_status: RightsStatus,
 ) -> TranscriptIngestionResult:
+     # Parse caller-supplied SRT text into validated cues.
     cues = parse_srt(source_text)
 
+     # Convert the cues into transcript segments and summarize the ingestion.
     segments = tuple(
         _to_transcript_segment(
             cue=cue,
@@ -80,6 +86,7 @@ def ingest_finalized_srt_text(
     )
 
 
+# Validate speaker labels and build one canonical transcript segment from an SRT cue.
 def _to_transcript_segment(
      *,
      cue: ParsedSrtCue,
@@ -88,6 +95,7 @@ def _to_transcript_segment(
      language: Language,
      rights_status: RightsStatus,
 ) -> TranscriptSegment:
+     # Require verified labels, normalize dialogue, and deduplicate speakers per cue.
      speaker_candidates: list[SpeakerCandidate] = []
      dialogue_parts: list[str] = []
      style_removed = False
@@ -129,6 +137,7 @@ def _to_transcript_segment(
                )
           )
 
+     # Join normalized dialogue and derive stable segment and speaker identifiers.
      text = " ".join(dialogue_parts)
      return TranscriptSegment(
           segment_id=_segment_id(
@@ -149,16 +158,19 @@ def _to_transcript_segment(
      )
 
 
+# Remove style tags, collapse whitespace, and report whether styling was removed.
 def _canonicalize_dialogue(value: str) -> tuple[str, bool]:
      without_styles = SrtPatterns.STYLE_TAG_PATTERN.sub(" ", value)
      text = SrtPatterns.WHITESPACE_PATTERN.sub(" ", without_styles).strip()
      return text, without_styles != value
 
 
+# Normalize a verified speaker label to trimmed uppercase text.
 def _normalize_speaker_name(value: str) -> str:
      return SrtPatterns.WHITESPACE_PATTERN.sub(" ", value).strip().upper()
 
 
+# Derive the stable speaker identifier for a series and normalized speaker name.
 def _speaker_id(
      *,
      series_id: UUID,
@@ -167,6 +179,7 @@ def _speaker_id(
     return IdentifierGenerator.speaker_id(series_id, speaker_name)
 
 
+# Derive the stable identifier for one transcript cue and its canonical text.
 def _segment_id(
      *,
      source_version_id: UUID,
@@ -184,12 +197,14 @@ def _segment_id(
     )
 
 
+# Summarize cue, speaker, overlap, and style-removal counts for the ingestion.
 def _build_report(
      *,
      source_path: Path,
      cues: tuple[ParsedSrtCue, ...],
      segments: tuple[TranscriptSegment, ...],
 ) -> TranscriptIngestionReport:
+     # Summarize cue counts, speaker multiplicity, overlaps, and removed styling.
      overlap_count = sum(
           current.start_ms < previous.end_ms
           for previous, current in zip(segments, segments[1:])

@@ -23,6 +23,7 @@ class SourceVersion:
     reviewed_by: str | None = None
     reviewed_at: datetime | None = None
 
+    # Enforce content-hash, status, timestamp, and review-metadata invariants.
     def __post_init__(self) -> None:
         if fullmatch(r"[0-9a-f]{64}", self.content_hash) is None:
             raise InvalidModelError(
@@ -46,6 +47,7 @@ class SourceVersion:
 
         self.validate_review_metadata()
 
+    # Validate reviewer metadata required by the current review status.
     def validate_review_metadata(self) -> None:
 
         has_reviewer = self.reviewed_by is not None

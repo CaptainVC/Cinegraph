@@ -9,17 +9,20 @@ from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegm
 
 class TranscriptIngestionRepository(Protocol):
 
+        # Return the active subtitle version when its content hash matches.
     def find_active_version_by_content_hash(
             self,
             source_document_id: UUID,
             content_hash: str,
     ) -> SourceVersion | None: ...
 
+        # Return the active subtitle version for a source document, if present.
     def get_active_version(
             self,
             source_document_id: UUID,
     ) -> SourceVersion | None: ...
 
+        # Persist a new subtitle version and its canonical transcript segments.
     def persist_new_subtitle_ingestion(
             self,
             source_document: SourceDocument,

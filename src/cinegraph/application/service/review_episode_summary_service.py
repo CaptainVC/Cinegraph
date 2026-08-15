@@ -6,12 +6,14 @@ from cinegraph.ports.repository.episode_summary_ingestion_repository import Epis
 
 class ReviewEpisodeSummaryService:
 
+    # Store the summary ingestion repository used for review transitions.
     def __init__(
             self,
             repository: EpisodeSummaryIngestionRepository,
     ) -> None:
         self._repository = repository
 
+    # Validate and persist a final summary review decision, preserving idempotent repeats.
     def execute(
             self,
             command: ReviewEpisodeSummaryCommand,

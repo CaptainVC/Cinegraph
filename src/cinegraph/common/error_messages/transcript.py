@@ -1,4 +1,13 @@
 class TranscriptErrorMessages:
+    SOURCE_VERSION_MUST_BE_ACTIVE_AND_REVIEWED = (
+        "Transcript source version must be active and reviewed."
+    )
+    TRANSCRIPT_SEGMENT_SOURCE_VERSION_MUST_MATCH = (
+        "Transcript segment source version must match the command source version."
+    )
+    TRANSCRIPT_SEGMENT_IDS_MUST_BE_UNIQUE = (
+        "Transcript segment IDs must be unique."
+    )
     SPEAKER_CANDIDATE_NAME_MUST_BE_TRIMMED = (
         "Speaker candidate name cannot be empty or have leading/trailing whitespace."
     )

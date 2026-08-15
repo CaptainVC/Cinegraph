@@ -21,13 +21,14 @@ class EpisodeSummaryIngestion:
 
 
 class InMemoryEpisodeSummaryIngestionRepository:
+    # Initialize in-memory source-document, version, active-version, and summary stores.
     def __init__(self):
         self._documents: dict[UUID, SourceDocument] = {}
         self._versions: dict[UUID, SourceVersion] = {}
         self._active_version: dict[UUID, UUID] = {}
         self._summaries_by_version: dict[UUID, EpisodeSummaryDocument] = {}
 
-    # Find the active version by content hash
+    # Return the active version only when its content hash matches the supplied hash.
     def find_active_version_by_content_hash(
             self,
             source_document_id: UUID,
@@ -43,7 +44,7 @@ class InMemoryEpisodeSummaryIngestionRepository:
 
         return active_version
 
-    # Get the active version for a given source document ID
+    # Return the currently active version for a source document, if one exists.
     def get_active_version(
             self,
             source_document_id: UUID,
@@ -55,7 +56,7 @@ class InMemoryEpisodeSummaryIngestionRepository:
 
         return self._versions.get(source_version_id)
 
-    # Persist a new episode summary ingestion
+    # Validate and persist a new summary version while retiring the previous active version.
     def persist_new_episode_summary_ingestion(
             self,
             source_document: SourceDocument,
@@ -63,44 +64,46 @@ class InMemoryEpisodeSummaryIngestionRepository:
             previous_active_version: SourceVersion | None,
             summary: EpisodeSummaryDocument,
     ) -> None:
-        # 1. Store or validate the stable source document.
+        # Preserve the stable document record and reject metadata conflicts.
         stored_document = self._documents.get(source_document.source_document_id)
         if stored_document is None:
             self._documents[source_document.source_document_id] = source_document
         elif stored_document != source_document:
             raise ValueError(SourceErrorMessages.SOURCE_DOCUMENT_ID_METADATA_CONFLICT)
 
-        # 2. Detect concurrent active-version changes.
+        # Reject writes based on an active version that changed since the caller read it.
         current_active_version = self.get_active_version(source_document.source_document_id)
         if current_active_version != previous_active_version:
             raise RuntimeError(SourceErrorMessages.ACTIVE_SOURCE_VERSION_CONFLICT)
 
-        # 3. Validate summary provenance.
+        # Ensure the summary belongs to the version being persisted.
         if summary.source_version_id != source_version.source_version_id:
             raise ValueError(
                 SourceErrorMessages.EPISODE_SUMMARY_SOURCE_VERSION_MISMATCH
             )
 
-        # 4. Retire the previous active version.
+        # Retire the previous active version before activating the new one.
         if previous_active_version is not None:
             self._versions[previous_active_version.source_version_id] = replace(
                 previous_active_version,
                 status=SourceVersionStatus.RETIRED,
             )
 
-        # 5. Persist the new active version and its summary.
+        # Store the new version, active mapping, and summary.
         self._versions[source_version.source_version_id] = source_version
         self._active_version[source_document.source_document_id] = (
             source_version.source_version_id
         )
         self._summaries_by_version[source_version.source_version_id] = summary
 
+    # Return a stored source version by identifier.
     def get_source_version(
         self,
         source_version_id: UUID
     ) -> SourceVersion | None:
         return self._versions.get(source_version_id)
 
+    # Apply and persist review metadata for an existing source version.
     def update_source_version_review_status(
         self,
         source_version_id: UUID,
@@ -109,7 +112,7 @@ class InMemoryEpisodeSummaryIngestionRepository:
         reviewed_at: datetime,
     ) -> SourceVersion:
 
-        # 1. Load the source version to update.
+        # Require the source version to exist before changing its review metadata.
         source_version = self._versions.get(source_version_id)
         if source_version is None:
             raise KeyError(
@@ -118,7 +121,7 @@ class InMemoryEpisodeSummaryIngestionRepository:
                 )
             )
 
-        # 2. Create the immutable review-state transition.
+        # Build the immutable source-version review transition.
         updated_source_version = replace(
             source_version,
             review_status=review_status,
@@ -126,10 +129,11 @@ class InMemoryEpisodeSummaryIngestionRepository:
             reviewed_at=reviewed_at,
         )
 
-        # 3. Replace the stored source version.
+        # Replace the stored version and return the updated value.
         self._versions[source_version_id] = updated_source_version
         return updated_source_version
 
+    # Return the active summary only when its version is active and fully reviewed.
     def get_active_reviewed_summary(
         self,
         source_document_id: UUID,
@@ -153,9 +157,11 @@ class InMemoryEpisodeSummaryIngestionRepository:
         )
 
     @property
+    # Expose all stored source versions in insertion order.
     def source_versions(self) -> tuple[SourceVersion, ...]:
         return tuple(self._versions.values())
 
     @property
+    # Expose all stored episode summaries in insertion order.
     def summaries(self) -> tuple[EpisodeSummaryDocument, ...]:
         return tuple(self._summaries_by_version.values())

@@ -11,6 +11,7 @@ from cinegraph.ports.repository.episode_summary_ingestion_repository import Epis
 
 class IngestEpisodeSummaryService:
 
+    # Store the external summary provider and ingestion repository.
     def __init__(
             self,
             provider: EpisodeSummaryProvider,
@@ -19,18 +20,19 @@ class IngestEpisodeSummaryService:
         self._provider = provider
         self._repository = repository
 
+    # Fetch, hash, version, and persist an episode summary unless its active content is unchanged.
     def execute(
             self,
             command: IngestEpisodeSummaryCommand
     ) -> IngestEpisodeSummaryResult:
 
-        # 1. Fetch the episode summary from the provider
+        # Fetch the localized summary and its source metadata.
         fetched = self._provider.fetch(
             page_title=command.page_title,
             language=command.language
         )
 
-        # 2. Check if the fetched content has already been ingested by comparing content hashes
+        # Avoid creating a new version when the active content hash is unchanged.
         content_hash = sha256(fetched.text.encode("utf-8")).hexdigest()
         existing_version = self._repository.find_active_version_by_content_hash(
             command.source_document.source_document_id,
@@ -43,7 +45,7 @@ class IngestEpisodeSummaryService:
                 was_already_ingested=True
             )
 
-        # 3. Create a new source version
+        # Link a new active source version to the previous version when present.
         previous_active_version = self._repository.get_active_version(
             command.source_document.source_document_id
         )
@@ -66,7 +68,7 @@ class IngestEpisodeSummaryService:
             )
         )
 
-        # 4. Create the episode summary document
+        # Build the summary document from the fetched content and provenance metadata.
         summary = EpisodeSummaryDocument(
             summary_id=IdentifierGenerator.episode_summary_document_id(
                 source_version.source_version_id,
@@ -84,7 +86,7 @@ class IngestEpisodeSummaryService:
             attribution=fetched.attribution
         )
 
-        # 5. Persist the new episode summary ingestion
+        # Persist the document, version, and summary as one ingestion transition.
         self._repository.persist_new_episode_summary_ingestion(
             source_document=command.source_document,
             source_version=source_version,
@@ -92,7 +94,7 @@ class IngestEpisodeSummaryService:
             summary=summary
         )
 
-        # 6. Return the result
+        # Return the newly persisted version and summary.
         return IngestEpisodeSummaryResult(
             source_version=source_version,
             summary=summary,

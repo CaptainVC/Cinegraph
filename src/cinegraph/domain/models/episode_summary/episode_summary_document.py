@@ -22,6 +22,7 @@ class EpisodeSummaryDocument:
     revision_timestamp: datetime
     attribution: str
 
+    # Require trimmed summary text and metadata consistent with its episode and source.
     def __post_init__(self) -> None:
         if not self.text or self.text.strip() != self.text:
             raise InvalidModelError(

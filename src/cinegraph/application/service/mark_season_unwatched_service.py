@@ -14,6 +14,7 @@ from cinegraph.ports.repository.watch_progress_repository import WatchProgressRe
 
 
 class MarkSeasonUnwatchedService:
+    # Store the progress repository, season catalogue, and event clock.
     def __init__(
         self,
         repository: WatchProgressRepository,
@@ -24,6 +25,7 @@ class MarkSeasonUnwatchedService:
         self._season_episode_catalog = season_episode_catalog
         self._clock = clock
 
+    # Remove progress from every progressed episode in a season and persist its events.
     def execute(
         self,
         command: MarkSeasonUnwatchedCommand,

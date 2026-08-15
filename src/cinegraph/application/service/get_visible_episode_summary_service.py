@@ -9,6 +9,7 @@ from cinegraph.ports.repository.episode_summary_reader import (
 
 
 class GetVisibleEpisodeSummaryService:
+    # Store the reviewed-summary reader and spoiler policy used for visibility decisions.
     def __init__(
         self,
         reader: EpisodeSummaryReader,
@@ -17,6 +18,7 @@ class GetVisibleEpisodeSummaryService:
         self._reader = reader
         self._spoiler_policy = spoiler_policy
 
+    # Return a visible summary, or a partial summary marked as model-only when appropriate.
     def execute(
         self,
         query: GetVisibleEpisodeSummaryQuery,

@@ -5,6 +5,7 @@ from cinegraph.common.error_messages import SubtitleErrorMessages
 from cinegraph.ingestion.transcript_srt.models import ParsedSrtCue
 from cinegraph.ingestion.transcript_srt.patterns import SrtPatterns
 
+# Read SRT text using the supported encodings, raising a domain error if none work.
 def read_srt_text(source_path: Path) -> str:
     for encoding in SrtConstants.SRT_ENCODINGS:
         try:
@@ -19,6 +20,7 @@ def read_srt_text(source_path: Path) -> str:
     )
 
 
+# Split canonical SRT text into non-empty blocks and parse each cue.
 def parse_srt(text: str) -> tuple[ParsedSrtCue, ...]:
     return tuple(
         _parse_cue(block)
@@ -27,15 +29,16 @@ def parse_srt(text: str) -> tuple[ParsedSrtCue, ...]:
     )
 
 
+# Validate one SRT block and convert its number, time range, and dialogue lines.
 def _parse_cue(block: str) -> ParsedSrtCue:
 
-    # 1. Split the block into lines and extract the cue number
+    # Split the block and parse its first line as a positive cue number.
     lines = block.splitlines()
 
-    # 2. Validate the cue number and timecode
+    # Require a timecode line after the cue number.
     cue_number = _parse_cue_number(lines[0])
 
-    # 3. Validate the timecode and dialogue lines
+    # Match the SRT timecode format before converting either timestamp.
     if len(lines) < 2:
         raise ValueError(
             SubtitleErrorMessages.SRT_CUE_MUST_HAVE_A_TIMECODE.format(
@@ -43,10 +46,10 @@ def _parse_cue(block: str) -> ParsedSrtCue:
             )
         )
 
-    # 4. Validate the timecode format and extract start and end times
+    # Reject malformed timecodes before reading their timestamp groups.
     match = SrtPatterns.TIMECODE.fullmatch(lines[1].strip())
 
-    # 5. Validate the timecode values and ensure end time is after start time
+    # Convert both timestamps and reject out-of-order cue boundaries.
     if match is None:
         raise ValueError(
             SubtitleErrorMessages.SRT_TIMECODE_IS_INVALID.format(
@@ -54,11 +57,11 @@ def _parse_cue(block: str) -> ParsedSrtCue:
             )
         )
 
-    # 6. Extract start and end times
+    # Convert the captured timestamp groups to milliseconds.
     start_ms = _timestamp_ms(match.group(SrtConstants.TIMESTAMP_START), cue_number)
     end_ms = _timestamp_ms(match.group(SrtConstants.TIMESTAMP_END), cue_number)
 
-    # 7. Validate that the end time is after the start time
+    # Require a positive cue duration.
     if end_ms <= start_ms:
         raise ValueError(
             SubtitleErrorMessages.SRT_CUE_END_MUST_FOLLOW_START.format(
@@ -66,7 +69,7 @@ def _parse_cue(block: str) -> ParsedSrtCue:
             )
         )
 
-    # 8. Extract dialogue lines and ensure they are not empty
+    # Retain non-empty dialogue lines and reject cues without dialogue.
     dialogue_lines = tuple(line.strip() for line in lines[2:] if line.strip())
     if not dialogue_lines:
         raise ValueError(
@@ -75,7 +78,7 @@ def _parse_cue(block: str) -> ParsedSrtCue:
             )
         )
 
-    # 9. Return the parsed SRT cue as a ParsedSrtCue object
+    # Return the validated cue with normalized line boundaries.
     return ParsedSrtCue(
         cue_number=cue_number,
         start_ms=start_ms,
@@ -84,6 +87,7 @@ def _parse_cue(block: str) -> ParsedSrtCue:
     )
 
 
+# Parse and validate the positive integer cue number.
 def _parse_cue_number(value: str) -> int:
     try:
         cue_number = int(value.strip())
@@ -98,6 +102,7 @@ def _parse_cue_number(value: str) -> int:
     return cue_number
 
 
+# Convert an SRT timestamp component to milliseconds and validate its ranges.
 def _timestamp_ms(value: str, cue_number: int) -> int:
     hours, minutes, seconds_and_ms = value.split(":")
     seconds, milliseconds = seconds_and_ms.split(",")

@@ -9,6 +9,7 @@ from cinegraph.ingestion.transcript_srt.models import TranscriptIngestionResult
 
 
 class FinalizedSubtitleCanonicalizer(Protocol):
+    # Convert finalized labeled subtitle text into canonical transcript segments and a report.
     def canonicalize(
             self,
             source_text: str,

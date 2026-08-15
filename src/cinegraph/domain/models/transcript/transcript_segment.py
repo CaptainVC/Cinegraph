@@ -20,6 +20,7 @@ class TranscriptSegment:
     style_removed: bool = False
     speaker_candidates: tuple[SpeakerCandidate, ...] = field(default_factory=tuple)
 
+    # Enforce positive timing, trimmed text, and speaker and episode consistency.
     def __post_init__(self) -> None:
         if self.start_ms < 0:
             raise InvalidModelError(

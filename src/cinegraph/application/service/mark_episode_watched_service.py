@@ -8,6 +8,7 @@ from cinegraph.application.service.watch_event_factory import create_watch_event
 
 class MarkEpisodeWatchedService:
 
+    # Store the watch-progress repository and clock used for watched events.
     def __init__(
             self,
             repository: WatchProgressRepository,
@@ -16,6 +17,7 @@ class MarkEpisodeWatchedService:
         self._repository = repository
         self._clock = clock
 
+    # Mark one episode watched, persist its event, or return an idempotent no-op.
     def execute(
             self,
             command: MarkEpisodeWatchedCommand

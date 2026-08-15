@@ -7,6 +7,7 @@ from cinegraph.domain.models.watch_event.watch_event import WatchEvent
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 
 
+# Create one watch event per episode with shared profile, source, and occurrence metadata.
 def create_watch_events(
     *,
     profile_id: UUID,

@@ -14,6 +14,7 @@ class SeriesWatchState:
     manually_allowed_episodes: frozenset[EpisodeRef] = field(default_factory=frozenset)
     sequential_safe_boundary: EpisodeRef | None = None
 
+    # Enforce immutable progress collections, series ownership, and unique episodes.
     def __post_init__(self) -> None:
         if not isinstance(self.episode_progress, tuple):
             raise InvalidModelError(
@@ -42,6 +43,7 @@ class SeriesWatchState:
                 WatchErrorMessages.SERIES_WATCH_STATE_CANNOT_HAVE_DUPLICATE_PROGRESS
             )
 
+    # Return the progress record for an episode, or None when it is absent.
     def progress_for(self, episode: EpisodeRef) -> EpisodeWatchProgress | None:
         return next(
             (
@@ -52,20 +54,25 @@ class SeriesWatchState:
             None,
         )
 
+    # Return whether the episode has a completed progress record.
     def is_fully_watched(self, episode: EpisodeRef) -> bool:
         progress = self.progress_for(episode)
         return progress is not None and progress.is_completed
 
+    # Return whether any progress record exists for the episode.
     def has_progress_for(self, episode: EpisodeRef) -> bool:
         return self.progress_for(episode) is not None
 
+    # Return the partial-watch cutoff, excluding completed or unknown episodes.
     def safe_until_ms_for(self, episode: EpisodeRef) -> int | None:
         progress = self.progress_for(episode)
         if progress is None or progress.is_completed:
             return None
         return progress.safe_until_ms
 
+    # Replace an episode's progress with completed progress, preserving no-op identity.
     def mark_episode_watched(self, episode: EpisodeRef) -> "SeriesWatchState":
+        # Confirm ownership, then replace any prior progress with completed progress.
         self._validate_episode_series(episode)
 
         if self.is_fully_watched(episode):
@@ -82,9 +89,12 @@ class SeriesWatchState:
             ),
         )
 
+        # Return the immutable series state with the updated progress tuple.
         return replace(self, episode_progress=updated_progress)
 
+    # Remove an episode's progress after validating that it belongs to this series.
     def mark_episode_unwatched(self, episode: EpisodeRef) -> "SeriesWatchState":
+        # Confirm ownership before removing the episode's progress.
         self._validate_episode_series(episode)
 
         if not self.has_progress_for(episode):
@@ -97,22 +107,27 @@ class SeriesWatchState:
         )
         return replace(self, episode_progress=updated_progress)
 
+    # Validate and fold watched updates for multiple episodes into one immutable state.
     def mark_episodes_watched(
         self,
         episodes: tuple[EpisodeRef, ...],
     ) -> "SeriesWatchState":
+        # Validate every episode before applying the updates sequentially.
         for episode in episodes:
             self._validate_episode_series(episode)
 
+        # Fold each episode update into the immutable state returned by the prior step.
         updated_state = self
         for episode in episodes:
             updated_state = updated_state.mark_episode_watched(episode)
         return updated_state
 
+    # Validate ownership and remove progress for all requested episodes.
     def mark_episodes_unwatched(
         self,
         episodes: tuple[EpisodeRef, ...],
     ) -> "SeriesWatchState":
+        # Validate ownership, then remove all requested episode identifiers together.
         for episode in episodes:
             self._validate_episode_series(episode)
 
@@ -126,6 +141,7 @@ class SeriesWatchState:
             return self
         return replace(self, episode_progress=updated_progress)
 
+    # Reject an episode that belongs to a different series watch state.
     def _validate_episode_series(self, episode: EpisodeRef) -> None:
         if episode.series_id != self.series_id:
             raise InvalidModelError(

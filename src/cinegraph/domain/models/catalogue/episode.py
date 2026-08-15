@@ -13,6 +13,7 @@ class Episode:
     synopsis: str | None = None
     runtime_seconds: int | None = None
 
+    # Require a positive episode number and non-empty trimmed episode title.
     def __post_init__(self) -> None:
         if self.episode_number < 1:
             raise InvalidModelError(

@@ -6,10 +6,12 @@ from cinegraph.domain.enums.enum import Language
 
 class IdentifierGenerator:
     @staticmethod
+    # Generate a random UUID for identifiers without a stable source key.
     def new_id() -> UUID:
         return uuid4()
 
     @staticmethod
+    # Generate a stable UUID from a source document and content hash.
     def source_version_id(
         source_document_id: UUID,
         content_hash: str,
@@ -23,6 +25,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Generate a stable series-scoped UUID from a speaker name.
     def speaker_id(
         series_id: UUID,
         speaker_name: str,
@@ -36,6 +39,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Generate a stable UUID from a transcript version, cue timing, and text.
     def transcript_segment_id(
         source_version_id: UUID,
         episode_id: UUID,
@@ -57,6 +61,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Generate a stable UUID from a summary version, episode, and language.
     def episode_summary_id(
         source_version_id: UUID,
         episode_id: UUID,
@@ -72,6 +77,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Generate the stable identifier used for an episode summary document.
     def episode_summary_document_id(
         source_version_id: UUID,
         episode_id: UUID,
@@ -84,6 +90,7 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Generate a stable UUID for an episode summary source and its origin.
     def episode_summary_source_document_id(
         episode_id: UUID,
         language: Language,

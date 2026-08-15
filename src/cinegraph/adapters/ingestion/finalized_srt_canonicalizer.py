@@ -10,6 +10,7 @@ from cinegraph.ingestion.transcript_srt.service import ingest_finalized_srt_text
 
 class FinalizedSrtCanonicalizer:
 
+    # Parse finalized labeled SRT text into canonical transcript segments and a report.
     def canonicalize(
             self,
             *,

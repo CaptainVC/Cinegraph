@@ -12,6 +12,7 @@ class SourceDocument:
     kind: SourceKind
     origin: str
 
+    # Require a non-empty trimmed source title and stable source-document identifier.
     def __post_init__(self) -> None:
         if not self.title or self.title.strip() != self.title:
             raise InvalidModelError(
