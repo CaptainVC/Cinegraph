@@ -28,6 +28,7 @@ class CinegraphRuntimeSettings(BaseSettings):
 
     environment: RuntimeEnvironment = RuntimeEnvironment.DEVELOPMENT
     knowledge_root: Path = Path("knowledge")
+    identity_database_path: Path = Path("knowledge/cinegraph-development.sqlite3")
     qdrant_mode: QdrantRuntimeMode = QdrantRuntimeMode.LOCAL
     qdrant_local_path: Path | None = Path("knowledge/qdrant-development")
     qdrant_url: AnyHttpUrl | None = None

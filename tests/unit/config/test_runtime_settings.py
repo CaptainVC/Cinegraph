@@ -17,6 +17,9 @@ def test_development_defaults_to_private_local_qdrant() -> None:
     assert settings.environment is RuntimeEnvironment.DEVELOPMENT
     assert settings.qdrant_mode is QdrantRuntimeMode.LOCAL
     assert settings.qdrant_local_path == Path("knowledge/qdrant-development")
+    assert settings.identity_database_path == Path(
+        "knowledge/cinegraph-development.sqlite3"
+    )
     assert settings.qdrant_collection_name == "transcript_segments_development"
     assert settings.qdrant_api_key is None
 
