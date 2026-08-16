@@ -17,6 +17,7 @@ class TranscriptIngestionReport:
     multi_speaker_cue_count: int
     overlap_count: int
     style_removed_segment_count: int
+    skipped_non_dialogue_cue_count: int = 0
 
 @dataclass(frozen=True, slots=True)
 class TranscriptIngestionResult:

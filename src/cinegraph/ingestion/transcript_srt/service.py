@@ -31,7 +31,7 @@ def ingest_finalized_srt(
     cues = parse_srt(read_srt_text(source_path))
 
      # Convert each labeled cue into a canonical transcript segment.
-    segments = tuple(
+    mapped_segments = tuple(
         _to_transcript_segment(
             cue=cue,
             source_version_id=source_version_id,
@@ -41,6 +41,7 @@ def ingest_finalized_srt(
         )
         for cue in cues
     )
+    segments = tuple(segment for segment in mapped_segments if segment is not None)
 
     return TranscriptIngestionResult(
           segments=segments,
@@ -65,7 +66,7 @@ def ingest_finalized_srt_text(
     cues = parse_srt(source_text)
 
      # Convert the cues into transcript segments and summarize the ingestion.
-    segments = tuple(
+    mapped_segments = tuple(
         _to_transcript_segment(
             cue=cue,
             source_version_id=source_version_id,
@@ -75,6 +76,7 @@ def ingest_finalized_srt_text(
         )
         for cue in cues
     )
+    segments = tuple(segment for segment in mapped_segments if segment is not None)
 
     return TranscriptIngestionResult(
           segments=segments,
@@ -94,7 +96,7 @@ def _to_transcript_segment(
      episode: EpisodeRef,
      language: Language,
      rights_status: RightsStatus,
-) -> TranscriptSegment:
+) -> TranscriptSegment | None:
      # Require verified labels, normalize dialogue, and deduplicate speakers per cue.
      speaker_candidates: list[SpeakerCandidate] = []
      dialogue_parts: list[str] = []
@@ -134,11 +136,7 @@ def _to_transcript_segment(
           )
 
      if not dialogue_parts:
-          raise ValueError(
-               SubtitleErrorMessages.SRT_CUE_MUST_HAVE_DIALOGUE.format(
-                    cue_number=cue.cue_number
-               )
-          )
+          return None
 
      # Join normalized dialogue and derive stable segment and speaker identifiers.
      text = " ".join(dialogue_parts)
@@ -225,4 +223,5 @@ def _build_report(
                segment.style_removed
                for segment in segments
           ),
+          skipped_non_dialogue_cue_count=len(cues) - len(segments),
      )
