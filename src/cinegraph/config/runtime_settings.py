@@ -34,6 +34,8 @@ class CinegraphRuntimeSettings(BaseSettings):
     qdrant_url: AnyHttpUrl | None = None
     qdrant_api_key: SecretStr | None = None
     qdrant_collection_name: str = "transcript_segments_development"
+    api_host: str = "127.0.0.1"
+    api_port: int = 8000
 
     @field_validator("qdrant_collection_name")
     @classmethod
@@ -42,6 +44,20 @@ class CinegraphRuntimeSettings(BaseSettings):
             raise ValueError(
                 ConfigurationErrorMessages.QDRANT_COLLECTION_NAME_MUST_BE_TRIMMED
             )
+        return value
+
+    @field_validator("api_host")
+    @classmethod
+    def require_trimmed_api_host(cls, value: str) -> str:
+        if not value or value.strip() != value:
+            raise ValueError("API host must be non-empty and trimmed.")
+        return value
+
+    @field_validator("api_port")
+    @classmethod
+    def require_valid_api_port(cls, value: int) -> int:
+        if isinstance(value, bool) or value < 1 or value > 65_535:
+            raise ValueError("API port must be between 1 and 65535.")
         return value
 
     @model_validator(mode="after")

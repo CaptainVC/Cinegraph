@@ -14,6 +14,7 @@ class OpenAISettings(BaseSettings):
 
     openai_api_key: SecretStr
     main_model: str = DEFAULT_MODEL_CONFIGURATION.main_model
+    rag_answer_model: str = DEFAULT_MODEL_CONFIGURATION.rag_answer_model
     speaker_review_model: str = DEFAULT_MODEL_CONFIGURATION.speaker_review_model
     speaker_adjudication_model: str = (
         DEFAULT_MODEL_CONFIGURATION.speaker_adjudication_model
@@ -33,6 +34,7 @@ class OpenAISettings(BaseSettings):
 
     @field_validator(
         "main_model",
+        "rag_answer_model",
         "speaker_review_model",
         "speaker_adjudication_model",
         "speaker_final_review_model",
