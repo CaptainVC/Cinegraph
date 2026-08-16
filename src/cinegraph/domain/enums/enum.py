@@ -11,6 +11,16 @@ class CorpusAccessMode(StrEnum):
     GUEST = "guest"
     AUTHENTICATED = "authenticated"
 
+
+class AccountStatus(StrEnum):
+    ACTIVE = "active"
+    DISABLED = "disabled"
+
+
+class PrincipalKind(StrEnum):
+    GUEST = "guest"
+    AUTHENTICATED = "authenticated"
+
 class WatchEventKind(StrEnum):
     EPISODE_MARKED_WATCHED = "episode_marked_watched"
     EPISODE_MARKED_UNWATCHED = "episode_marked_unwatched"

@@ -7,6 +7,7 @@ from cinegraph.common.error_messages import (
     SourceErrorMessages,
     WatchErrorMessages,
     WorkflowErrorMessages,
+    AuthenticationErrorMessages,
 )
 
 
@@ -73,3 +74,23 @@ class SourceVersionNotFoundError(LookupError):
                 source_version_id=source_version_id,
             )
         )
+
+
+class EmailAlreadyRegisteredError(ValueError):
+    def __init__(self) -> None:
+        super().__init__(AuthenticationErrorMessages.EMAIL_ALREADY_REGISTERED)
+
+
+class InvalidCredentialsError(PermissionError):
+    def __init__(self) -> None:
+        super().__init__(AuthenticationErrorMessages.INVALID_CREDENTIALS)
+
+
+class AccountDisabledError(PermissionError):
+    def __init__(self) -> None:
+        super().__init__(AuthenticationErrorMessages.ACCOUNT_DISABLED)
+
+
+class SessionInvalidError(PermissionError):
+    def __init__(self) -> None:
+        super().__init__(AuthenticationErrorMessages.SESSION_INVALID)

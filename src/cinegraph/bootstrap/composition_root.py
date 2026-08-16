@@ -8,6 +8,11 @@ from cinegraph.adapters.date_time.system_clock import SystemClock
 from cinegraph.adapters.ingestion.finalized_srt_canonicalizer import (
     FinalizedSrtCanonicalizer,
 )
+from cinegraph.adapters.identity import (
+    ScryptPasswordHasher,
+    SecureSessionTokenGenerator,
+    SqliteIdentityRepositories,
+)
 from cinegraph.adapters.qdrant.qdrant_collection_provisioner import (
     QdrantCollectionProvisioningResult,
     QdrantTranscriptCollectionProvisioner,
@@ -27,6 +32,9 @@ from cinegraph.adapters.source.local_subtitle_text_reader import (
 )
 from cinegraph.application.service.index_transcript_segments_service import (
     IndexTranscriptSegmentsService,
+)
+from cinegraph.application.service.identity_session_service import (
+    IdentitySessionService,
 )
 from cinegraph.application.service.ingest_reviewed_corpus_service import (
     IngestReviewedCorpusService,
@@ -129,6 +137,20 @@ class CinegraphCompositionRoot:
             ),
         )
 
+    @cached_property
+    def identity_repositories(self) -> SqliteIdentityRepositories:
+        return SqliteIdentityRepositories(self.settings.identity_database_path)
+
+    @cached_property
+    def identity_session_service(self) -> IdentitySessionService:
+        return IdentitySessionService(
+            self.identity_repositories,
+            self.identity_repositories,
+            ScryptPasswordHasher(),
+            SecureSessionTokenGenerator(),
+            SystemClock(),
+        )
+
     def provision_transcript_collection(
         self,
     ) -> QdrantCollectionProvisioningResult:
@@ -138,5 +160,7 @@ class CinegraphCompositionRoot:
         ).provision()
 
     def close(self) -> None:
+        if "identity_repositories" in self.__dict__:
+            self.identity_repositories.close()
         if "qdrant_client" in self.__dict__:
             self.qdrant_client.close()
