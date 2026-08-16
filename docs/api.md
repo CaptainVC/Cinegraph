@@ -32,3 +32,22 @@ or a strict/sequential spoiler boundary, but cannot broaden corpus entitlement.
 The model sees only segments returned after both policies have been compiled.
 Unknown, duplicate, or absent citations are retried once and then become a safe
 refusal through the LangGraph workflow.
+
+## Request guardrails and audit trail
+
+Every response carries a validated or server-generated `X-Request-ID`,
+`nosniff`, frame-denial, referrer, no-store, and rate-limit headers. Production
+responses also carry HSTS. JSON validation failures expose only affected field
+names, never submitted values; unhandled failures return a stable internal-error
+contract while the request ID remains available to operators.
+
+Request bodies are capped at 64 KiB. A bounded, thread-safe token bucket applies
+larger costs to authentication and chat routes, and structured audit events record
+method, path, status, duration, outcome, and principal kind without cookies,
+tokens, query strings, request bodies, or response bodies. Values and route costs
+are centralized in `ApiConfiguration`.
+
+The current limiter is intentionally process-local for the single-process
+development runtime. A multi-worker or multi-node production deployment must use
+a shared rate-limit adapter or enforce an equivalent policy at the trusted reverse
+proxy. Forwarded address headers are not trusted by the application boundary.

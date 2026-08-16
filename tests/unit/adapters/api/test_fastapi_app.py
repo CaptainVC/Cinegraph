@@ -123,7 +123,7 @@ def test_health_endpoints_distinguish_liveness_and_readiness(tmp_path: Path) -> 
         response = client.get("/health/ready")
 
     assert response.status_code == 503
-    assert response.json()["detail"] == "Application dependencies are not ready."
+    assert response.json()["error"]["code"] == "service_unavailable"
 
 
 def test_guest_cookie_and_catalogue_are_limited_to_seasons_one_and_two(
