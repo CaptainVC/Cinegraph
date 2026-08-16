@@ -10,6 +10,7 @@ class Episode:
     season_id: UUID
     episode_id: UUID
     episode_number: int
+    episode_title: str | None = None
     synopsis: str | None = None
     runtime_seconds: int | None = None
 
@@ -18,6 +19,12 @@ class Episode:
         if self.episode_number < 1:
             raise InvalidModelError(
                 CatalogueErrorMessages.EPISODE_NUMBER_MUST_BE_POSITIVE
+            )
+        if self.episode_title is not None and (
+            not self.episode_title or self.episode_title.strip() != self.episode_title
+        ):
+            raise InvalidModelError(
+                CatalogueErrorMessages.EPISODE_TITLE_MUST_BE_TRIMMED
             )
         if self.runtime_seconds is not None and self.runtime_seconds < 1:
             raise InvalidModelError(

@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "series": [
+    {
+      "series_id": "00000000-0000-0000-0000-000000000011",
+      "series_name": "Example Family",
+      "seasons": [
+        {
+          "season_id": "00000000-0000-0000-0000-000000000101",
+          "season_number": 1,
+          "episodes": [
+            {
+              "episode_id": "00000000-0000-0000-0000-000000001001",
+              "episode_number": 1,
+              "episode_title": "The First Episode",
+              "runtime_seconds": 1320,
+              "synopsis": "An example synopsis for local manifest validation."
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
