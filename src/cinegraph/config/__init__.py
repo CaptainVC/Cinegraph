@@ -17,6 +17,10 @@ from cinegraph.config.embedding import (
     EmbeddingConfiguration,
 )
 from cinegraph.config.models import DEFAULT_MODEL_CONFIGURATION, ModelConfiguration
+from cinegraph.config.media_actions import (
+    DEFAULT_MEDIA_ACTION_CONFIGURATION,
+    MediaActionConfiguration,
+)
 from cinegraph.config.qdrant import (
     DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA,
     QdrantPayloadIndexDefinition,
@@ -54,6 +58,7 @@ __all__ = [
     "DEFAULT_GUEST_ACCESS_CONFIGURATION",
     "DEFAULT_GUEST_CORPUS_ACCESS_SCOPE",
     "DEFAULT_MODEL_CONFIGURATION",
+    "DEFAULT_MEDIA_ACTION_CONFIGURATION",
     "DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA",
     "DEFAULT_RECOMMENDATION_CONFIGURATION",
     "DEFAULT_RETRIEVAL_EVALUATION_THRESHOLDS",
@@ -66,6 +71,7 @@ __all__ = [
     "EmbeddingConfiguration",
     "GuestAccessConfiguration",
     "ModelConfiguration",
+    "MediaActionConfiguration",
     "ModelTokenPricing",
     "OpenAISettings",
     "QdrantPayloadIndexDefinition",

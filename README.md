@@ -27,6 +27,8 @@ This branch establishes the first production boundaries:
 - a same-origin guest/auth web experience for spoiler-scoped, citation-backed chat.
 - an evidence-backed recommendation workflow that ranks only deterministically
   entitled and spoiler-visible candidates.
+- provider-neutral media commands with defense-in-depth authorization, exact-parameter
+  approvals, resumable LangGraph interrupts, idempotency, verification, and audit.
 
 ## Architecture
 

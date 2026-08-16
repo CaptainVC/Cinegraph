@@ -27,6 +27,34 @@ class WatchPreference(StrEnum):
     WATCHED = "watched"
     UNWATCHED = "unwatched"
 
+
+class MediaCommandKind(StrEnum):
+    MARK_WATCHED = "mark_watched"
+    SET_FAVORITE = "set_favorite"
+    CREATE_PLAYLIST = "create_playlist"
+    REQUEST_PLAYBACK = "request_playback"
+
+
+class MediaCommandRisk(StrEnum):
+    REVERSIBLE_LOW_RISK = "reversible_low_risk"
+    REVERSIBLE_MULTI_ITEM = "reversible_multi_item"
+
+
+class ApprovalStatus(StrEnum):
+    PENDING = "pending"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EXECUTED = "executed"
+    VERIFIED = "verified"
+
+
+class MediaActionAuditStage(StrEnum):
+    PROPOSED = "proposed"
+    APPROVED = "approved"
+    REJECTED = "rejected"
+    EXECUTED = "executed"
+    VERIFIED = "verified"
+
 class WatchEventKind(StrEnum):
     EPISODE_MARKED_WATCHED = "episode_marked_watched"
     EPISODE_MARKED_UNWATCHED = "episode_marked_unwatched"
