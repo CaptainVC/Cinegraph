@@ -1,10 +1,18 @@
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+import logging
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
+from fastapi.exceptions import RequestValidationError
+from starlette.responses import JSONResponse
 
 from cinegraph.adapters.api.context import ApiContext, build_default_api_context
+from cinegraph.adapters.api.guardrails import (
+    ApiGuardrailMiddleware,
+    ApiGuardrailServices,
+    error_response,
+)
 from cinegraph.adapters.api.schemas import (
     CatalogueEpisodeResponse,
     CatalogueResponse,
@@ -37,11 +45,24 @@ from cinegraph.common.error_messages import AuthenticationErrorMessages
 from cinegraph.config import (
     DEFAULT_API_CONFIGURATION,
     DEFAULT_AUTHENTICATION_CONFIGURATION,
+    ApiConfiguration,
     RuntimeEnvironment,
 )
 from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.identity import SessionPrincipal
 from cinegraph.domain.models.watch_state import ProfileWatchState, SeriesWatchState
+
+LOGGER = logging.getLogger("cinegraph.api")
+
+ERROR_CODE_BY_STATUS = {
+    status.HTTP_401_UNAUTHORIZED: "unauthorized",
+    status.HTTP_404_NOT_FOUND: "not_found",
+    status.HTTP_409_CONFLICT: "conflict",
+    status.HTTP_413_CONTENT_TOO_LARGE: "request_too_large",
+    status.HTTP_422_UNPROCESSABLE_CONTENT: "invalid_request",
+    status.HTTP_429_TOO_MANY_REQUESTS: "rate_limit_exceeded",
+    status.HTTP_503_SERVICE_UNAVAILABLE: "service_unavailable",
+}
 
 
 def _context(request: Request) -> ApiContext:
@@ -65,7 +86,9 @@ def _principal(
     token: str = Depends(_session_token),
 ) -> SessionPrincipal:
     try:
-        return _context(request).identity_sessions.resolve(token)
+        principal = _context(request).identity_sessions.resolve(token)
+        request.state.principal_kind = principal.kind.value
+        return principal
     except SessionInvalidError as error:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -180,7 +203,7 @@ def _build_watch_state(
     )
     if boundary is None:
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Spoiler boundary must identify an episode in the requested series.",
         )
     series_state = SeriesWatchState(
@@ -206,7 +229,11 @@ def _build_watch_state(
     )
 
 
-def create_app(context: ApiContext | None = None) -> FastAPI:
+def create_app(
+    context: ApiContext | None = None,
+    guardrail_services: ApiGuardrailServices | None = None,
+    api_configuration: ApiConfiguration = DEFAULT_API_CONFIGURATION,
+) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         owned_context = context or build_default_api_context()
@@ -222,7 +249,68 @@ def create_app(context: ApiContext | None = None) -> FastAPI:
         version=DEFAULT_API_CONFIGURATION.version,
         lifespan=lifespan,
     )
+    app.add_middleware(
+        ApiGuardrailMiddleware,
+        services=guardrail_services or ApiGuardrailServices.defaults(api_configuration),
+        configuration=api_configuration,
+    )
     prefix = DEFAULT_API_CONFIGURATION.api_prefix
+
+    def current_request_id(request: Request) -> str:
+        return getattr(request.state, "request_id", "unavailable")
+
+    @app.exception_handler(HTTPException)
+    async def handle_http_exception(
+        request: Request,
+        error: HTTPException,
+    ) -> JSONResponse:
+        message = error.detail if isinstance(error.detail, str) else "Request failed."
+        return error_response(
+            status_code=error.status_code,
+            code=ERROR_CODE_BY_STATUS.get(error.status_code, "request_failed"),
+            message=message,
+            request_id=current_request_id(request),
+            headers=error.headers,
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def handle_validation_exception(
+        request: Request,
+        error: RequestValidationError,
+    ) -> JSONResponse:
+        fields = tuple(
+            sorted(
+                {
+                    ".".join(str(part) for part in item["loc"] if part != "body")
+                    or "request"
+                    for item in error.errors()
+                }
+            )
+        )
+        return error_response(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            code="invalid_request",
+            message="Request validation failed.",
+            request_id=current_request_id(request),
+            fields=fields,
+        )
+
+    @app.exception_handler(Exception)
+    async def handle_unexpected_exception(
+        request: Request,
+        error: Exception,
+    ) -> JSONResponse:
+        LOGGER.error(
+            "Unhandled API exception request_id=%s",
+            current_request_id(request),
+            exc_info=(type(error), error, error.__traceback__),
+        )
+        return error_response(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            code="internal_error",
+            message="An internal error occurred.",
+            request_id=current_request_id(request),
+        )
 
     @app.get("/health/live", response_model=HealthResponse)
     def live() -> HealthResponse:
@@ -267,7 +355,7 @@ def create_app(context: ApiContext | None = None) -> FastAPI:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
         except ValueError as error:
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail=str(error),
             ) from error
         _set_session_cookie(response, grant, app_context.settings.environment)
