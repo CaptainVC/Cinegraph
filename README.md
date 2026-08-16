@@ -24,6 +24,7 @@ This branch establishes the first production boundaries:
 - fail-closed corpus entitlements that restrict guest access to Modern Family
   seasons 1 and 2 independently of spoiler/watch-progress policy;
 - ports, in-memory adapters, focused unit tests, and centralized identifiers.
+- a same-origin guest/auth web experience for spoiler-scoped, citation-backed chat.
 
 ## Architecture
 
@@ -169,6 +170,7 @@ or local environment files.
 
 ## Status
 
-Foundation work is in progress. Persistent application composition, retrieval
-evaluation against the private corpus, authentication adapters, the HTTP/UI layer,
-and provider actions remain ahead of deployment hardening.
+Foundation work is in progress. Governed retrieval, persistent application
+composition, corpus evaluation, authentication, HTTP contracts, guardrails, and
+the first product UI are present. Provider actions and deployment hardening remain
+ahead.
