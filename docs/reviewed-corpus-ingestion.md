@@ -15,8 +15,10 @@ uv run python scripts/ingest_reviewed_corpus.py \
 
 Add `--apply` only after validation succeeds. Apply mode checks/provisions the Qdrant
 schema, creates local FastEmbed dense and sparse embeddings, and upserts deterministic
-point IDs. It does not use the OpenAI API. `--qdrant-url` defaults to the local VPS
-endpoint; set `QDRANT_API_KEY` when the service requires one.
+point IDs. It does not use the OpenAI API. Runtime location, collection, and credentials
+come only from the centralized `CINEGRAPH_QDRANT_*` settings.
+Local development uses Qdrant's embedded storage, which supports the same filters but
+does not create payload indexes. Remote/production mode provisions all filter indexes.
 
 The operation is replay-safe: source versions and transcript segments derive their IDs
 from stable source identity and verified content. Qdrant upserts replace the same IDs

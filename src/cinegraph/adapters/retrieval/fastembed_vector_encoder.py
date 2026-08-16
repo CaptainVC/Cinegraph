@@ -2,6 +2,7 @@ from collections.abc import Iterable
 from typing import Protocol, TypeVar
 
 from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.config import DEFAULT_EMBEDDING_CONFIGURATION, EmbeddingConfiguration
 from cinegraph.domain.retrieval.vector_data import (
     DenseVector,
     DocumentVector,
@@ -41,9 +42,11 @@ class FastEmbedVectorEncoder:
         self,
         dense_backend: DenseEmbeddingBackend,
         sparse_backend: SparseEmbeddingBackend,
+        configuration: EmbeddingConfiguration = DEFAULT_EMBEDDING_CONFIGURATION,
     ) -> None:
         self._dense_backend = dense_backend
         self._sparse_backend = sparse_backend
+        self._configuration = configuration
 
     @classmethod
     # Build an encoder using FastEmbed's configured dense and sparse models.
@@ -51,8 +54,12 @@ class FastEmbedVectorEncoder:
         from fastembed import SparseTextEmbedding, TextEmbedding
 
         return cls(
-            dense_backend=TextEmbedding(model_name="BAAI/bge-small-en-v1.5"),
-            sparse_backend=SparseTextEmbedding(model_name="Qdrant/bm25"),
+            dense_backend=TextEmbedding(
+                model_name=DEFAULT_EMBEDDING_CONFIGURATION.dense_model
+            ),
+            sparse_backend=SparseTextEmbedding(
+                model_name=DEFAULT_EMBEDDING_CONFIGURATION.sparse_model
+            ),
         )
 
     # Encode query text into one validated hybrid query vector.
@@ -82,14 +89,21 @@ class FastEmbedVectorEncoder:
         return result
 
     # Convert backend outputs before constructing domain-owned vector types.
-    @staticmethod
     def _build_hybrid_vector(
+        self,
         dense_result: Iterable[object], sparse_result: SparseEmbeddingResult
     ) -> HybridVector:
         # Convert dense values and materialize both sparse sequences before sorting.
         dense_vector = DenseVector(tuple(float(value) for value in dense_result))
         sparse_indices = tuple(int(index) for index in sparse_result.indices)
         sparse_values = tuple(float(value) for value in sparse_result.values)
+        if not sparse_indices and not sparse_values:
+            sparse_indices = (
+                self._configuration.empty_sparse_fallback_index,
+            )
+            sparse_values = (
+                self._configuration.empty_sparse_fallback_value,
+            )
         if len(sparse_indices) != len(sparse_values):
             return HybridVector(
                 dense=dense_vector,

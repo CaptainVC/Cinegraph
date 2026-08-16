@@ -85,6 +85,17 @@ def test_unsorted_sparse_results_are_sorted_with_matching_values() -> None:
     assert result.vector.sparse.values == (0.1, 0.3, 0.4)
 
 
+def test_empty_sparse_values_use_reserved_negligible_fallback() -> None:
+    encoder, _, _ = make_encoder(
+        sparse_result=FakeSparseEmbedding((), ())
+    )
+
+    result = encoder.encode_document("music or punctuation only")
+
+    assert result.vector.sparse.indices == (2_147_483_647,)
+    assert result.vector.sparse.values == (1e-12,)
+
+
 @pytest.mark.parametrize("empty_backend", ["dense", "sparse"])
 def test_empty_backend_result_raises_central_error(empty_backend: str) -> None:
     dense_backend = EmptyBackend() if empty_backend == "dense" else FakeBackend((1,))
