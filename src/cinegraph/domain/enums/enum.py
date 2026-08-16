@@ -65,6 +65,18 @@ class WatchEventSource(StrEnum):
     JELLYFIN = "jellyfin"
     NETFLIX_CSV = "netflix_csv"
 
+
+class NetflixHistoryImportStatus(StrEnum):
+    PENDING_REVIEW = "pending_review"
+    COMMITTED = "committed"
+    EXPIRED = "expired"
+
+
+class NetflixTitleResolutionStatus(StrEnum):
+    MATCHED = "matched"
+    AMBIGUOUS = "ambiguous"
+    UNMATCHED = "unmatched"
+
 class RightsStatus(StrEnum):
     ALLOWED = "allowed"
     RESTRICTED = "restricted"
