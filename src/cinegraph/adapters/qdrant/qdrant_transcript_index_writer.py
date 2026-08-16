@@ -2,6 +2,22 @@ from typing import Protocol
 
 from qdrant_client.http import models
 
+from cinegraph.config.qdrant import (
+    DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA,
+    QDRANT_END_MS_FIELD,
+    QDRANT_EPISODE_ID_FIELD,
+    QDRANT_EPISODE_NUMBER_FIELD,
+    QDRANT_LANGUAGE_FIELD,
+    QDRANT_REVIEW_STATUS_FIELD,
+    QDRANT_RIGHTS_STATUS_FIELD,
+    QDRANT_SEASON_ID_FIELD,
+    QDRANT_SEASON_NUMBER_FIELD,
+    QDRANT_SERIES_ID_FIELD,
+    QDRANT_SOURCE_STATUS_FIELD,
+    QDRANT_SOURCE_VERSION_ID_FIELD,
+    QDRANT_START_MS_FIELD,
+    QDRANT_TEXT_FIELD,
+)
 from cinegraph.ports.retrieval.transcript_index_writer import (
     TranscriptIndexPoint,
     TranscriptIndexWriter,
@@ -35,26 +51,28 @@ class QdrantTranscriptIndexWriter(TranscriptIndexWriter):
             models.PointStruct(
                 id=str(point.segment_id),
                 vector={
-                    "dense": list(point.vector.vector.dense.values),
-                    "sparse": models.SparseVector(
+                    DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA.dense_vector_name: list(
+                        point.vector.vector.dense.values
+                    ),
+                    DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA.sparse_vector_name: models.SparseVector(
                         indices=list(point.vector.vector.sparse.indices),
                         values=list(point.vector.vector.sparse.values),
                     ),
                 },
                 payload={
-                    "source_version_id": str(point.payload.source_version_id),
-                    "series_id": str(point.payload.series_id),
-                    "season_id": str(point.payload.season_id),
-                    "episode_id": str(point.payload.episode_id),
-                    "season_number": int(point.payload.season_number),
-                    "episode_number": int(point.payload.episode_number),
-                    "start_ms": int(point.payload.start_ms),
-                    "end_ms": int(point.payload.end_ms),
-                    "text": point.payload.text,
-                    "language": point.payload.language.value,
-                    "rights_status": point.payload.rights_status.value,
-                    "source_status": point.payload.source_status.value,
-                    "review_status": point.payload.review_status.value,
+                    QDRANT_SOURCE_VERSION_ID_FIELD: str(point.payload.source_version_id),
+                    QDRANT_SERIES_ID_FIELD: str(point.payload.series_id),
+                    QDRANT_SEASON_ID_FIELD: str(point.payload.season_id),
+                    QDRANT_EPISODE_ID_FIELD: str(point.payload.episode_id),
+                    QDRANT_SEASON_NUMBER_FIELD: int(point.payload.season_number),
+                    QDRANT_EPISODE_NUMBER_FIELD: int(point.payload.episode_number),
+                    QDRANT_START_MS_FIELD: int(point.payload.start_ms),
+                    QDRANT_END_MS_FIELD: int(point.payload.end_ms),
+                    QDRANT_TEXT_FIELD: point.payload.text,
+                    QDRANT_LANGUAGE_FIELD: point.payload.language.value,
+                    QDRANT_RIGHTS_STATUS_FIELD: point.payload.rights_status.value,
+                    QDRANT_SOURCE_STATUS_FIELD: point.payload.source_status.value,
+                    QDRANT_REVIEW_STATUS_FIELD: point.payload.review_status.value,
                 },
             )
             for point in points

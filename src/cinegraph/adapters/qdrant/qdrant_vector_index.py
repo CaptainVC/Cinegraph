@@ -10,6 +10,21 @@ from cinegraph.adapters.qdrant.retrieval_scope_filter import (
     compile_retrieval_scope_filter,
 )
 from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.config.qdrant import (
+    DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA,
+    QDRANT_END_MS_FIELD,
+    QDRANT_EPISODE_ID_FIELD,
+    QDRANT_EPISODE_NUMBER_FIELD,
+    QDRANT_LANGUAGE_FIELD,
+    QDRANT_RIGHTS_STATUS_FIELD,
+    QDRANT_SEASON_ID_FIELD,
+    QDRANT_SEASON_NUMBER_FIELD,
+    QDRANT_SERIES_ID_FIELD,
+    QDRANT_SOURCE_VERSION_ID_FIELD,
+    QDRANT_START_MS_FIELD,
+    QDRANT_TEXT_FIELD,
+    QDRANT_TRANSCRIPT_REQUIRED_PAYLOAD_FIELDS,
+)
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.watch_state.episode_watch_state import (
@@ -57,7 +72,7 @@ class QdrantVectorIndex(VectorIndex):
         compiled_filter = compile_retrieval_scope_filter(scope)
         dense_prefetch = models.Prefetch(
             query=list(query.vector.dense.values),
-            using="dense",
+            using=DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA.dense_vector_name,
             filter=compiled_filter,
             limit=limit,
         )
@@ -66,7 +81,7 @@ class QdrantVectorIndex(VectorIndex):
                 indices=list(query.vector.sparse.indices),
                 values=list(query.vector.sparse.values),
             ),
-            using="sparse",
+            using=DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA.sparse_vector_name,
             filter=compiled_filter,
             limit=limit,
         )
@@ -85,29 +100,16 @@ class QdrantVectorIndex(VectorIndex):
     # Convert one validated Qdrant point into the retrieval port model.
     def _map_point(self, point: Any, scope: RetrievalScope) -> RetrievedSegment:
         payload = point.payload
-        required_keys = {
-            "source_version_id",
-            "series_id",
-            "season_id",
-            "episode_id",
-            "season_number",
-            "episode_number",
-            "start_ms",
-            "end_ms",
-            "text",
-            "language",
-            "rights_status",
-        }
-        if not isinstance(payload, Mapping) or not required_keys.issubset(payload):
+        if not isinstance(payload, Mapping) or not QDRANT_TRANSCRIPT_REQUIRED_PAYLOAD_FIELDS.issubset(payload):
             raise InvalidModelError(RetrievalErrorMessages.QDRANT_RESULT_PAYLOAD_MUST_BE_COMPLETE)
 
         # Parse identifiers before constructing the immutable episode reference.
         try:
             segment_id = UUID(str(point.id))
-            source_version_id = UUID(payload["source_version_id"])
-            series_id = UUID(payload["series_id"])
-            season_id = UUID(payload["season_id"])
-            episode_id = UUID(payload["episode_id"])
+            source_version_id = UUID(payload[QDRANT_SOURCE_VERSION_ID_FIELD])
+            series_id = UUID(payload[QDRANT_SERIES_ID_FIELD])
+            season_id = UUID(payload[QDRANT_SEASON_ID_FIELD])
+            episode_id = UUID(payload[QDRANT_EPISODE_ID_FIELD])
         except (AttributeError, TypeError, ValueError):
             raise InvalidModelError(RetrievalErrorMessages.QDRANT_RESULT_IDS_MUST_BE_VALID)
         if series_id != scope.series_id:
@@ -116,8 +118,8 @@ class QdrantVectorIndex(VectorIndex):
             )
 
         try:
-            language = Language(payload["language"])
-            rights_status = RightsStatus(payload["rights_status"])
+            language = Language(payload[QDRANT_LANGUAGE_FIELD])
+            rights_status = RightsStatus(payload[QDRANT_RIGHTS_STATUS_FIELD])
         except (TypeError, ValueError):
             raise InvalidModelError(
                 RetrievalErrorMessages.QDRANT_RESULT_GOVERNANCE_FIELDS_MUST_BE_VALID
@@ -125,26 +127,29 @@ class QdrantVectorIndex(VectorIndex):
 
         # Enforce backend scalar types before applying domain timing invariants.
         numeric_fields = (
-            payload["season_number"],
-            payload["episode_number"],
-            payload["start_ms"],
-            payload["end_ms"],
+            payload[QDRANT_SEASON_NUMBER_FIELD],
+            payload[QDRANT_EPISODE_NUMBER_FIELD],
+            payload[QDRANT_START_MS_FIELD],
+            payload[QDRANT_END_MS_FIELD],
         )
         if (
             any(isinstance(value, bool) or not isinstance(value, int) for value in numeric_fields)
-            or payload["season_number"] < 1
-            or payload["episode_number"] < 1
+            or payload[QDRANT_SEASON_NUMBER_FIELD] < 1
+            or payload[QDRANT_EPISODE_NUMBER_FIELD] < 1
         ):
             raise InvalidModelError(
                 RetrievalErrorMessages.QDRANT_RESULT_NUMERIC_FIELDS_MUST_BE_VALID
             )
-        text = payload["text"]
+        text = payload[QDRANT_TEXT_FIELD]
         if not isinstance(text, str) or not text or text.strip() != text:
             raise InvalidModelError(RetrievalErrorMessages.QDRANT_RESULT_TEXT_MUST_BE_VALID)
         score = point.score
         if isinstance(score, bool) or not isinstance(score, Real) or not math.isfinite(score):
             raise InvalidModelError(RetrievalErrorMessages.QDRANT_RESULT_SCORE_MUST_BE_FINITE)
-        if payload["start_ms"] < 0 or payload["end_ms"] <= payload["start_ms"]:
+        if (
+            payload[QDRANT_START_MS_FIELD] < 0
+            or payload[QDRANT_END_MS_FIELD] <= payload[QDRANT_START_MS_FIELD]
+        ):
             raise InvalidModelError(
                 RetrievalErrorMessages.QDRANT_RESULT_NUMERIC_FIELDS_MUST_BE_VALID
             )
@@ -155,8 +160,8 @@ class QdrantVectorIndex(VectorIndex):
             season_id=season_id,
             episode_id=episode_id,
             position=EpisodePosition(
-                season_number=payload["season_number"],
-                episode_number=payload["episode_number"],
+                season_number=payload[QDRANT_SEASON_NUMBER_FIELD],
+                episode_number=payload[QDRANT_EPISODE_NUMBER_FIELD],
             ),
         )
         visibility_scope = next(
@@ -172,7 +177,7 @@ class QdrantVectorIndex(VectorIndex):
             or visibility_scope.episode != episode
             or (
                 visibility_scope.safe_until_ms is not None
-                and payload["end_ms"] > visibility_scope.safe_until_ms
+                and payload[QDRANT_END_MS_FIELD] > visibility_scope.safe_until_ms
             )
         ):
             raise InvalidModelError(
@@ -182,8 +187,8 @@ class QdrantVectorIndex(VectorIndex):
             segment_id=segment_id,
             source_version_id=source_version_id,
             episode=episode,
-            start_ms=payload["start_ms"],
-            end_ms=payload["end_ms"],
+            start_ms=payload[QDRANT_START_MS_FIELD],
+            end_ms=payload[QDRANT_END_MS_FIELD],
             text=text,
             language=language,
             rights_status=rights_status,

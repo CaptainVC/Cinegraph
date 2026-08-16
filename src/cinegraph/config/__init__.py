@@ -8,6 +8,11 @@ from cinegraph.config.agent_middleware import (
     AgentMiddlewareConfiguration,
 )
 from cinegraph.config.models import DEFAULT_MODEL_CONFIGURATION, ModelConfiguration
+from cinegraph.config.qdrant import (
+    DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA,
+    QdrantPayloadIndexDefinition,
+    QdrantTranscriptCollectionSchema,
+)
 from cinegraph.config.secrets import (
     DEFAULT_SECRET_PROVISIONING_CONFIGURATION,
     SecretProvisioningConfiguration,
@@ -24,6 +29,7 @@ __all__ = [
     "DEFAULT_GUEST_ACCESS_CONFIGURATION",
     "DEFAULT_GUEST_CORPUS_ACCESS_SCOPE",
     "DEFAULT_MODEL_CONFIGURATION",
+    "DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA",
     "DEFAULT_SECRET_PROVISIONING_CONFIGURATION",
     "DEFAULT_SPEAKER_REVIEW_CONFIGURATION",
     "AgentMiddlewareConfiguration",
@@ -31,6 +37,8 @@ __all__ = [
     "ModelConfiguration",
     "ModelTokenPricing",
     "OpenAISettings",
+    "QdrantPayloadIndexDefinition",
+    "QdrantTranscriptCollectionSchema",
     "SecretProvisioningConfiguration",
     "SpeakerReviewConfiguration",
 ]
