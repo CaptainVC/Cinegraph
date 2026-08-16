@@ -21,6 +21,10 @@ from cinegraph.config.media_actions import (
     DEFAULT_MEDIA_ACTION_CONFIGURATION,
     MediaActionConfiguration,
 )
+from cinegraph.config.mock_media_provider import (
+    DEFAULT_MOCK_MEDIA_PROVIDER_CONFIGURATION,
+    MockMediaProviderConfiguration,
+)
 from cinegraph.config.qdrant import (
     DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA,
     QdrantPayloadIndexDefinition,
@@ -59,6 +63,7 @@ __all__ = [
     "DEFAULT_GUEST_CORPUS_ACCESS_SCOPE",
     "DEFAULT_MODEL_CONFIGURATION",
     "DEFAULT_MEDIA_ACTION_CONFIGURATION",
+    "DEFAULT_MOCK_MEDIA_PROVIDER_CONFIGURATION",
     "DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA",
     "DEFAULT_RECOMMENDATION_CONFIGURATION",
     "DEFAULT_RETRIEVAL_EVALUATION_THRESHOLDS",
@@ -72,6 +77,7 @@ __all__ = [
     "GuestAccessConfiguration",
     "ModelConfiguration",
     "MediaActionConfiguration",
+    "MockMediaProviderConfiguration",
     "ModelTokenPricing",
     "OpenAISettings",
     "QdrantPayloadIndexDefinition",
