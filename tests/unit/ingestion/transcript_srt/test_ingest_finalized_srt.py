@@ -109,6 +109,38 @@ def test_rejects_an_uncertain_speaker_label(tmp_path) -> None:
         ingest(source_path)
 
 
+def test_ignores_style_only_line_when_cue_still_contains_dialogue(tmp_path) -> None:
+    source_path = tmp_path / "synthetic-s01e01.srt"
+    source_path.write_text(
+        "1\n"
+        "00:00:01,000 --> 00:00:02,000\n"
+        "FRANK: <i>\n"
+        "FRANK: Merry Christmas Eve.</i>\n",
+        encoding="utf-8",
+    )
+
+    result = ingest(source_path)
+
+    assert result.segments[0].text == "Merry Christmas Eve."
+    assert result.segments[0].style_removed is True
+    assert [item.name for item in result.segments[0].speaker_candidates] == ["FRANK"]
+
+
+def test_skips_cue_when_every_labeled_line_is_style_only(tmp_path) -> None:
+    source_path = tmp_path / "synthetic-s01e01.srt"
+    source_path.write_text(
+        "1\n00:00:01,000 --> 00:00:02,000\nFRANK: <i>\n",
+        encoding="utf-8",
+    )
+
+    result = ingest(source_path)
+
+    assert result.segments == ()
+    assert result.report.cue_count == 1
+    assert result.report.segment_count == 0
+    assert result.report.skipped_non_dialogue_cue_count == 1
+
+
 def test_reports_overlapping_cues(tmp_path) -> None:
     source_path = tmp_path / "synthetic-s01e01.srt"
     source_path.write_text(
