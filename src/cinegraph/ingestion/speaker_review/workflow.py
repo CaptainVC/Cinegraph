@@ -14,6 +14,7 @@ from cinegraph.domain.enums.enum import (
     SpeakerReviewRunStatus,
 )
 from cinegraph.domain.models.transcript import (
+    HumanSpeakerReviewResolution,
     SpeakerReviewCandidate,
     SpeakerReviewDecision,
     SpeakerReviewVerdict,
@@ -86,6 +87,7 @@ class SpeakerReviewRunState:
     accepted_by_consensus: int = 0
     accepted_by_adjudication: int = 0
     accepted_by_final_review: int = 0
+    accepted_by_human: int = 0
     needs_human: int = 0
 
     @property
@@ -332,7 +334,7 @@ class SpeakerReviewWorkflow:
             "primary",
             state.primary_part_count,
         )
-        candidates = _load_candidates(run_directory)
+        candidates = load_candidates(run_directory)
         candidates_by_id = {item.candidate_id: item for item in candidates}
         primary_verdicts, parse_errors = parse_batch_results(
             output_jsonl=output_text,
@@ -480,7 +482,7 @@ class SpeakerReviewWorkflow:
             "adjudication",
             state.adjudication_part_count,
         )
-        candidates = _load_candidates(run_directory)
+        candidates = load_candidates(run_directory)
         candidates_by_id = {item.candidate_id: item for item in candidates}
         primary_text = _combined_stage_output(
             run_directory,
@@ -520,7 +522,7 @@ class SpeakerReviewWorkflow:
             configuration=self._configuration,
         )
         _write_jsonl(
-            run_directory / "final-decisions.jsonl",
+            run_directory / self._configuration.final_decisions_filename,
             tuple(item.to_dict() for item in final_decisions),
         )
         adjudication_cost = actual_batch_output_cost_usd(
@@ -568,8 +570,8 @@ class SpeakerReviewWorkflow:
                     status=state.status.value
                 )
             )
-        final_decisions = decisions or _load_decisions(
-            run_directory / "final-decisions.jsonl"
+        final_decisions = decisions or load_decisions(
+            run_directory / self._configuration.final_decisions_filename
         )
         unresolved_ids = {
             item.candidate_id
@@ -580,7 +582,7 @@ class SpeakerReviewWorkflow:
             return self._finalize(run_directory, state, final_decisions)
         candidates = tuple(
             item
-            for item in _load_candidates(run_directory)
+            for item in load_candidates(run_directory)
             if item.candidate_id in unresolved_ids
         )
         decisions_by_id = {item.candidate_id: item for item in final_decisions}
@@ -644,7 +646,7 @@ class SpeakerReviewWorkflow:
                     status=state.status.value
                 )
             )
-        candidates = _load_candidates(run_directory)
+        candidates = load_candidates(run_directory)
         output_text = _combined_stage_output(
             run_directory,
             "final-review",
@@ -776,7 +778,7 @@ class SpeakerReviewWorkflow:
             save_run_state(run_directory, updated)
             return updated
 
-        candidates = _load_candidates(run_directory)
+        candidates = load_candidates(run_directory)
         candidates_by_id = {item.candidate_id: item for item in candidates}
         output_text = _combined_stage_output(
             run_directory,
@@ -819,14 +821,23 @@ class SpeakerReviewWorkflow:
         )
         if retried is not None:
             return retried
-        prior_decisions = _load_decisions(run_directory / "final-decisions.jsonl")
+        prior_decisions = load_decisions(
+            run_directory / self._configuration.final_decisions_filename
+        )
         decisions = apply_final_review(
             decisions=prior_decisions,
             final_verdicts=verdicts,
             configuration=self._configuration,
         )
         _write_jsonl(
-            run_directory / f"post-final-decisions{retry_suffix}.jsonl",
+            run_directory
+            / (
+                self._configuration.retry_post_final_decisions_filename_template.format(
+                    retry_count=state.final_review_retry_count
+                )
+                if state.final_review_retry_count
+                else self._configuration.post_final_decisions_filename
+            ),
             tuple(item.to_dict() for item in decisions),
         )
         updated = replace(
@@ -859,7 +870,9 @@ class SpeakerReviewWorkflow:
             >= self._configuration.final_review_max_retry_rounds
         ):
             return None
-        prior_decisions = _load_decisions(run_directory / "final-decisions.jsonl")
+        prior_decisions = load_decisions(
+            run_directory / self._configuration.final_decisions_filename
+        )
         missing_ids = {
             item.candidate_id
             for item in prior_decisions
@@ -870,7 +883,7 @@ class SpeakerReviewWorkflow:
             return None
         candidates = tuple(
             item
-            for item in _load_candidates(run_directory)
+            for item in load_candidates(run_directory)
             if item.candidate_id in missing_ids
         )
         decisions_by_id = {item.candidate_id: item for item in prior_decisions}
@@ -954,7 +967,7 @@ class SpeakerReviewWorkflow:
         state: SpeakerReviewRunState,
         decisions: tuple[SpeakerReviewDecision, ...],
     ) -> SpeakerReviewRunState:
-        candidates = _load_candidates(run_directory)
+        candidates = load_candidates(run_directory)
         source_manifest = json.loads(
             (run_directory / "source-manifest.json").read_text(encoding="utf-8")
         )
@@ -977,8 +990,9 @@ class SpeakerReviewWorkflow:
             actual_cost_usd=state.actual_total_cost_usd,
             configuration=self._configuration,
             human_queue_filename=(
-                f"remaining-human-review-queue-retry-"
-                f"{state.final_review_retry_count}.json"
+                self._configuration.retry_human_queue_filename_template.format(
+                    retry_count=state.final_review_retry_count
+                )
                 if state.final_review_retry_count
                 else None
             ),
@@ -1122,7 +1136,7 @@ def save_run_state(run_directory: Path, state: SpeakerReviewRunState) -> None:
     _write_json_atomic(run_directory / "run-state.json", state.to_dict())
 
 
-def _load_candidates(run_directory: Path) -> tuple[SpeakerReviewCandidate, ...]:
+def load_candidates(run_directory: Path) -> tuple[SpeakerReviewCandidate, ...]:
     return tuple(
         candidate_from_dict(json.loads(line))
         for line in (run_directory / "candidates.jsonl")
@@ -1132,44 +1146,56 @@ def _load_candidates(run_directory: Path) -> tuple[SpeakerReviewCandidate, ...]:
     )
 
 
-def _load_decisions(path: Path) -> tuple[SpeakerReviewDecision, ...]:
+def load_decisions(path: Path) -> tuple[SpeakerReviewDecision, ...]:
     return tuple(
-        _decision_from_dict(json.loads(line))
+        decision_from_dict(json.loads(line))
         for line in path.read_text(encoding="utf-8").splitlines()
         if line.strip()
     )
 
 
-def _decision_from_dict(payload: dict[str, object]) -> SpeakerReviewDecision:
+def decision_from_dict(payload: dict[str, object]) -> SpeakerReviewDecision:
     primary_payload = payload.get("primary_verdicts")
     if not isinstance(primary_payload, list):
         raise TypeError("Decision primary_verdicts must be a list.")
     adjudication_payload = payload.get("adjudication_verdict")
     final_payload = payload.get("final_review_verdict")
+    human_payload = payload.get("human_review_resolution")
     return SpeakerReviewDecision(
         candidate_id=str(payload["candidate_id"]),
         disposition=SpeakerReviewDisposition(str(payload["disposition"])),
         speaker=str(payload["speaker"]) if payload.get("speaker") is not None else None,
         reason=str(payload["reason"]),
         primary_verdicts=tuple(
-            _verdict_from_dict(item)
+            verdict_from_dict(item)
             for item in primary_payload
             if isinstance(item, dict)
         ),
         adjudication_verdict=(
-            _verdict_from_dict(adjudication_payload)
+            verdict_from_dict(adjudication_payload)
             if isinstance(adjudication_payload, dict)
             else None
         ),
         final_review_verdict=(
-            _verdict_from_dict(final_payload)
+            verdict_from_dict(final_payload)
             if isinstance(final_payload, dict)
+            else None
+        ),
+        human_review_resolution=(
+            HumanSpeakerReviewResolution(
+                candidate_id=str(human_payload["candidate_id"]),
+                speaker=str(human_payload["speaker"]),
+                reviewer=str(human_payload["reviewer"]),
+                reviewed_at=datetime.fromisoformat(str(human_payload["reviewed_at"])),
+                rationale=str(human_payload["rationale"]),
+            )
+            if isinstance(human_payload, dict)
             else None
         ),
     )
 
 
-def _verdict_from_dict(payload: dict[str, object]) -> SpeakerReviewVerdict:
+def verdict_from_dict(payload: dict[str, object]) -> SpeakerReviewVerdict:
     evidence_ids = payload.get("evidence_ids")
     if not isinstance(evidence_ids, list):
         raise TypeError("Verdict evidence_ids must be a list.")

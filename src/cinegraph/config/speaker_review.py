@@ -43,6 +43,18 @@ class SpeakerReviewConfiguration:
     season_directory_glob_template: str
     aligned_subtitle_glob: str
     run_directory_name: str
+    human_resolution_schema_version: int
+    human_review_workbench_filename: str
+    human_review_resolution_filename: str
+    human_review_ledger_filename: str
+    post_human_decisions_filename: str
+    initial_human_queue_filename: str
+    remaining_human_queue_filename: str
+    retry_human_queue_filename_template: str
+    final_decisions_filename: str
+    post_final_decisions_filename: str
+    retry_post_final_decisions_filename_template: str
+    reviewed_directory_name: str
     successful_batch_status: str
     terminal_batch_failure_statuses: frozenset[str]
     redaction_placeholders: frozenset[str]
@@ -50,8 +62,8 @@ class SpeakerReviewConfiguration:
 
 
 DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
-    schema_version=4,
-    ledger_schema_version=4,
+    schema_version=5,
+    ledger_schema_version=5,
     prompt_version="speaker-review-v1",
     batch_endpoint="/v1/responses",
     batch_method="POST",
@@ -84,6 +96,22 @@ DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
     season_directory_glob_template="*season {season}.en",
     aligned_subtitle_glob="*.script-aligned.srt",
     run_directory_name="review-runs",
+    human_resolution_schema_version=1,
+    human_review_workbench_filename="human-review-workbench.html",
+    human_review_resolution_filename="human-review-resolution.json",
+    human_review_ledger_filename="human-review-resolution-ledger.json",
+    post_human_decisions_filename="post-human-decisions.jsonl",
+    initial_human_queue_filename="human-review-queue.json",
+    remaining_human_queue_filename="remaining-human-review-queue.json",
+    retry_human_queue_filename_template=(
+        "remaining-human-review-queue-retry-{retry_count}.json"
+    ),
+    final_decisions_filename="final-decisions.jsonl",
+    post_final_decisions_filename="post-final-decisions.jsonl",
+    retry_post_final_decisions_filename_template=(
+        "post-final-decisions-retry-{retry_count}.jsonl"
+    ),
+    reviewed_directory_name="reviewed",
     successful_batch_status="completed",
     terminal_batch_failure_statuses=frozenset({"failed", "expired", "cancelled"}),
     redaction_placeholders=frozenset({"***", "- ***.", "--"}),

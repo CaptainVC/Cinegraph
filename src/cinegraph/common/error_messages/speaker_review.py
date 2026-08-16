@@ -31,3 +31,32 @@ class SpeakerReviewErrorMessages:
     OPENAI_AUTHENTICATION_FAILED = (
         "OpenAI rejected the configured API key; replace OPENAI_API_KEY before retrying."
     )
+    HUMAN_REVIEW_QUEUE_MISSING = "The current human-review queue does not exist."
+    HUMAN_REVIEW_QUEUE_EMPTY = "The current human-review queue is empty."
+    HUMAN_REVIEW_RESOLUTION_MALFORMED = (
+        "The human-review resolution file is malformed."
+    )
+    HUMAN_REVIEW_RUN_ID_MISMATCH = (
+        "The human-review resolution belongs to a different run."
+    )
+    HUMAN_REVIEW_QUEUE_HASH_MISMATCH = (
+        "The human-review queue changed after the resolution was prepared."
+    )
+    HUMAN_REVIEW_SCHEMA_MISMATCH = (
+        "The human-review resolution schema version is unsupported."
+    )
+    HUMAN_REVIEW_DECISION_SET_MISMATCH = (
+        "Human-review decisions must resolve every queued candidate exactly once."
+    )
+    HUMAN_REVIEW_SPEAKER_NOT_ALLOWED = (
+        "Human reviewer selected a speaker outside the candidate allowlist."
+    )
+    HUMAN_REVIEW_REVIEWER_REQUIRED = (
+        "Human reviewer identity must be non-empty and trimmed."
+    )
+    HUMAN_REVIEW_RATIONALE_REQUIRED = (
+        "Every human-review decision requires a non-empty trimmed rationale."
+    )
+    HUMAN_REVIEW_TIMESTAMP_INVALID = (
+        "Human-review timestamp must be a timezone-aware ISO-8601 value."
+    )

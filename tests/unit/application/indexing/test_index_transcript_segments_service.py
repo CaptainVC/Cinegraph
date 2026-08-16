@@ -65,6 +65,7 @@ def make_source_version(
     # Build a source version with metadata valid for the requested lifecycle state.
     reviewed = review_status in (
         SourceReviewStatus.AUTOMATED_REVIEWED,
+        SourceReviewStatus.HYBRID_REVIEWED,
         SourceReviewStatus.REVIEWED,
         SourceReviewStatus.REJECTED,
     )
@@ -150,6 +151,21 @@ def test_active_automated_reviewed_segments_are_approved_for_indexing() -> None:
     assert encoder.texts == ["Claire asks about dinner"]
     assert writer.batches[0][0].payload.review_status is (
         SourceReviewStatus.AUTOMATED_REVIEWED
+    )
+
+
+def test_active_hybrid_reviewed_segments_are_approved_for_indexing() -> None:
+    service, encoder, writer = make_service()
+    source = make_source_version(review_status=SourceReviewStatus.HYBRID_REVIEWED)
+
+    result = service.execute(
+        IndexTranscriptSegmentsCommand(source, (make_segment(),))
+    )
+
+    assert result.indexed_segment_count == 1
+    assert encoder.texts == ["Claire asks about dinner"]
+    assert writer.batches[0][0].payload.review_status is (
+        SourceReviewStatus.HYBRID_REVIEWED
     )
 
 

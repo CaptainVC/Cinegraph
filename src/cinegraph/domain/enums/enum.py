@@ -1,5 +1,6 @@
 from enum import StrEnum
 
+
 class SpoilerMode(StrEnum):
     STRICT = "strict"
     SEQUENTIAL = "sequential"
@@ -41,6 +42,7 @@ class SourceAcquisitionMethod(StrEnum):
 class SourceReviewStatus(StrEnum):
     PENDING = "pending"
     AUTOMATED_REVIEWED = "automated_reviewed"
+    HYBRID_REVIEWED = "hybrid_reviewed"
     REVIEWED = "reviewed"
     REJECTED = "rejected"
 
@@ -61,6 +63,7 @@ class SpeakerReviewDisposition(StrEnum):
     ADJUDICATION_REQUIRED = "adjudication_required"
     ADJUDICATION_ACCEPTED = "adjudication_accepted"
     FINAL_REVIEW_ACCEPTED = "final_review_accepted"
+    HUMAN_REVIEW_ACCEPTED = "human_review_accepted"
     NEEDS_HUMAN = "needs_human"
 
 

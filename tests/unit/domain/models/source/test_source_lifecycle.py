@@ -70,6 +70,15 @@ def test_creates_automated_reviewed_source_with_model_provenance() -> None:
     assert source_version.review_status is SourceReviewStatus.AUTOMATED_REVIEWED
 
 
+def test_creates_hybrid_reviewed_source_with_model_and_human_provenance() -> None:
+    source_version = make_source_version(
+        review_status=SourceReviewStatus.HYBRID_REVIEWED,
+        reviewed_by="openai:gpt-5.6-sol+human:corpus-owner",
+    )
+
+    assert source_version.review_status is SourceReviewStatus.HYBRID_REVIEWED
+
+
 @pytest.mark.parametrize(
     "content_hash",
     [

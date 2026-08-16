@@ -132,7 +132,13 @@ def test_normal_query_builds_dense_sparse_rrf_request_and_shared_filter() -> Non
         {"key": "source_status", "match": {"value": "active"}},
         {
             "key": "review_status",
-            "match": {"any": ["automated_reviewed", "reviewed"]},
+                "match": {
+                    "any": [
+                        "automated_reviewed",
+                        "hybrid_reviewed",
+                        "reviewed",
+                    ]
+                },
         },
     ]
     assert serialized["must"][3]["should"][0]["must"][1] == {

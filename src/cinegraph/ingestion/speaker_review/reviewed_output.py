@@ -37,6 +37,7 @@ class ReviewedOutputRecord:
     candidate_sha256: str
     reviewed_sha256: str
     automated_decision_count: int
+    human_decision_count: int
     consensus_decision_count: int
     adjudicated_decision_count: int
     final_review_decision_count: int
@@ -55,6 +56,7 @@ def write_reviewed_outputs(
     actual_cost_usd: float,
     configuration: SpeakerReviewConfiguration,
     human_queue_filename: str | None = None,
+    reviewed_at: str | None = None,
 ) -> tuple[ReviewedOutputRecord, ...]:
     decision_by_id = {item.candidate_id: item for item in decisions}
     candidate_by_file: dict[str, list[SpeakerReviewCandidate]] = {}
@@ -68,9 +70,9 @@ def write_reviewed_outputs(
     ]
     if unresolved:
         queue_filename = human_queue_filename or (
-            "remaining-human-review-queue.json"
-            if (run_directory / "human-review-queue.json").exists()
-            else "human-review-queue.json"
+            configuration.remaining_human_queue_filename
+            if (run_directory / configuration.initial_human_queue_filename).exists()
+            else configuration.initial_human_queue_filename
         )
         _write_human_queue(
             run_directory,
@@ -80,7 +82,22 @@ def write_reviewed_outputs(
         )
         return ()
 
-    output_root = run_directory / "reviewed"
+    has_human_review = any(
+        item.disposition is SpeakerReviewDisposition.HUMAN_REVIEW_ACCEPTED
+        for item in decisions
+    )
+    review_status = (
+        SourceReviewStatus.HYBRID_REVIEWED
+        if has_human_review
+        else SourceReviewStatus.AUTOMATED_REVIEWED
+    )
+    output_suffix = (
+        ".hybrid-reviewed.srt"
+        if has_human_review
+        else ".automated-reviewed.srt"
+    )
+
+    output_root = run_directory / configuration.reviewed_directory_name
     records: list[ReviewedOutputRecord] = []
     for source_filename, source_path in sorted(source_paths.items()):
         file_candidates = candidate_by_file.get(source_filename, [])
@@ -96,7 +113,7 @@ def write_reviewed_outputs(
         output_directory.mkdir(parents=True, exist_ok=True)
         output_filename = source_filename.replace(
             ".script-aligned.srt",
-            ".automated-reviewed.srt",
+            output_suffix,
         )
         output_path = output_directory / output_filename
         _write_if_new_or_unchanged(output_path, reviewed_text)
@@ -107,7 +124,16 @@ def write_reviewed_outputs(
                 reviewed_filename=str(output_path.relative_to(run_directory)),
                 candidate_sha256=_sha256(source_text),
                 reviewed_sha256=_sha256(reviewed_text),
-                automated_decision_count=len(file_decisions),
+                automated_decision_count=sum(
+                    item.disposition
+                    is not SpeakerReviewDisposition.HUMAN_REVIEW_ACCEPTED
+                    for item in file_decisions
+                ),
+                human_decision_count=sum(
+                    item.disposition
+                    is SpeakerReviewDisposition.HUMAN_REVIEW_ACCEPTED
+                    for item in file_decisions
+                ),
                 consensus_decision_count=sum(
                     item.disposition is SpeakerReviewDisposition.CONSENSUS_ACCEPTED
                     for item in file_decisions
@@ -127,15 +153,15 @@ def write_reviewed_outputs(
         )
 
     ledger_path = run_directory / "review-ledger.json"
-    reviewed_at = datetime.now(UTC).isoformat()
+    resolved_reviewed_at = reviewed_at or datetime.now(UTC).isoformat()
     if ledger_path.exists():
         prior_ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
-        reviewed_at = str(prior_ledger["reviewed_at"])
+        resolved_reviewed_at = str(prior_ledger["reviewed_at"])
     ledger = {
         "schema_version": configuration.ledger_schema_version,
-        "review_status": SourceReviewStatus.AUTOMATED_REVIEWED.value,
+        "review_status": review_status.value,
         "reviewed_by": list(reviewer_models),
-        "reviewed_at": reviewed_at,
+        "reviewed_at": resolved_reviewed_at,
         "prompt_version": prompt_version,
         "actual_batch_cost_usd": round(actual_cost_usd, 8),
         "records": [asdict(record) for record in records],

@@ -111,8 +111,9 @@ def test_outer_conditions_require_series_active_and_reviewed_values() -> None:
             "key": "review_status",
             "match": {
                 "any": [
-                    SourceReviewStatus.AUTOMATED_REVIEWED.value,
-                    SourceReviewStatus.REVIEWED.value,
+                        SourceReviewStatus.AUTOMATED_REVIEWED.value,
+                        SourceReviewStatus.HYBRID_REVIEWED.value,
+                        SourceReviewStatus.REVIEWED.value,
                 ]
             },
         },
