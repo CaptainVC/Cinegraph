@@ -33,6 +33,8 @@ This branch establishes the first production boundaries:
   and a reusable adapter contract for future real providers.
 - a hardened Jellyfin HTTP adapter with reviewed item mappings, redacted credentials,
   bounded retries/circuit breaking, idempotency, and read-after-write verification.
+- authenticated, review-first Netflix viewing-history CSV reconciliation with strict
+  upload validation, deterministic candidates, retention, and idempotent watch events.
 
 ## Architecture
 

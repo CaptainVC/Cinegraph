@@ -31,6 +31,10 @@ from cinegraph.config.mock_media_provider import (
     DEFAULT_MOCK_MEDIA_PROVIDER_CONFIGURATION,
     MockMediaProviderConfiguration,
 )
+from cinegraph.config.netflix_history import (
+    DEFAULT_NETFLIX_HISTORY_IMPORT_CONFIGURATION,
+    NetflixHistoryImportConfiguration,
+)
 from cinegraph.config.qdrant import (
     DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA,
     QdrantPayloadIndexDefinition,
@@ -71,6 +75,7 @@ __all__ = [
     "DEFAULT_MEDIA_ACTION_CONFIGURATION",
     "DEFAULT_JELLYFIN_PROVIDER_CONFIGURATION",
     "DEFAULT_MOCK_MEDIA_PROVIDER_CONFIGURATION",
+    "DEFAULT_NETFLIX_HISTORY_IMPORT_CONFIGURATION",
     "DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA",
     "DEFAULT_RECOMMENDATION_CONFIGURATION",
     "DEFAULT_RETRIEVAL_EVALUATION_THRESHOLDS",
@@ -88,6 +93,7 @@ __all__ = [
     "JellyfinEpisodeMapping",
     "JellyfinProviderConfiguration",
     "MockMediaProviderConfiguration",
+    "NetflixHistoryImportConfiguration",
     "ModelTokenPricing",
     "OpenAISettings",
     "QdrantPayloadIndexDefinition",
