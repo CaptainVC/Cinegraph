@@ -125,6 +125,7 @@ def test_active_reviewed_segments_index_in_input_order_with_one_batch() -> None:
     points = writer.batches[0]
     assert [point.segment_id for point in points] == [first.segment_id, second.segment_id]
     assert [point.vector for point in points] == [encoder.document_vector] * 2
+    assert points[0].payload.source_version_id == first.source_version_id
     assert points[0].payload.series_id == first.episode.series_id
     assert points[0].payload.season_id == first.episode.season_id
     assert points[0].payload.episode_id == first.episode.episode_id
@@ -133,6 +134,8 @@ def test_active_reviewed_segments_index_in_input_order_with_one_batch() -> None:
     assert points[0].payload.start_ms == first.start_ms
     assert points[0].payload.end_ms == first.end_ms
     assert points[0].payload.text == first.text
+    assert points[0].payload.language is first.language
+    assert points[0].payload.rights_status is first.rights_status
     assert points[0].payload.source_status is SourceVersionStatus.ACTIVE
     assert points[0].payload.review_status is SourceReviewStatus.REVIEWED
 

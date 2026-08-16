@@ -2,12 +2,18 @@ from dataclasses import dataclass
 from typing import Protocol
 from uuid import UUID
 
-from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.enums.enum import (
+    Language,
+    RightsStatus,
+    SourceReviewStatus,
+    SourceVersionStatus,
+)
 from cinegraph.domain.retrieval.vector_data import DocumentVector
 
 
 @dataclass(frozen=True, slots=True)
 class TranscriptIndexPayload:
+    source_version_id: UUID
     series_id: UUID
     season_id: UUID
     episode_id: UUID
@@ -16,6 +22,8 @@ class TranscriptIndexPayload:
     start_ms: int
     end_ms: int
     text: str
+    language: Language
+    rights_status: RightsStatus
     source_status: SourceVersionStatus
     review_status: SourceReviewStatus
 

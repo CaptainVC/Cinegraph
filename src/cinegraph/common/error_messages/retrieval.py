@@ -30,6 +30,15 @@ class RetrievalErrorMessages:
         "Document vector must contain a HybridVector."
     )
     SEARCH_LIMIT_MUST_BE_POSITIVE = "Search limit must be at least one."
+    SEARCH_QUERY_MUST_BE_TRIMMED_NONEMPTY = (
+        "Search query must be non-empty and trimmed."
+    )
+    CANDIDATE_EPISODES_MUST_BE_IMMUTABLE = (
+        "Candidate episodes must be provided as an immutable tuple."
+    )
+    CANDIDATE_EPISODE_IDS_MUST_BE_UNIQUE = (
+        "Candidate episode IDs must be unique."
+    )
     EPISODE_VISIBILITY_SCOPE_SAFE_UNTIL_MS_MUST_BE_NON_NEGATIVE = (
         "Episode visibility scope safe_until_ms must be non-negative."
     )
@@ -49,6 +58,9 @@ class RetrievalErrorMessages:
         "Qdrant result payload must be present and complete."
     )
     QDRANT_RESULT_IDS_MUST_BE_VALID = "Qdrant result IDs must be valid UUIDs."
+    QDRANT_RESULT_GOVERNANCE_FIELDS_MUST_BE_VALID = (
+        "Qdrant result language and rights status must be valid."
+    )
     QDRANT_RESULT_SERIES_MUST_MATCH_SCOPE = (
         "Qdrant result series must match the retrieval scope."
     )
@@ -59,4 +71,31 @@ class RetrievalErrorMessages:
     QDRANT_RESULT_SCORE_MUST_BE_FINITE = "Qdrant result score must be finite numeric data."
     QDRANT_RESULT_MUST_MATCH_VISIBILITY_SCOPE = (
         "Qdrant result must match an episode and time bound in the retrieval scope."
+    )
+    RETRIEVED_SEGMENT_IDS_MUST_BE_UUIDS = (
+        "Retrieved segment and source version IDs must be UUIDs."
+    )
+    RETRIEVED_SEGMENT_EPISODE_MUST_BE_VALID = (
+        "Retrieved segment episode must be an EpisodeRef."
+    )
+    RETRIEVED_SEGMENT_TIMING_MUST_BE_VALID = (
+        "Retrieved segment timing must contain valid millisecond integers."
+    )
+    RETRIEVED_SEGMENT_TEXT_MUST_BE_VALID = (
+        "Retrieved segment text must be non-empty and trimmed."
+    )
+    RETRIEVED_SEGMENT_GOVERNANCE_MUST_BE_VALID = (
+        "Retrieved segment language and rights status must be valid."
+    )
+    RETRIEVED_SEGMENT_SCORE_MUST_BE_FINITE = (
+        "Retrieved segment score must be finite numeric data."
+    )
+    VECTOR_INDEX_RESULT_COUNT_MUST_NOT_EXCEED_LIMIT = (
+        "Vector index result count must not exceed the requested limit."
+    )
+    VECTOR_INDEX_RESULT_IDS_MUST_BE_UNIQUE = (
+        "Vector index result segment IDs must be unique."
+    )
+    VECTOR_INDEX_RESULT_MUST_MATCH_SCOPE = (
+        "Vector index result must match an episode and time bound in the retrieval scope."
     )

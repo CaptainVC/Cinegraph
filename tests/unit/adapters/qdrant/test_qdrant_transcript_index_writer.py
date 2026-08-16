@@ -6,7 +6,12 @@ from qdrant_client.http import models
 from cinegraph.adapters.qdrant.qdrant_transcript_index_writer import (
     QdrantTranscriptIndexWriter,
 )
-from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.enums.enum import (
+    Language,
+    RightsStatus,
+    SourceReviewStatus,
+    SourceVersionStatus,
+)
 from cinegraph.domain.retrieval.vector_data import (
     DenseVector,
     DocumentVector,
@@ -19,6 +24,7 @@ from tests.factories import make_episode_ref
 
 COLLECTION_NAME = "transcript_segments"
 SEGMENT_ID = UUID("00000000-0000-0000-0000-000000002001")
+SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000701")
 
 
 class FakeQdrantClient:
@@ -51,6 +57,7 @@ def make_point(
         segment_id=segment_id,
         vector=make_document_vector(offset=offset),
         payload=TranscriptIndexPayload(
+            source_version_id=SOURCE_VERSION_ID,
             series_id=episode.series_id,
             season_id=episode.season_id,
             episode_id=episode.episode_id,
@@ -59,6 +66,8 @@ def make_point(
             start_ms=1_000,
             end_ms=1_500,
             text=text,
+            language=Language.ENGLISH,
+            rights_status=RightsStatus.ALLOWED,
             source_status=SourceVersionStatus.ACTIVE,
             review_status=SourceReviewStatus.REVIEWED,
         ),
@@ -91,6 +100,7 @@ def test_one_point_maps_hybrid_vectors_id_and_exact_payload() -> None:
         "sparse": models.SparseVector(indices=[2, 7], values=[0.4, 0.8]),
     }
     assert qdrant_point.payload == {
+        "source_version_id": str(SOURCE_VERSION_ID),
         "series_id": str(point.payload.series_id),
         "season_id": str(point.payload.season_id),
         "episode_id": str(point.payload.episode_id),
@@ -99,6 +109,8 @@ def test_one_point_maps_hybrid_vectors_id_and_exact_payload() -> None:
         "start_ms": 1_000,
         "end_ms": 1_500,
         "text": "Claire asks about dinner",
+        "language": Language.ENGLISH.value,
+        "rights_status": RightsStatus.ALLOWED.value,
         "source_status": SourceVersionStatus.ACTIVE.value,
         "review_status": SourceReviewStatus.REVIEWED.value,
     }
