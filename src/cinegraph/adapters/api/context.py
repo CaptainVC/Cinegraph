@@ -11,12 +11,25 @@ from cinegraph.adapters.catalogue.json_catalogue_manifest_loader import (
 from cinegraph.adapters.llm.langchain_chat_model_gateway import (
     LangChainChatModelGateway,
 )
+from cinegraph.adapters.llm.langchain_recommendation_ranker import (
+    LangChainEpisodeRecommendationRanker,
+)
+from cinegraph.adapters.workflow.langgraph.episode_recommendation_graph import (
+    EpisodeRecommendationGraphWorkflow,
+)
 from cinegraph.adapters.workflow.langgraph.hybrid_grounded_answer_graph import (
     HybridGroundedAnswerGraphWorkflow,
 )
 from cinegraph.application.models.hybrid_grounded_answer import (
     HybridGroundedAnswerQuery,
     HybridGroundedAnswerResult,
+)
+from cinegraph.application.models.episode_recommendation import (
+    RecommendEpisodesQuery,
+    RecommendEpisodesResult,
+)
+from cinegraph.application.service.episode_recommendation_service import (
+    EpisodeRecommendationService,
 )
 from cinegraph.application.service.hybrid_grounded_answer_service import (
     HybridGroundedAnswerService,
@@ -40,6 +53,13 @@ class AnswerWorkflow(Protocol):
     ) -> HybridGroundedAnswerResult: ...
 
 
+class RecommendationWorkflow(Protocol):
+    def execute(
+        self,
+        query: RecommendEpisodesQuery,
+    ) -> RecommendEpisodesResult: ...
+
+
 @dataclass(slots=True)
 class ApiContext:
     settings: CinegraphRuntimeSettings
@@ -47,6 +67,7 @@ class ApiContext:
     identity_sessions: IdentitySessionService
     answer_workflow: AnswerWorkflow
     readiness_probe: Callable[[], bool]
+    recommendation_workflow: RecommendationWorkflow | None = None
     close_callback: Callable[[], None] = lambda: None
 
     def close(self) -> None:
@@ -71,6 +92,24 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
             LangChainChatModelGateway.from_chat_model(chat_model),
         )
     )
+    recommendation_model = (
+        chat_model
+        if openai.recommendation_model == openai.rag_answer_model
+        else ChatOpenAI(
+            model=openai.recommendation_model,
+            api_key=openai.openai_api_key.get_secret_value(),
+            temperature=0,
+        )
+    )
+    recommendation_workflow = EpisodeRecommendationGraphWorkflow(
+        EpisodeRecommendationService(
+            loaded_catalogue.manifest,
+            root.hybrid_search_service,
+            LangChainEpisodeRecommendationRanker.from_chat_model(
+                recommendation_model
+            ),
+        )
+    )
 
     def readiness_probe() -> bool:
         try:
@@ -86,5 +125,6 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         identity_sessions=root.identity_session_service,
         answer_workflow=answer_workflow,
         readiness_probe=readiness_probe,
+        recommendation_workflow=recommendation_workflow,
         close_callback=root.close,
     )

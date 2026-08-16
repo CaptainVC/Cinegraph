@@ -25,6 +25,8 @@ session cookie `Secure`; every environment uses `HttpOnly` and `SameSite=Lax`.
 - `POST /api/v1/auth/logout` revokes the current session.
 - `GET /api/v1/catalogue` returns only corpus-visible catalogue entries.
 - `POST /api/v1/chat` runs governed retrieval and grounded generation.
+- `POST /api/v1/recommendations` ranks only entitled, spoiler-visible episode
+  candidates and requires visible transcript citations for every explanation.
 
 Guest sessions remain constrained to Modern Family seasons 1 and 2 in the
 trusted identity service. Chat requests may select relaxed access for discovery
@@ -32,6 +34,10 @@ or a strict/sequential spoiler boundary, but cannot broaden corpus entitlement.
 The model sees only segments returned after both policies have been compiled.
 Unknown, duplicate, or absent citations are retried once and then become a safe
 refusal through the LangGraph workflow.
+
+Recommendation requests apply runtime, watched/unwatched, excluded-theme, corpus,
+and spoiler constraints before retrieval. The model receives only that bounded
+candidate set; injected episode or citation identifiers are rejected after ranking.
 
 ## Request guardrails and audit trail
 

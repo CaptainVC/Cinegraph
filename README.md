@@ -25,6 +25,8 @@ This branch establishes the first production boundaries:
   seasons 1 and 2 independently of spoiler/watch-progress policy;
 - ports, in-memory adapters, focused unit tests, and centralized identifiers.
 - a same-origin guest/auth web experience for spoiler-scoped, citation-backed chat.
+- an evidence-backed recommendation workflow that ranks only deterministically
+  entitled and spoiler-visible candidates.
 
 ## Architecture
 

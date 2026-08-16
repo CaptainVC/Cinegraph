@@ -14,6 +14,10 @@ from cinegraph.adapters.date_time.system_clock import SystemClock
 from cinegraph.application.models.hybrid_grounded_answer import (
     HybridGroundedAnswerResult,
 )
+from cinegraph.application.models.episode_recommendation import (
+    EpisodeRecommendation,
+    RecommendEpisodesResult,
+)
 from cinegraph.application.service.identity_session_service import (
     IdentitySessionService,
 )
@@ -61,6 +65,39 @@ class RecordingAnswerWorkflow:
         )
 
 
+class RecordingRecommendationWorkflow:
+    def __init__(self, catalogue: CatalogueManifest) -> None:
+        self.queries = []
+        self.episode = catalogue.episode_refs()[0]
+
+    def execute(self, query):
+        self.queries.append(query)
+        citation = RetrievedSegment(
+            segment_id=UUID(int=9101),
+            source_version_id=UUID(int=9102),
+            episode=self.episode,
+            start_ms=2_000,
+            end_ms=3_000,
+            text="The family shares a playful dinner.",
+            language=Language.ENGLISH,
+            rights_status=RightsStatus.ALLOWED,
+            score=0.89,
+        )
+        return RecommendEpisodesResult(
+            recommendations=(
+                EpisodeRecommendation(
+                    episode=self.episode,
+                    episode_title="Season 1 premiere",
+                    runtime_seconds=1_200,
+                    score=0.9,
+                    reason="The visible dinner scene matches the requested mood.",
+                    citations=(citation,),
+                ),
+            ),
+            visible_candidate_count=2,
+        )
+
+
 def make_catalogue() -> CatalogueManifest:
     seasons = []
     for season_number in (1, 2, 3):
@@ -101,6 +138,8 @@ def make_context(tmp_path: Path, *, ready: bool = True):
         SystemClock(),
     )
     workflow = RecordingAnswerWorkflow()
+    catalogue = make_catalogue()
+    recommendation_workflow = RecordingRecommendationWorkflow(catalogue)
     context = ApiContext(
         settings=CinegraphRuntimeSettings(
             _env_file=None,
@@ -108,10 +147,11 @@ def make_context(tmp_path: Path, *, ready: bool = True):
             identity_database_path=tmp_path / "identity.sqlite3",
             qdrant_local_path=tmp_path / "qdrant",
         ),
-        catalogue=make_catalogue(),
+        catalogue=catalogue,
         identity_sessions=identity,
         answer_workflow=workflow,
         readiness_probe=lambda: ready,
+        recommendation_workflow=recommendation_workflow,
     )
     return context, workflow
 
@@ -238,6 +278,41 @@ def test_chat_and_catalogue_require_a_valid_session(tmp_path: Path) -> None:
                 "question": "Who introduces the family?",
             },
         )
+        recommendations = client.post(
+            "/api/v1/recommendations",
+            json={
+                "series_id": str(DEFAULT_SERIES_ID),
+                "mood": "warm",
+            },
+        )
 
     assert catalogue.status_code == 401
     assert chat.status_code == 401
+    assert recommendations.status_code == 401
+
+
+def test_recommendations_use_session_scope_and_return_visible_citations(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    workflow = context.recommendation_workflow
+    with TestClient(create_app(context)) as client:
+        client.post("/api/v1/auth/guest")
+        response = client.post(
+            "/api/v1/recommendations",
+            json={
+                "series_id": str(DEFAULT_SERIES_ID),
+                "mood": "warm and playful",
+                "characters": ["Alex"],
+                "requested_count": 2,
+            },
+        )
+
+    assert response.status_code == 200
+    assert response.json()["visible_candidate_count"] == 2
+    assert response.json()["recommendations"][0]["citations"][0][
+        "source_version_id"
+    ] == str(UUID(int=9102))
+    query = workflow.queries[0]
+    assert query.corpus_access_scope.revision == "guest-modern-family-s01-s02-v1"
+    assert query.profile_watch_state.spoiler_mode is SpoilerMode.RELAXED
