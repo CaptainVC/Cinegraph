@@ -11,6 +11,7 @@ from cinegraph.config.authentication import (
     DEFAULT_AUTHENTICATION_CONFIGURATION,
     AuthenticationConfiguration,
 )
+from cinegraph.config.api import DEFAULT_API_CONFIGURATION, ApiConfiguration
 from cinegraph.config.embedding import (
     DEFAULT_EMBEDDING_CONFIGURATION,
     EmbeddingConfiguration,
@@ -43,6 +44,7 @@ from cinegraph.config.speaker_review import (
 
 __all__ = [
     "DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION",
+    "DEFAULT_API_CONFIGURATION",
     "DEFAULT_AUTHENTICATION_CONFIGURATION",
     "DEFAULT_EMBEDDING_CONFIGURATION",
     "DEFAULT_GUEST_ACCESS_CONFIGURATION",
@@ -53,6 +55,7 @@ __all__ = [
     "DEFAULT_SECRET_PROVISIONING_CONFIGURATION",
     "DEFAULT_SPEAKER_REVIEW_CONFIGURATION",
     "AgentMiddlewareConfiguration",
+    "ApiConfiguration",
     "AuthenticationConfiguration",
     "CinegraphRuntimeSettings",
     "EmbeddingConfiguration",

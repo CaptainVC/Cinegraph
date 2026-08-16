@@ -14,6 +14,9 @@ class AuthenticationConfiguration:
     authenticated_session_ttl: timedelta
     guest_session_ttl: timedelta
     email_pattern: str
+    session_cookie_name: str
+    session_cookie_path: str
+    session_cookie_same_site: str
 
 
 DEFAULT_AUTHENTICATION_CONFIGURATION = AuthenticationConfiguration(
@@ -27,4 +30,7 @@ DEFAULT_AUTHENTICATION_CONFIGURATION = AuthenticationConfiguration(
     authenticated_session_ttl=timedelta(days=14),
     guest_session_ttl=timedelta(hours=8),
     email_pattern=r"^[^\s@]+@[^\s@]+\.[^\s@]+$",
+    session_cookie_name="cinegraph_session",
+    session_cookie_path="/",
+    session_cookie_same_site="lax",
 )

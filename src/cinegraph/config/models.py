@@ -4,6 +4,7 @@ from dataclasses import dataclass
 @dataclass(frozen=True, slots=True)
 class ModelConfiguration:
     main_model: str
+    rag_answer_model: str
     speaker_review_model: str
     speaker_adjudication_model: str
     speaker_final_review_model: str
@@ -14,6 +15,7 @@ class ModelConfiguration:
 
 DEFAULT_MODEL_CONFIGURATION = ModelConfiguration(
     main_model="gpt-5.6-terra",
+    rag_answer_model="gpt-4.1-mini",
     speaker_review_model="gpt-5.6-luna",
     speaker_adjudication_model="gpt-5.6-terra",
     speaker_final_review_model="gpt-5.6-sol",
