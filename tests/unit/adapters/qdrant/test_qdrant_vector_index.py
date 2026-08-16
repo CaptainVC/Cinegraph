@@ -130,7 +130,10 @@ def test_normal_query_builds_dense_sparse_rrf_request_and_shared_filter() -> Non
     assert serialized["must"][:3] == [
         {"key": "series_id", "match": {"value": str(SERIES_ID)}},
         {"key": "source_status", "match": {"value": "active"}},
-        {"key": "review_status", "match": {"value": "reviewed"}},
+        {
+            "key": "review_status",
+            "match": {"any": ["automated_reviewed", "reviewed"]},
+        },
     ]
     assert serialized["must"][3]["should"][0]["must"][1] == {
         "key": "end_ms",

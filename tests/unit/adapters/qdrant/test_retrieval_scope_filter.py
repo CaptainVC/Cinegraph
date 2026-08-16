@@ -109,7 +109,12 @@ def test_outer_conditions_require_series_active_and_reviewed_values() -> None:
         },
         {
             "key": "review_status",
-            "match": {"value": SourceReviewStatus.REVIEWED.value},
+            "match": {
+                "any": [
+                    SourceReviewStatus.AUTOMATED_REVIEWED.value,
+                    SourceReviewStatus.REVIEWED.value,
+                ]
+            },
         },
     ]
 

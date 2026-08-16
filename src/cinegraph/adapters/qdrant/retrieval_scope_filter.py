@@ -1,4 +1,7 @@
 from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.models.source.review_status import (
+    APPROVED_SOURCE_REVIEW_STATUSES,
+)
 from cinegraph.domain.retrieval.retrieval_scope import RetrievalScope
 from qdrant_client.http import models
 
@@ -49,7 +52,13 @@ def compile_retrieval_scope_filter(
             ),
             models.FieldCondition(
                 key=_REVIEW_STATUS_FIELD,
-                match=models.MatchValue(value=SourceReviewStatus.REVIEWED.value),
+                match=models.MatchAny(
+                    any=[
+                        status.value
+                        for status in SourceReviewStatus
+                        if status in APPROVED_SOURCE_REVIEW_STATUSES
+                    ]
+                ),
             ),
             models.Filter(should=visibility_filters),
         ]

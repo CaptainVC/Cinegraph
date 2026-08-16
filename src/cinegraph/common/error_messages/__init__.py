@@ -3,6 +3,7 @@ from cinegraph.common.error_messages.conversation import ConversationErrorMessag
 from cinegraph.common.error_messages.grounded_answer import GroundedAnswerErrorMessages
 from cinegraph.common.error_messages.retrieval import RetrievalErrorMessages
 from cinegraph.common.error_messages.source import SourceErrorMessages
+from cinegraph.common.error_messages.speaker_review import SpeakerReviewErrorMessages
 from cinegraph.common.error_messages.subtitle import SubtitleErrorMessages
 from cinegraph.common.error_messages.summary import SummaryErrorMessages
 from cinegraph.common.error_messages.transcript import TranscriptErrorMessages
@@ -15,6 +16,7 @@ __all__ = [
     "GroundedAnswerErrorMessages",
     "RetrievalErrorMessages",
     "SourceErrorMessages",
+    "SpeakerReviewErrorMessages",
     "SubtitleErrorMessages",
     "SummaryErrorMessages",
     "TranscriptErrorMessages",

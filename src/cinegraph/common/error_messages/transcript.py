@@ -1,6 +1,9 @@
 class TranscriptErrorMessages:
     SOURCE_VERSION_MUST_BE_ACTIVE_AND_REVIEWED = (
-        "Transcript source version must be active and reviewed."
+        "Transcript source version must be active and approved."
+    )
+    SUBTITLE_INGESTION_REQUIRES_APPROVED_REVIEW_STATUS = (
+        "Reviewed subtitle ingestion requires an approved review status."
     )
     TRANSCRIPT_SEGMENT_SOURCE_VERSION_MUST_MATCH = (
         "Transcript segment source version must match the command source version."

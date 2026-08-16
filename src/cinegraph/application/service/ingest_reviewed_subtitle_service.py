@@ -4,8 +4,10 @@ from cinegraph.application.models.ingest_reviewed_subtitle import (
     IngestReviewedSubtitleCommand,
     IngestReviewedSubtitleResult,
 )
+from cinegraph.common.error_messages import TranscriptErrorMessages
 from cinegraph.common.identifiers import IdentifierGenerator
-from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.enums.enum import SourceVersionStatus
+from cinegraph.domain.models.source.review_status import is_source_version_approved
 from cinegraph.domain.models.source.source_version import SourceVersion
 from cinegraph.ports.date_time.clock import Clock
 from cinegraph.ports.repository.transcript_ingestion_repository import TranscriptIngestionRepository
@@ -36,6 +38,11 @@ class IngestReviewedSubtitleService:
             self,
             command: IngestReviewedSubtitleCommand
     ) -> IngestReviewedSubtitleResult:
+
+        if not is_source_version_approved(command.review_status):
+            raise ValueError(
+                TranscriptErrorMessages.SUBTITLE_INGESTION_REQUIRES_APPROVED_REVIEW_STATUS
+            )
 
         # Read subtitle text from the caller-provided source locator.
         source_text = self._subtitle_text_reader.read_text(
@@ -74,7 +81,7 @@ class IngestReviewedSubtitleService:
             content_hash=content_hash,
             rights_status=command.rights_status,
             acquisition_method=command.acquisition_method,
-            review_status=SourceReviewStatus.REVIEWED,
+            review_status=command.review_status,
             status=SourceVersionStatus.ACTIVE,
             acquired_at=self._clock.now_utc(),
             parent_source_version_id=(
