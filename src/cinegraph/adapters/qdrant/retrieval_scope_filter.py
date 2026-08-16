@@ -4,13 +4,13 @@ from cinegraph.domain.models.source.review_status import (
 )
 from cinegraph.domain.retrieval.retrieval_scope import RetrievalScope
 from qdrant_client.http import models
-
-
-_SERIES_ID_FIELD = "series_id"
-_EPISODE_ID_FIELD = "episode_id"
-_END_MS_FIELD = "end_ms"
-_SOURCE_STATUS_FIELD = "source_status"
-_REVIEW_STATUS_FIELD = "review_status"
+from cinegraph.config.qdrant import (
+    QDRANT_END_MS_FIELD,
+    QDRANT_EPISODE_ID_FIELD,
+    QDRANT_REVIEW_STATUS_FIELD,
+    QDRANT_SERIES_ID_FIELD,
+    QDRANT_SOURCE_STATUS_FIELD,
+)
 
 
 # Compile visible episode scopes into a Qdrant filter with per-episode time bounds.
@@ -26,14 +26,14 @@ def compile_retrieval_scope_filter(
     for episode_scope in scope.episode_scopes:
         conditions = [
             models.FieldCondition(
-                key=_EPISODE_ID_FIELD,
+                key=QDRANT_EPISODE_ID_FIELD,
                 match=models.MatchValue(value=str(episode_scope.episode.episode_id)),
             )
         ]
         if episode_scope.safe_until_ms is not None:
             conditions.append(
                 models.FieldCondition(
-                    key=_END_MS_FIELD,
+                    key=QDRANT_END_MS_FIELD,
                     range=models.Range(lte=episode_scope.safe_until_ms),
                 )
             )
@@ -43,15 +43,15 @@ def compile_retrieval_scope_filter(
     return models.Filter(
         must=[
             models.FieldCondition(
-                key=_SERIES_ID_FIELD,
+                key=QDRANT_SERIES_ID_FIELD,
                 match=models.MatchValue(value=str(scope.series_id)),
             ),
             models.FieldCondition(
-                key=_SOURCE_STATUS_FIELD,
+                key=QDRANT_SOURCE_STATUS_FIELD,
                 match=models.MatchValue(value=SourceVersionStatus.ACTIVE.value),
             ),
             models.FieldCondition(
-                key=_REVIEW_STATUS_FIELD,
+                key=QDRANT_REVIEW_STATUS_FIELD,
                 match=models.MatchAny(
                     any=[
                         status.value
