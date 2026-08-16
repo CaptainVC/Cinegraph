@@ -113,15 +113,11 @@ def _to_transcript_segment(
           dialogue, removed_styles = _canonicalize_dialogue(
                speaker_match.group("text")
           )
+          style_removed = style_removed or removed_styles
           if not dialogue:
-               raise ValueError(
-                    SubtitleErrorMessages.SRT_CUE_MUST_HAVE_DIALOGUE.format(
-                         cue_number=cue.cue_number
-                    )
-               )
+               continue
 
           dialogue_parts.append(dialogue)
-          style_removed = style_removed or removed_styles
 
           if any(candidate.name == speaker_name for candidate in speaker_candidates):
                continue
@@ -134,6 +130,13 @@ def _to_transcript_segment(
                     ),
                     name=speaker_name,
                     confidence=SrtConstants.VERIFIED_SPEAKER_CONFIDENCE,
+               )
+          )
+
+     if not dialogue_parts:
+          raise ValueError(
+               SubtitleErrorMessages.SRT_CUE_MUST_HAVE_DIALOGUE.format(
+                    cue_number=cue.cue_number
                )
           )
 
