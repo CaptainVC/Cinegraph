@@ -1,10 +1,13 @@
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 import logging
+from pathlib import Path
 from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 
 from cinegraph.adapters.api.context import ApiContext, build_default_api_context
@@ -53,6 +56,7 @@ from cinegraph.domain.models.identity import SessionPrincipal
 from cinegraph.domain.models.watch_state import ProfileWatchState, SeriesWatchState
 
 LOGGER = logging.getLogger("cinegraph.api")
+STATIC_ROOT = Path(__file__).parent / "static"
 
 ERROR_CODE_BY_STATUS = {
     status.HTTP_401_UNAUTHORIZED: "unauthorized",
@@ -254,6 +258,7 @@ def create_app(
         services=guardrail_services or ApiGuardrailServices.defaults(api_configuration),
         configuration=api_configuration,
     )
+    app.mount("/assets", StaticFiles(directory=STATIC_ROOT), name="assets")
     prefix = DEFAULT_API_CONFIGURATION.api_prefix
 
     def current_request_id(request: Request) -> str:
@@ -315,6 +320,10 @@ def create_app(
     @app.get("/health/live", response_model=HealthResponse)
     def live() -> HealthResponse:
         return HealthResponse(status="ok")
+
+    @app.get("/", include_in_schema=False, response_class=FileResponse)
+    def product_ui() -> FileResponse:
+        return FileResponse(STATIC_ROOT / "index.html")
 
     @app.get("/health/ready", response_model=HealthResponse)
     def ready(request: Request) -> HealthResponse:

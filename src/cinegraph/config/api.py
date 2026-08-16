@@ -21,6 +21,7 @@ class ApiConfiguration:
     health_request_cost: int
     authentication_request_cost: int
     chat_request_cost: int
+    static_asset_request_cost: int
 
     def __post_init__(self) -> None:
         positive_integers = (
@@ -38,6 +39,7 @@ class ApiConfiguration:
             self.health_request_cost,
             self.authentication_request_cost,
             self.chat_request_cost,
+            self.static_asset_request_cost,
         )
         if any(cost < 0 or cost > self.rate_limit_capacity for cost in costs):
             raise ValueError("Request costs must fit within rate-limit capacity.")
@@ -64,4 +66,5 @@ DEFAULT_API_CONFIGURATION = ApiConfiguration(
     health_request_cost=0,
     authentication_request_cost=5,
     chat_request_cost=10,
+    static_asset_request_cost=0,
 )

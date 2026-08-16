@@ -243,6 +243,8 @@ class ApiGuardrailMiddleware(BaseHTTPMiddleware):
 
     def _request_cost(self, request: Request) -> int:
         path = request.url.path
+        if path == "/" or path.startswith("/assets/"):
+            return self._configuration.static_asset_request_cost
         if path.startswith("/health/"):
             return self._configuration.health_request_cost
         if path.endswith("/chat"):
@@ -272,6 +274,16 @@ class ApiGuardrailMiddleware(BaseHTTPMiddleware):
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
         response.headers["Cache-Control"] = "no-store"
+        response.headers["Permissions-Policy"] = (
+            "camera=(), microphone=(), geolocation=()"
+        )
+        response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self'; "
+            "img-src 'self' data:; connect-src 'self'; font-src 'self'; "
+            "object-src 'none'; base-uri 'none'; form-action 'self'; "
+            "frame-ancestors 'none'"
+        )
         response.headers["RateLimit-Limit"] = str(
             self._configuration.rate_limit_capacity
         )
