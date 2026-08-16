@@ -5,7 +5,9 @@ from cinegraph.adapters.media.mock_media_provider import (
 )
 
 __all__ = [
+    "JellyfinMediaProvider",
     "MockMediaProvider",
     "MockMediaProviderProfileSeed",
     "MockMediaProviderSeed",
 ]
+from cinegraph.adapters.media.jellyfin_media_provider import JellyfinMediaProvider

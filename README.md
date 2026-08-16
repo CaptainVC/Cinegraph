@@ -31,6 +31,8 @@ This branch establishes the first production boundaries:
   approvals, resumable LangGraph interrupts, idempotency, verification, and audit.
 - a deterministic, clearly labeled mock media provider with synthetic profile state
   and a reusable adapter contract for future real providers.
+- a hardened Jellyfin HTTP adapter with reviewed item mappings, redacted credentials,
+  bounded retries/circuit breaking, idempotency, and read-after-write verification.
 
 ## Architecture
 

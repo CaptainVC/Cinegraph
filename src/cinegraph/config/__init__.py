@@ -21,6 +21,12 @@ from cinegraph.config.media_actions import (
     DEFAULT_MEDIA_ACTION_CONFIGURATION,
     MediaActionConfiguration,
 )
+from cinegraph.config.jellyfin import (
+    DEFAULT_JELLYFIN_PROVIDER_CONFIGURATION,
+    JellyfinConnectionSettings,
+    JellyfinEpisodeMapping,
+    JellyfinProviderConfiguration,
+)
 from cinegraph.config.mock_media_provider import (
     DEFAULT_MOCK_MEDIA_PROVIDER_CONFIGURATION,
     MockMediaProviderConfiguration,
@@ -63,6 +69,7 @@ __all__ = [
     "DEFAULT_GUEST_CORPUS_ACCESS_SCOPE",
     "DEFAULT_MODEL_CONFIGURATION",
     "DEFAULT_MEDIA_ACTION_CONFIGURATION",
+    "DEFAULT_JELLYFIN_PROVIDER_CONFIGURATION",
     "DEFAULT_MOCK_MEDIA_PROVIDER_CONFIGURATION",
     "DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA",
     "DEFAULT_RECOMMENDATION_CONFIGURATION",
@@ -77,6 +84,9 @@ __all__ = [
     "GuestAccessConfiguration",
     "ModelConfiguration",
     "MediaActionConfiguration",
+    "JellyfinConnectionSettings",
+    "JellyfinEpisodeMapping",
+    "JellyfinProviderConfiguration",
     "MockMediaProviderConfiguration",
     "ModelTokenPricing",
     "OpenAISettings",
