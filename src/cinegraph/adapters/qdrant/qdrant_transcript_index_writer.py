@@ -42,6 +42,7 @@ class QdrantTranscriptIndexWriter(TranscriptIndexWriter):
                     ),
                 },
                 payload={
+                    "source_version_id": str(point.payload.source_version_id),
                     "series_id": str(point.payload.series_id),
                     "season_id": str(point.payload.season_id),
                     "episode_id": str(point.payload.episode_id),
@@ -50,6 +51,8 @@ class QdrantTranscriptIndexWriter(TranscriptIndexWriter):
                     "start_ms": int(point.payload.start_ms),
                     "end_ms": int(point.payload.end_ms),
                     "text": point.payload.text,
+                    "language": point.payload.language.value,
+                    "rights_status": point.payload.rights_status.value,
                     "source_status": point.payload.source_status.value,
                     "review_status": point.payload.review_status.value,
                 },

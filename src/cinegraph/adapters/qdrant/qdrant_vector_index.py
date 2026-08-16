@@ -10,6 +10,7 @@ from cinegraph.adapters.qdrant.retrieval_scope_filter import (
     compile_retrieval_scope_filter,
 )
 from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.watch_state.episode_watch_state import (
     EpisodePosition,
@@ -85,6 +86,7 @@ class QdrantVectorIndex(VectorIndex):
     def _map_point(self, point: Any, scope: RetrievalScope) -> RetrievedSegment:
         payload = point.payload
         required_keys = {
+            "source_version_id",
             "series_id",
             "season_id",
             "episode_id",
@@ -93,6 +95,8 @@ class QdrantVectorIndex(VectorIndex):
             "start_ms",
             "end_ms",
             "text",
+            "language",
+            "rights_status",
         }
         if not isinstance(payload, Mapping) or not required_keys.issubset(payload):
             raise InvalidModelError(RetrievalErrorMessages.QDRANT_RESULT_PAYLOAD_MUST_BE_COMPLETE)
@@ -100,6 +104,7 @@ class QdrantVectorIndex(VectorIndex):
         # Parse identifiers before constructing the immutable episode reference.
         try:
             segment_id = UUID(str(point.id))
+            source_version_id = UUID(payload["source_version_id"])
             series_id = UUID(payload["series_id"])
             season_id = UUID(payload["season_id"])
             episode_id = UUID(payload["episode_id"])
@@ -108,6 +113,14 @@ class QdrantVectorIndex(VectorIndex):
         if series_id != scope.series_id:
             raise InvalidModelError(
                 RetrievalErrorMessages.QDRANT_RESULT_SERIES_MUST_MATCH_SCOPE
+            )
+
+        try:
+            language = Language(payload["language"])
+            rights_status = RightsStatus(payload["rights_status"])
+        except (TypeError, ValueError):
+            raise InvalidModelError(
+                RetrievalErrorMessages.QDRANT_RESULT_GOVERNANCE_FIELDS_MUST_BE_VALID
             )
 
         # Enforce backend scalar types before applying domain timing invariants.
@@ -167,9 +180,12 @@ class QdrantVectorIndex(VectorIndex):
             )
         return RetrievedSegment(
             segment_id=segment_id,
+            source_version_id=source_version_id,
             episode=episode,
             start_ms=payload["start_ms"],
             end_ms=payload["end_ms"],
             text=text,
+            language=language,
+            rights_status=rights_status,
             score=float(score),
         )

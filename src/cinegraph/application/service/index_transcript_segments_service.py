@@ -59,6 +59,7 @@ class IndexTranscriptSegmentsService:
             # Encode in caller order and map the episode and timing payload exactly.
             vector = self._encoder.encode_document(segment.text)
             payload = TranscriptIndexPayload(
+                source_version_id=segment.source_version_id,
                 series_id=segment.episode.series_id,
                 season_id=segment.episode.season_id,
                 episode_id=segment.episode.episode_id,
@@ -67,6 +68,8 @@ class IndexTranscriptSegmentsService:
                 start_ms=segment.start_ms,
                 end_ms=segment.end_ms,
                 text=segment.text,
+                language=segment.language,
+                rights_status=segment.rights_status,
                 source_status=command.source_version.status,
                 review_status=command.source_version.review_status,
             )

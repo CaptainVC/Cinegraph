@@ -6,6 +6,7 @@ from qdrant_client.http import models
 
 from cinegraph.adapters.qdrant.qdrant_vector_index import QdrantVectorIndex
 from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.retrieval.retrieval_scope import (
     EpisodeVisibilityScope,
@@ -23,6 +24,7 @@ SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")
 SEASON_ID = UUID("00000000-0000-0000-0000-000000000101")
 EPISODE_ID = UUID("00000000-0000-0000-0000-000000001001")
 SEGMENT_ID = UUID("00000000-0000-0000-0000-000000002001")
+SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000701")
 
 
 class FakeQdrantClient:
@@ -60,6 +62,7 @@ def make_scope(*, safe_until_ms: int | None = None) -> RetrievalScope:
 
 def make_payload(**overrides: Any) -> dict[str, Any]:
     payload = {
+        "source_version_id": str(SOURCE_VERSION_ID),
         "series_id": str(SERIES_ID),
         "season_id": str(SEASON_ID),
         "episode_id": str(EPISODE_ID),
@@ -68,6 +71,8 @@ def make_payload(**overrides: Any) -> dict[str, Any]:
         "start_ms": 1_000,
         "end_ms": 2_000,
         "text": "Claire says hello.",
+        "language": Language.ENGLISH.value,
+        "rights_status": RightsStatus.ALLOWED.value,
     }
     payload.update(overrides)
     return payload
@@ -160,6 +165,7 @@ def test_mapped_point_retains_score_episode_and_transcript_fields() -> None:
     assert len(result) == 1
     mapped = result[0]
     assert mapped.segment_id == SEGMENT_ID
+    assert mapped.source_version_id == SOURCE_VERSION_ID
     assert mapped.episode.series_id == SERIES_ID
     assert mapped.episode.season_id == SEASON_ID
     assert mapped.episode.episode_id == EPISODE_ID
@@ -168,6 +174,8 @@ def test_mapped_point_retains_score_episode_and_transcript_fields() -> None:
     assert mapped.start_ms == 1_000
     assert mapped.end_ms == 2_000
     assert mapped.text == "Claire says hello."
+    assert mapped.language is Language.ENGLISH
+    assert mapped.rights_status is RightsStatus.ALLOWED
     assert mapped.score == 0.75
 
 
@@ -181,6 +189,10 @@ def test_mapped_point_retains_score_episode_and_transcript_fields() -> None:
         (
             make_payload(series_id=str(UUID("00000000-0000-0000-0000-000000000099"))),
             RetrievalErrorMessages.QDRANT_RESULT_SERIES_MUST_MATCH_SCOPE,
+        ),
+        (
+            make_payload(language="not-a-language"),
+            RetrievalErrorMessages.QDRANT_RESULT_GOVERNANCE_FIELDS_MUST_BE_VALID,
         ),
     ],
 )
