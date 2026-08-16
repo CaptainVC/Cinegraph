@@ -13,6 +13,10 @@ from cinegraph.config.qdrant import (
     QdrantPayloadIndexDefinition,
     QdrantTranscriptCollectionSchema,
 )
+from cinegraph.config.retrieval_evaluation import (
+    DEFAULT_RETRIEVAL_EVALUATION_THRESHOLDS,
+    RetrievalEvaluationThresholds,
+)
 from cinegraph.config.secrets import (
     DEFAULT_SECRET_PROVISIONING_CONFIGURATION,
     SecretProvisioningConfiguration,
@@ -30,6 +34,7 @@ __all__ = [
     "DEFAULT_GUEST_CORPUS_ACCESS_SCOPE",
     "DEFAULT_MODEL_CONFIGURATION",
     "DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA",
+    "DEFAULT_RETRIEVAL_EVALUATION_THRESHOLDS",
     "DEFAULT_SECRET_PROVISIONING_CONFIGURATION",
     "DEFAULT_SPEAKER_REVIEW_CONFIGURATION",
     "AgentMiddlewareConfiguration",
@@ -39,6 +44,7 @@ __all__ = [
     "OpenAISettings",
     "QdrantPayloadIndexDefinition",
     "QdrantTranscriptCollectionSchema",
+    "RetrievalEvaluationThresholds",
     "SecretProvisioningConfiguration",
     "SpeakerReviewConfiguration",
 ]

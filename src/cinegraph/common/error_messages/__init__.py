@@ -2,6 +2,7 @@ from cinegraph.common.error_messages.access import AccessErrorMessages
 from cinegraph.common.error_messages.catalogue import CatalogueErrorMessages
 from cinegraph.common.error_messages.conversation import ConversationErrorMessages
 from cinegraph.common.error_messages.corpus_ingestion import CorpusIngestionErrorMessages
+from cinegraph.common.error_messages.evaluation import EvaluationErrorMessages
 from cinegraph.common.error_messages.grounded_answer import GroundedAnswerErrorMessages
 from cinegraph.common.error_messages.qdrant import QdrantErrorMessages
 from cinegraph.common.error_messages.retrieval import RetrievalErrorMessages
@@ -18,6 +19,7 @@ __all__ = [
     "CatalogueErrorMessages",
     "ConversationErrorMessages",
     "CorpusIngestionErrorMessages",
+    "EvaluationErrorMessages",
     "GroundedAnswerErrorMessages",
     "QdrantErrorMessages",
     "RetrievalErrorMessages",
