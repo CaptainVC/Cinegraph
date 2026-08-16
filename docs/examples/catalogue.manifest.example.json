@@ -13,6 +13,7 @@
               "episode_id": "00000000-0000-0000-0000-000000001001",
               "episode_number": 1,
               "episode_title": "The First Episode",
+              "reviewed_subtitle_filename": "Example Family - 1x01 - The First Episode.reviewed.srt",
               "runtime_seconds": 1320,
               "synopsis": "An example synopsis for local manifest validation."
             }

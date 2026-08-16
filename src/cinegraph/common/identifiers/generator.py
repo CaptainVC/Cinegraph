@@ -25,6 +25,22 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    # Generate a stable UUID for one episode transcript source and origin.
+    def transcript_source_document_id(
+        episode_id: UUID,
+        language: Language,
+        origin: str,
+    ) -> UUID:
+        return uuid5(
+            IdentifierTemplates.NAMESPACE,
+            IdentifierTemplates.TRANSCRIPT_SOURCE_DOCUMENT.format(
+                episode_id=episode_id,
+                language=language.value,
+                origin=origin.casefold(),
+            ),
+        )
+
+    @staticmethod
     # Generate a stable series-scoped UUID from a speaker name.
     def speaker_id(
         series_id: UUID,

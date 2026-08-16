@@ -22,6 +22,7 @@ class _EpisodeModel(_StrictManifestModel):
     episode_id: UUID
     episode_number: StrictInt = Field(ge=1)
     episode_title: StrictStr
+    reviewed_subtitle_filename: StrictStr | None = None
     synopsis: StrictStr | None = None
     runtime_seconds: StrictInt | None = Field(default=None, ge=1)
 
@@ -96,6 +97,9 @@ class JsonCatalogueManifestLoader:
                                 episode_id=item.episode_id,
                                 episode_number=item.episode_number,
                                 episode_title=item.episode_title,
+                                reviewed_subtitle_filename=(
+                                    item.reviewed_subtitle_filename
+                                ),
                                 synopsis=item.synopsis,
                                 runtime_seconds=item.runtime_seconds,
                             )
@@ -146,6 +150,9 @@ class JsonCatalogueManifestLoader:
                                     "episode_id": str(episode.episode_id),
                                     "episode_number": episode.episode_number,
                                     "episode_title": episode.episode_title,
+                                    "reviewed_subtitle_filename": (
+                                        episode.reviewed_subtitle_filename
+                                    ),
                                     "runtime_seconds": episode.runtime_seconds,
                                     "synopsis": episode.synopsis,
                                 }

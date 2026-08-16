@@ -16,4 +16,7 @@ the digest.
 
 Use [`catalogue.manifest.example.json`](examples/catalogue.manifest.example.json) as a
 shape reference. Synopsis and runtime are optional, but each episode title is required.
+Set `reviewed_subtitle_filename` for any episode that can be included by a review
+ledger; this explicit mapping prevents ingestion from guessing episode identity from
+release-specific filenames.
 Real SRT, script PDF, manifest, and derived index artifacts remain outside Git.
