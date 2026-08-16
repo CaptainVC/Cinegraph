@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from math import isfinite
 
 from cinegraph.domain.enums.enum import (
@@ -8,7 +9,6 @@ from cinegraph.domain.enums.enum import (
     SpeakerReviewDisposition,
     SpeakerReviewRunStatus,
 )
-
 
 TERMINAL_SPEAKER_REVIEW_RUN_STATUSES = frozenset(
     {
@@ -116,6 +116,36 @@ class SpeakerReviewVerdict:
 
 
 @dataclass(frozen=True, slots=True)
+class HumanSpeakerReviewResolution:
+    candidate_id: str
+    speaker: str
+    reviewer: str
+    reviewed_at: datetime
+    rationale: str
+
+    def __post_init__(self) -> None:
+        for field_name, value in (
+            ("candidate_id", self.candidate_id),
+            ("speaker", self.speaker),
+            ("reviewer", self.reviewer),
+            ("rationale", self.rationale),
+        ):
+            if not value or value.strip() != value:
+                raise ValueError(f"Human review {field_name} must be non-empty and trimmed.")
+        if self.reviewed_at.tzinfo is None or self.reviewed_at.utcoffset() is None:
+            raise ValueError("Human review timestamp must be timezone-aware.")
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "candidate_id": self.candidate_id,
+            "speaker": self.speaker,
+            "reviewer": self.reviewer,
+            "reviewed_at": self.reviewed_at.isoformat(),
+            "rationale": self.rationale,
+        }
+
+
+@dataclass(frozen=True, slots=True)
 class SpeakerReviewDecision:
     candidate_id: str
     disposition: SpeakerReviewDisposition
@@ -124,6 +154,7 @@ class SpeakerReviewDecision:
     primary_verdicts: tuple[SpeakerReviewVerdict, ...]
     adjudication_verdict: SpeakerReviewVerdict | None = None
     final_review_verdict: SpeakerReviewVerdict | None = None
+    human_review_resolution: HumanSpeakerReviewResolution | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -140,6 +171,11 @@ class SpeakerReviewDecision:
             "final_review_verdict": (
                 self.final_review_verdict.to_dict()
                 if self.final_review_verdict is not None
+                else None
+            ),
+            "human_review_resolution": (
+                self.human_review_resolution.to_dict()
+                if self.human_review_resolution is not None
                 else None
             ),
         }

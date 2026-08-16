@@ -120,6 +120,29 @@ to `human-review-queue.json`; successful runs produce cleaned SRT files, an
 immutable decision ledger, token/cost records, source hashes, and a deterministic
 calibration sample.
 
+### Private human resolution
+
+When the conservative agent stages still leave genuine ambiguity, generate the
+self-contained offline workbench inside the ignored run directory:
+
+```bash
+uv run python scripts/review_speakers_human.py prepare knowledge/review-runs/<run-id>
+```
+
+The HTML workbench makes no network requests, stores resumable progress in the
+browser when available, restricts choices to the candidate allowlist, and exports
+`human-review-resolution.json`. Apply that file with:
+
+```bash
+uv run python scripts/review_speakers_human.py apply knowledge/review-runs/<run-id> /path/to/human-review-resolution.json
+```
+
+Resolution validation is all-or-nothing. It validates the run ID, exact queue hash,
+schema, reviewer identity, timezone-aware timestamp, one decision per queued
+candidate, allowlisted speaker, and a human rationale. Prior agent artifacts remain immutable.
+The resulting SRTs and ledger use truthful `hybrid_reviewed` provenance and become
+eligible for canonical ingestion and indexing only after every queued case resolves.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and repository security

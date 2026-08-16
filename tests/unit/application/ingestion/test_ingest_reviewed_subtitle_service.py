@@ -165,6 +165,14 @@ def test_ingests_automated_reviewed_subtitle_with_truthful_status() -> None:
     assert result.source_version.review_status is SourceReviewStatus.AUTOMATED_REVIEWED
 
 
+def test_ingests_hybrid_reviewed_subtitle_with_truthful_status() -> None:
+    service, _repository, _reader, _canonicalizer = build_service("CLAIRE: Hello.")
+
+    result = service.execute(command(SourceReviewStatus.HYBRID_REVIEWED))
+
+    assert result.source_version.review_status is SourceReviewStatus.HYBRID_REVIEWED
+
+
 def test_reingesting_unchanged_content_is_idempotent() -> None:
     service, repository, _reader, canonicalizer = build_service("CLAIRE: Hello.")
 

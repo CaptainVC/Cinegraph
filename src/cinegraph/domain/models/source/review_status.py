@@ -1,9 +1,9 @@
 from cinegraph.domain.enums.enum import SourceReviewStatus
 
-
 FINAL_SOURCE_REVIEW_STATUSES = frozenset(
     {
         SourceReviewStatus.AUTOMATED_REVIEWED,
+        SourceReviewStatus.HYBRID_REVIEWED,
         SourceReviewStatus.REVIEWED,
         SourceReviewStatus.REJECTED,
     }
@@ -12,6 +12,7 @@ FINAL_SOURCE_REVIEW_STATUSES = frozenset(
 APPROVED_SOURCE_REVIEW_STATUSES = frozenset(
     {
         SourceReviewStatus.AUTOMATED_REVIEWED,
+        SourceReviewStatus.HYBRID_REVIEWED,
         SourceReviewStatus.REVIEWED,
     }
 )

@@ -64,6 +64,7 @@ def _summary(run_directory: Path, state) -> dict[str, object]:
         "accepted_by_consensus": state.accepted_by_consensus,
         "accepted_by_adjudication": state.accepted_by_adjudication,
         "accepted_by_final_review": state.accepted_by_final_review,
+        "accepted_by_human": state.accepted_by_human,
         "needs_human": state.needs_human,
         "primary_parts": {
             "completed": state.primary_completed_part_count,
