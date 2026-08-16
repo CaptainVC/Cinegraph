@@ -3,8 +3,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from cinegraph.config import DEFAULT_API_CONFIGURATION
-from cinegraph.domain.enums.enum import PrincipalKind, SpoilerMode
+from cinegraph.config import (
+    DEFAULT_API_CONFIGURATION,
+    DEFAULT_RECOMMENDATION_CONFIGURATION,
+)
+from cinegraph.domain.enums.enum import PrincipalKind, SpoilerMode, WatchPreference
 
 
 class ApiSchema(BaseModel):
@@ -116,3 +119,77 @@ class ChatResponse(ApiSchema):
     answer: str | None
     citations: tuple[CitationResponse, ...]
     is_safe_refusal: bool
+
+
+class RecommendationRequest(ApiSchema):
+    series_id: UUID
+    mood: str = Field(
+        min_length=1,
+        max_length=DEFAULT_RECOMMENDATION_CONFIGURATION.maximum_term_length,
+    )
+    characters: tuple[str, ...] = Field(
+        default=(),
+        max_length=DEFAULT_RECOMMENDATION_CONFIGURATION.maximum_characters,
+    )
+    excluded_themes: tuple[str, ...] = Field(
+        default=(),
+        max_length=DEFAULT_RECOMMENDATION_CONFIGURATION.maximum_excluded_themes,
+    )
+    maximum_runtime_seconds: int | None = Field(default=None, ge=1)
+    watch_preference: WatchPreference = WatchPreference.ANY
+    requested_count: int = Field(
+        default=3,
+        ge=1,
+        le=DEFAULT_RECOMMENDATION_CONFIGURATION.maximum_requested_count,
+    )
+    spoiler_mode: SpoilerMode = SpoilerMode.RELAXED
+    safe_through_episode_id: UUID | None = None
+
+    @field_validator("mood")
+    @classmethod
+    def require_trimmed_mood(cls, value: str) -> str:
+        if value.strip() != value:
+            raise ValueError("Mood must be trimmed.")
+        return value
+
+    @field_validator("characters", "excluded_themes")
+    @classmethod
+    def require_unique_trimmed_terms(
+        cls,
+        values: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        if any(
+            not value
+            or value.strip() != value
+            or len(value) > DEFAULT_RECOMMENDATION_CONFIGURATION.maximum_term_length
+            for value in values
+        ):
+            raise ValueError("Recommendation terms must be non-empty and trimmed.")
+        if len({value.casefold() for value in values}) != len(values):
+            raise ValueError("Recommendation terms must be unique.")
+        return values
+
+    @model_validator(mode="after")
+    def require_boundary_for_non_relaxed_mode(self) -> "RecommendationRequest":
+        if self.spoiler_mode is SpoilerMode.RELAXED:
+            if self.safe_through_episode_id is not None:
+                raise ValueError("Relaxed mode cannot set a spoiler boundary.")
+        elif self.safe_through_episode_id is None:
+            raise ValueError("A spoiler boundary is required in protected modes.")
+        return self
+
+
+class EpisodeRecommendationResponse(ApiSchema):
+    episode_id: UUID
+    season_number: int
+    episode_number: int
+    episode_title: str | None
+    runtime_seconds: int | None
+    score: float
+    reason: str
+    citations: tuple[CitationResponse, ...]
+
+
+class RecommendationResponse(ApiSchema):
+    recommendations: tuple[EpisodeRecommendationResponse, ...]
+    visible_candidate_count: int

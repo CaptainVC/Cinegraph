@@ -27,6 +27,9 @@ from cinegraph.adapters.api.schemas import (
     HealthResponse,
     LoginRequest,
     MessageResponse,
+    EpisodeRecommendationResponse,
+    RecommendationRequest,
+    RecommendationResponse,
     RegisterRequest,
     SessionResponse,
 )
@@ -38,6 +41,9 @@ from cinegraph.application.exceptions.errors import (
 )
 from cinegraph.application.models.hybrid_grounded_answer import (
     HybridGroundedAnswerQuery,
+)
+from cinegraph.application.models.episode_recommendation import (
+    RecommendEpisodesQuery,
 )
 from cinegraph.application.models.identity_sessions import (
     AuthenticateAccountCommand,
@@ -183,7 +189,7 @@ def _catalogue_response(
 def _build_watch_state(
     context: ApiContext,
     principal: SessionPrincipal,
-    chat: ChatRequest,
+    chat: ChatRequest | RecommendationRequest,
 ) -> ProfileWatchState:
     episode_refs = tuple(
         episode
@@ -471,6 +477,72 @@ def create_app(
                 for item in result.citations
             ),
             is_safe_refusal=result.is_safe_refusal,
+        )
+
+    @app.post(f"{prefix}/recommendations", response_model=RecommendationResponse)
+    def recommendations(
+        body: RecommendationRequest,
+        request: Request,
+        principal: SessionPrincipal = Depends(_principal),
+    ) -> RecommendationResponse:
+        app_context = _context(request)
+        if app_context.recommendation_workflow is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Recommendation workflow is unavailable.",
+            )
+        if not any(
+            item.series_id == body.series_id
+            for item in app_context.catalogue.series
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Series was not found.",
+            )
+        result = app_context.recommendation_workflow.execute(
+            RecommendEpisodesQuery(
+                series_id=body.series_id,
+                mood=body.mood,
+                characters=body.characters,
+                excluded_themes=body.excluded_themes,
+                watch_preference=body.watch_preference,
+                requested_count=body.requested_count,
+                profile_watch_state=_build_watch_state(
+                    app_context,
+                    principal,
+                    body,
+                ),
+                corpus_access_scope=principal.corpus_access_scope,
+                maximum_runtime_seconds=body.maximum_runtime_seconds,
+            )
+        )
+        return RecommendationResponse(
+            visible_candidate_count=result.visible_candidate_count,
+            recommendations=tuple(
+                EpisodeRecommendationResponse(
+                    episode_id=item.episode.episode_id,
+                    season_number=item.episode.position.season_number,
+                    episode_number=item.episode.position.episode_number,
+                    episode_title=item.episode_title,
+                    runtime_seconds=item.runtime_seconds,
+                    score=item.score,
+                    reason=item.reason,
+                    citations=tuple(
+                        CitationResponse(
+                            segment_id=citation.segment_id,
+                            source_version_id=citation.source_version_id,
+                            season_number=citation.episode.position.season_number,
+                            episode_number=citation.episode.position.episode_number,
+                            start_ms=citation.start_ms,
+                            end_ms=citation.end_ms,
+                            text=citation.text,
+                            score=citation.score,
+                        )
+                        for citation in item.citations
+                    ),
+                )
+                for item in result.recommendations
+            ),
         )
 
     return app

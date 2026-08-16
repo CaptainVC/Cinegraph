@@ -21,6 +21,12 @@ class PrincipalKind(StrEnum):
     GUEST = "guest"
     AUTHENTICATED = "authenticated"
 
+
+class WatchPreference(StrEnum):
+    ANY = "any"
+    WATCHED = "watched"
+    UNWATCHED = "unwatched"
+
 class WatchEventKind(StrEnum):
     EPISODE_MARKED_WATCHED = "episode_marked_watched"
     EPISODE_MARKED_UNWATCHED = "episode_marked_unwatched"
