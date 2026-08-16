@@ -2,6 +2,9 @@ class CatalogueErrorMessages:
     EPISODE_TITLE_MUST_BE_TRIMMED = (
         "Episode title cannot be empty or have leading/trailing whitespace."
     )
+    EPISODE_REVIEWED_SUBTITLE_FILENAME_MUST_BE_SAFE = (
+        "Episode reviewed subtitle filename must be a safe basename."
+    )
     EPISODE_NUMBER_MUST_BE_POSITIVE = "Episode number must be a positive integer."
     EPISODE_RUNTIME_MUST_BE_POSITIVE = "Episode runtime must be a positive integer."
     SEASON_NUMBER_MUST_BE_POSITIVE = "Season number must be a positive integer."

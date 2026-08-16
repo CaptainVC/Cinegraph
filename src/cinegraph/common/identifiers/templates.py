@@ -5,6 +5,9 @@ class IdentifierTemplates:
     NAMESPACE = NAMESPACE_URL
 
     SOURCE_VERSION = "cinegraph:source-version:{source_document_id}:{content_hash}"
+    TRANSCRIPT_SOURCE_DOCUMENT = (
+        "cinegraph:source-document:transcript:{episode_id}:{language}:{origin}"
+    )
     SPEAKER = "cinegraph:speaker:{series_id}:{speaker_name}"
     TRANSCRIPT_SEGMENT = (
         "cinegraph:transcript-segment:{source_version_id}:{episode_id}:"
