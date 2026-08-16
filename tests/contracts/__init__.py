@@ -1,0 +1,1 @@
+"""Reusable adapter contract assertions."""

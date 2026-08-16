@@ -29,6 +29,8 @@ This branch establishes the first production boundaries:
   entitled and spoiler-visible candidates.
 - provider-neutral media commands with defense-in-depth authorization, exact-parameter
   approvals, resumable LangGraph interrupts, idempotency, verification, and audit.
+- a deterministic, clearly labeled mock media provider with synthetic profile state
+  and a reusable adapter contract for future real providers.
 
 ## Architecture
 

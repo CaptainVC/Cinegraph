@@ -1,0 +1,10 @@
+class MediaProviderErrorMessages:
+    CONNECTION_NOT_FOUND = "The media-provider connection does not exist."
+    PROVIDER_UNAVAILABLE = "The media provider is unavailable."
+    PROFILE_NOT_AUTHORIZED = "The profile is not authorized for this provider connection."
+    EPISODE_NOT_FOUND = "The media provider could not resolve an episode."
+    COMMAND_FAILED = "The media provider simulated a command failure."
+    IDEMPOTENCY_KEY_REUSED = "The provider idempotency key is bound to another command."
+    RESULT_NOT_RECOGNIZED = "The provider result does not match an executed command."
+    MOCK_CONFIGURATION_INVALID = "The mock media-provider configuration is invalid."
+    MOCK_SEED_INVALID = "The mock media-provider seed is invalid."
