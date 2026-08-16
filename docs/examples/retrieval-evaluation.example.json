@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "series_id": "00000000-0000-0000-0000-000000000011",
+  "cases": [
+    {
+      "case_id": "guest-example-pilot",
+      "query": "a synthetic family dinner question",
+      "access_mode": "guest",
+      "candidate_seasons": [1, 2],
+      "expected_episodes": [
+        {"season_number": 1, "episode_number": 1}
+      ],
+      "forbidden_episodes": [],
+      "limit": 5
+    }
+  ]
+}
