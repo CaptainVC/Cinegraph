@@ -6,6 +6,7 @@ from cinegraph.domain.enums.enum import (
     Language,
     RightsStatus,
     SourceAcquisitionMethod,
+    SourceReviewStatus,
 )
 from cinegraph.domain.models.source.source_document import SourceDocument
 from cinegraph.domain.models.source.source_version import SourceVersion
@@ -23,6 +24,7 @@ class IngestReviewedSubtitleCommand:
     acquisition_method: SourceAcquisitionMethod
     reviewed_by: str
     reviewed_at: datetime
+    review_status: SourceReviewStatus = SourceReviewStatus.REVIEWED
 
 @dataclass(frozen=True, slots=True)
 class IngestReviewedSubtitleResult:

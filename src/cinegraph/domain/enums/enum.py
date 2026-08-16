@@ -40,6 +40,7 @@ class SourceAcquisitionMethod(StrEnum):
 
 class SourceReviewStatus(StrEnum):
     PENDING = "pending"
+    AUTOMATED_REVIEWED = "automated_reviewed"
     REVIEWED = "reviewed"
     REJECTED = "rejected"
 
@@ -47,3 +48,27 @@ class SourceReviewStatus(StrEnum):
 class SourceVersionStatus(StrEnum):
     ACTIVE = "active"
     RETIRED = "retired"
+
+
+class SpeakerReviewAction(StrEnum):
+    ACCEPT_CANDIDATE = "accept_candidate"
+    CORRECT_CANDIDATE = "correct_candidate"
+    NEEDS_REVIEW = "needs_review"
+
+
+class SpeakerReviewDisposition(StrEnum):
+    CONSENSUS_ACCEPTED = "consensus_accepted"
+    ADJUDICATION_REQUIRED = "adjudication_required"
+    ADJUDICATION_ACCEPTED = "adjudication_accepted"
+    FINAL_REVIEW_ACCEPTED = "final_review_accepted"
+    NEEDS_HUMAN = "needs_human"
+
+
+class SpeakerReviewRunStatus(StrEnum):
+    PREPARED = "prepared"
+    PRIMARY_SUBMITTED = "primary_submitted"
+    ADJUDICATION_SUBMITTED = "adjudication_submitted"
+    FINAL_REVIEW_SUBMITTED = "final_review_submitted"
+    COMPLETED = "completed"
+    NEEDS_HUMAN = "needs_human"
+    FAILED = "failed"

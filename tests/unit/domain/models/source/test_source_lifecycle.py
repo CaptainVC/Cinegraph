@@ -61,6 +61,15 @@ def test_creates_reviewed_private_subtitle_source_lifecycle() -> None:
     assert source_version.content_hash == CONTENT_HASH
 
 
+def test_creates_automated_reviewed_source_with_model_provenance() -> None:
+    source_version = make_source_version(
+        review_status=SourceReviewStatus.AUTOMATED_REVIEWED,
+        reviewed_by="openai:gpt-5.6-luna+gpt-5.6-terra",
+    )
+
+    assert source_version.review_status is SourceReviewStatus.AUTOMATED_REVIEWED
+
+
 @pytest.mark.parametrize(
     "content_hash",
     [

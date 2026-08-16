@@ -17,6 +17,7 @@ from cinegraph.domain.enums.enum import (
     RightsStatus,
     SourceAcquisitionMethod,
     SourceKind,
+    SourceReviewStatus,
     SourceVersionStatus,
 )
 from cinegraph.domain.models.source import SourceDocument
@@ -111,7 +112,9 @@ def episode() -> EpisodeRef:
     )
 
 
-def command() -> IngestReviewedSubtitleCommand:
+def command(
+    review_status: SourceReviewStatus = SourceReviewStatus.REVIEWED,
+) -> IngestReviewedSubtitleCommand:
     return IngestReviewedSubtitleCommand(
         source_document=source_document(),
         source_locator=str(Path("private/reviewed-s01e01.srt")),
@@ -121,6 +124,7 @@ def command() -> IngestReviewedSubtitleCommand:
         acquisition_method=SourceAcquisitionMethod.LOCAL_FILESYSTEM,
         reviewed_by="local-corpus-owner",
         reviewed_at=REVIEWED_AT,
+        review_status=review_status,
     )
 
 
@@ -151,6 +155,14 @@ def test_ingests_new_reviewed_subtitle() -> None:
     assert repository.get_active_version(SOURCE_DOCUMENT_ID) == result.source_version
     assert repository.segments == result.segments
     assert result.report is not None
+
+
+def test_ingests_automated_reviewed_subtitle_with_truthful_status() -> None:
+    service, _repository, _reader, _canonicalizer = build_service("CLAIRE: Hello.")
+
+    result = service.execute(command(SourceReviewStatus.AUTOMATED_REVIEWED))
+
+    assert result.source_version.review_status is SourceReviewStatus.AUTOMATED_REVIEWED
 
 
 def test_reingesting_unchanged_content_is_idempotent() -> None:

@@ -3,8 +3,9 @@ from cinegraph.application.models.index_transcript_segments import (
     IndexTranscriptSegmentsResult,
 )
 from cinegraph.common.error_messages import TranscriptErrorMessages
-from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.enums.enum import SourceVersionStatus
 from cinegraph.domain.exceptions.errors import InvalidModelError
+from cinegraph.domain.models.source.review_status import is_source_version_approved
 from cinegraph.ports.retrieval.transcript_index_writer import (
     TranscriptIndexPayload,
     TranscriptIndexPoint,
@@ -31,7 +32,7 @@ class IndexTranscriptSegmentsService:
         # Validate source governance before inspecting or encoding segments.
         if (
             command.source_version.status is not SourceVersionStatus.ACTIVE
-            or command.source_version.review_status is not SourceReviewStatus.REVIEWED
+            or not is_source_version_approved(command.source_version.review_status)
         ):
             raise InvalidModelError(
                 TranscriptErrorMessages.SOURCE_VERSION_MUST_BE_ACTIVE_AND_REVIEWED

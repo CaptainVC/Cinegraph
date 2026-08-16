@@ -14,6 +14,9 @@ This branch establishes the first production boundaries:
 - source documents, immutable source versions, review metadata, and content hashes;
 - reviewed subtitle promotion, canonical SRT transcript ingestion, timestamps, and
 	deterministic segment identities;
+- resumable OpenAI Batch speaker review with independent low-cost passes,
+  higher-capability adjudication, a hard run-cost ceiling, immutable evidence,
+  and truthful `automated_reviewed` provenance;
 - typed source provenance for episode summary data;
 - a MediaWiki episode-summary provider with revision and attribution metadata;
 - ports, in-memory adapters, focused unit tests, and centralized identifiers.
@@ -55,6 +58,67 @@ segments, API keys, and provider credentials are excluded from Git.
 The repository contains application code and tests only. A private corpus may be
 used locally through source versions and content hashes, but it is not published or
 required for the test suite.
+
+## Private Speaker Review
+
+The private corpus remains outside Git. The review workflow reads screenplay PDFs
+and script-aligned SRT files from a caller-provided corpus directory, writes all
+run artifacts beneath that directory, and never modifies the source files.
+
+Model names, thresholds, pricing assumptions, the Batch endpoint, output schema,
+file patterns, and the cost limit are centralized under `src/cinegraph/config`.
+The default policy runs two independent `gpt-5.6-luna` opinions and sends only
+disagreements or low-confidence cases to `gpt-5.6-terra`. A completed file is
+recorded as `automated_reviewed`; it is not represented as human-reviewed.
+Cases still unresolved after Terra may enter one final conservative
+`gpt-5.6-sol` graph stage with a separately configured confidence threshold and
+the same evidence allowlist. Anything that still fails remains human review;
+thresholds are never lowered merely to eliminate the queue.
+Final-review responses that fail to produce valid structured output are retried
+once with a larger centralized output allowance. The retry targets only missing
+verdicts, remains inside the run budget, records all consumed tokens (including
+malformed responses), and never re-asks cases where Sol explicitly requested a
+human decision.
+
+Corpus-review lifecycle transitions are compiled as a LangGraph workflow. The
+graph owns prepare/load, submission, and resumable advancement routing, while the
+underlying application workflow retains deterministic evidence validation,
+consensus, budget enforcement, immutable artifacts, and promotion policy. This
+keeps future corpora easy to start or resume without granting an LLM authority
+over source governance.
+
+Provision an environment file from a temporary labelled key file. This command
+copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
+with private permissions, and can delete the temporary server-side source:
+
+```zsh
+uv run python scripts/provision_openai_env.py /secure/staging/key.txt .env --delete-source
+```
+
+Prepare and submit a resumable review for guest-visible seasons 1 and 2:
+
+```zsh
+uv run python scripts/review_speakers_with_openai.py run \
+  --corpus-root knowledge --seasons 1 2 --wait
+```
+
+Without `--wait`, the command submits the primary Batch and returns immediately.
+Use the emitted run directory to inspect or advance it later:
+
+```zsh
+uv run python scripts/review_speakers_with_openai.py submit knowledge/review-runs/<run-id>
+uv run python scripts/review_speakers_with_openai.py status knowledge/review-runs/<run-id>
+uv run python scripts/review_speakers_with_openai.py advance knowledge/review-runs/<run-id>
+uv run python scripts/review_speakers_with_openai.py final-review knowledge/review-runs/<run-id>
+uv run python scripts/review_speakers_with_openai.py retry-incomplete knowledge/review-runs/<run-id>
+uv run python scripts/review_speakers_with_openai.py reconcile-costs knowledge/review-runs/<run-id>
+uv run python scripts/review_speakers_with_openai.py wait knowledge/review-runs/<run-id>
+```
+
+No output is promoted while any item still needs review. Residual cases are written
+to `human-review-queue.json`; successful runs produce cleaned SRT files, an
+immutable decision ledger, token/cost records, source hashes, and a deterministic
+calibration sample.
 
 ## Security
 
