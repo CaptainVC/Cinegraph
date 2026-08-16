@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
+from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.transcript.transcript_segment import (
     TranscriptSegment,
 )
@@ -16,6 +17,7 @@ class GroundedAnswerQuery:
     episode: EpisodeRef
     summary_source_document_id: UUID
     profile_watch_state: ProfileWatchState | None
+    corpus_access_scope: CorpusAccessScope
     limit: int = 5
 
 

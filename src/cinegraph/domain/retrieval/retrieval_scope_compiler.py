@@ -1,6 +1,7 @@
 from uuid import UUID
 
 from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 from cinegraph.domain.models.watch_state.profile_watch_state import ProfileWatchState
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
@@ -21,6 +22,7 @@ class RetrievalScopeCompiler:
         series_id: UUID,
         candidate_episodes: tuple[EpisodeRef, ...],
         watch_state: ProfileWatchState | None,
+        corpus_access_scope: CorpusAccessScope,
     ) -> RetrievalScope:
         # Reject candidate episodes that belong to a different series.
         for episode in candidate_episodes:
@@ -32,6 +34,8 @@ class RetrievalScopeCompiler:
         # Keep fully accessible episodes and bounded partial visibility scopes.
         episode_scopes = []
         for episode in candidate_episodes:
+            if not corpus_access_scope.allows_episode(episode):
+                continue
             if self._spoiler_policy.can_access((episode,), watch_state):
                 episode_scopes.append(
                     EpisodeVisibilityScope(episode=episode, safe_until_ms=None)

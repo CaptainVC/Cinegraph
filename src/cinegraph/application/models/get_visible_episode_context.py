@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
+from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.episode_summary.episode_summary_document import (
     EpisodeSummaryDocument,
 )
@@ -18,6 +19,7 @@ class GetVisibleEpisodeContextQuery:
     episode: EpisodeRef
     summary_source_document_id: UUID
     profile_watch_state: ProfileWatchState | None
+    corpus_access_scope: CorpusAccessScope
 
 
 @dataclass(frozen=True, slots=True)

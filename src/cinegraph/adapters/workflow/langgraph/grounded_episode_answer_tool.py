@@ -25,6 +25,7 @@ def build_grounded_episode_answer_tool(
             episode=context["episode"],
             summary_source_document_id=context["summary_source_document_id"],
             profile_watch_state=context["profile_watch_state"],
+            corpus_access_scope=context["corpus_access_scope"],
         )
         result = workflow.execute(query)
 

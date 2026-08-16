@@ -3,6 +3,7 @@ from uuid import UUID
 
 from cinegraph.common.error_messages import ConversationErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
+from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 
 
@@ -11,6 +12,7 @@ class ConversationThreadBinding:
     profile_id: UUID
     watch_state_version: int
     permission_scope_revision: str
+    corpus_access_scope: CorpusAccessScope
 
     # Enforce the immutable thread binding's version and scope invariants.
     def __post_init__(self) -> None:
@@ -25,6 +27,10 @@ class ConversationThreadBinding:
             raise InvalidModelError(
                 ConversationErrorMessages.BINDING_PERMISSION_SCOPE_REVISION_MUST_BE_NONEMPTY
             )
+        if self.permission_scope_revision != self.corpus_access_scope.revision:
+            raise InvalidModelError(
+                ConversationErrorMessages.BINDING_PERMISSION_SCOPE_REVISION_MUST_MATCH_ACCESS_SCOPE
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,3 +41,4 @@ class ConversationalEpisodeChatQuery:
     question: str
     episode: EpisodeRef
     summary_source_document_id: UUID
+    corpus_access_scope: CorpusAccessScope

@@ -37,6 +37,7 @@ class SearchVisibleEpisodeSegmentsService:
                 episode=query.episode,
                 summary_source_document_id=query.summary_source_document_id,
                 profile_watch_state=query.profile_watch_state,
+                corpus_access_scope=query.corpus_access_scope,
             )
         )
 

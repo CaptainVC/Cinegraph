@@ -25,8 +25,11 @@ from cinegraph.domain.models.watch_state.series_watch_state import (
     SeriesWatchState,
 )
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
-from tests.factories import make_episode_ref
-
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
@@ -139,11 +142,19 @@ def partially_watched_profile(safe_until_ms: int) -> ProfileWatchState:
     )
 
 
-def query(profile_watch_state: ProfileWatchState | None) -> GetVisibleEpisodeContextQuery:
+def query(
+    profile_watch_state: ProfileWatchState | None,
+    *,
+    episode=None,
+    corpus_access_scope=None,
+) -> GetVisibleEpisodeContextQuery:
     return GetVisibleEpisodeContextQuery(
-        episode=make_episode_ref(),
+        episode=episode or make_episode_ref(),
         summary_source_document_id=SOURCE_DOCUMENT_ID,
         profile_watch_state=profile_watch_state,
+        corpus_access_scope=(
+            corpus_access_scope or make_authenticated_corpus_access_scope()
+        ),
     )
 
 
@@ -220,3 +231,23 @@ def test_unavailable_summary_does_not_hide_visible_transcript_segments() -> None
     assert result.summary is None
     assert result.transcript_segments == segments
     assert result.summary_is_model_context_only is False
+
+
+def test_guest_scope_rejects_season_three_before_private_ports_are_read() -> None:
+    service, summary_service, transcript_reader = context_service(
+        GetVisibleEpisodeSummaryResult(summary=episode_summary()),
+        (transcript_segment(start_ms=10_000, end_ms=15_000, cue_number=1),),
+    )
+
+    result = service.execute(
+        query(
+            fully_watched_profile(),
+            episode=make_episode_ref(season_number=3),
+            corpus_access_scope=make_guest_corpus_access_scope(),
+        )
+    )
+
+    assert result.transcript_segments == ()
+    assert result.summary is None
+    assert summary_service.queries == []
+    assert transcript_reader.episodes == []

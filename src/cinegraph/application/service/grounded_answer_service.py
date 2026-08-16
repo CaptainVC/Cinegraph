@@ -3,8 +3,8 @@ from uuid import UUID
 from cinegraph.application.models.grounded_answer import (
     GroundedAnswerQuery,
     GroundedAnswerResult,
-    ModelEvidence,
     ModelDraft,
+    ModelEvidence,
     ModelRequest,
 )
 from cinegraph.application.models.search_visible_episode_segments import (
@@ -38,6 +38,7 @@ class GroundedAnswerService:
                 episode=query.episode,
                 summary_source_document_id=query.summary_source_document_id,
                 profile_watch_state=query.profile_watch_state,
+                corpus_access_scope=query.corpus_access_scope,
                 limit=query.limit,
             )
         )

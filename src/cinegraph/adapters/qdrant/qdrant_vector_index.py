@@ -146,6 +146,25 @@ class QdrantVectorIndex(VectorIndex):
                 episode_number=payload["episode_number"],
             ),
         )
+        visibility_scope = next(
+            (
+                item
+                for item in scope.episode_scopes
+                if item.episode.episode_id == episode.episode_id
+            ),
+            None,
+        )
+        if (
+            visibility_scope is None
+            or visibility_scope.episode != episode
+            or (
+                visibility_scope.safe_until_ms is not None
+                and payload["end_ms"] > visibility_scope.safe_until_ms
+            )
+        ):
+            raise InvalidModelError(
+                RetrievalErrorMessages.QDRANT_RESULT_MUST_MATCH_VISIBILITY_SCOPE
+            )
         return RetrievedSegment(
             segment_id=segment_id,
             episode=episode,

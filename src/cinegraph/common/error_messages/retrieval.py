@@ -57,3 +57,6 @@ class RetrievalErrorMessages:
     )
     QDRANT_RESULT_TEXT_MUST_BE_VALID = "Qdrant result text must be non-empty and trimmed."
     QDRANT_RESULT_SCORE_MUST_BE_FINITE = "Qdrant result score must be finite numeric data."
+    QDRANT_RESULT_MUST_MATCH_VISIBILITY_SCOPE = (
+        "Qdrant result must match an episode and time bound in the retrieval scope."
+    )

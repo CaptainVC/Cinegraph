@@ -32,7 +32,11 @@ class GetVisibleEpisodeSummaryService:
         if summary is None:
             return GetVisibleEpisodeSummaryResult(summary=None)
 
-        # 3. Return fully visible summaries for authorized episodes.
+        # 3. Fail closed when the caller's corpus grant excludes this episode.
+        if not query.corpus_access_scope.allows_episode(summary.episode):
+            return GetVisibleEpisodeSummaryResult(summary=None)
+
+        # 4. Return fully visible summaries for authorized episodes.
         can_access = self._spoiler_policy.can_access(
             evidence_episode_refs=(summary.episode,),
             watch_state=query.profile_watch_state,
@@ -41,7 +45,7 @@ class GetVisibleEpisodeSummaryService:
         if can_access:
             return GetVisibleEpisodeSummaryResult(summary=summary)
 
-        # 4. Provide partial-watch summaries only as model context.
+        # 5. Provide partial-watch summaries only as model context.
         safe_until_ms = self._spoiler_policy.partial_safe_until_ms_for(
             summary.episode,
             query.profile_watch_state,

@@ -1,4 +1,5 @@
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 from uuid import UUID
 
 from langchain_core.language_models import BaseChatModel
@@ -20,8 +21,7 @@ from cinegraph.application.models.grounded_answer import (
 )
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
-from tests.factories import make_episode_ref
-
+from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
@@ -91,6 +91,7 @@ def make_context() -> AgentRuntimeContext:
         "episode": make_episode_ref(season_number=2, episode_number=7),
         "summary_source_document_id": SOURCE_DOCUMENT_ID,
         "profile_watch_state": None,
+        "corpus_access_scope": make_authenticated_corpus_access_scope(),
     }
 
 
@@ -128,6 +129,7 @@ def test_compiled_agent_uses_runtime_context_and_safe_tool_projection() -> None:
     assert query.episode == make_context()["episode"]
     assert query.summary_source_document_id == SOURCE_DOCUMENT_ID
     assert query.profile_watch_state is None
+    assert query.corpus_access_scope == make_context()["corpus_access_scope"]
     assert result["messages"][-1].content == "Grounded answer returned by the tool."
     tool_message = result["messages"][-2]
     assert isinstance(tool_message, ToolMessage)
@@ -145,6 +147,7 @@ def test_tool_schema_exposes_only_question() -> None:
     assert "episode" not in str(schema_fields)
     assert "summary_source_document_id" not in str(schema_fields)
     assert "profile_watch_state" not in str(schema_fields)
+    assert "corpus_access_scope" not in str(schema_fields)
 
 
 def test_safe_refusal_is_preserved_without_citations() -> None:

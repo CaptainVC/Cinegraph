@@ -4,6 +4,7 @@ from uuid import UUID
 from cinegraph.application.models.search_visible_episode_segments import (
     RankedTranscriptSegment,
 )
+from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.watch_state.profile_watch_state import (
     ProfileWatchState,
 )
@@ -15,6 +16,7 @@ class SearchVisibleSeasonSegmentsQuery:
     series_id: UUID
     season_id: UUID
     profile_watch_state: ProfileWatchState | None
+    corpus_access_scope: CorpusAccessScope
     limit: int = 10
 
 
