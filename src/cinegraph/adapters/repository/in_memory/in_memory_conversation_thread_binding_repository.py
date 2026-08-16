@@ -38,6 +38,7 @@ class InMemoryConversationThreadBindingRepository:
             if (
                 existing_binding.permission_scope_revision
                 != binding.permission_scope_revision
+                or existing_binding.corpus_access_scope != binding.corpus_access_scope
             ):
                 raise ConversationThreadScopeMismatchError(thread_id)
             # Accept the existing binding when every field matches.

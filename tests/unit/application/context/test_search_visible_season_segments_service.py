@@ -9,7 +9,7 @@ from cinegraph.application.service.search_visible_season_segments_service import
     SearchVisibleSeasonSegmentsService,
 )
 from cinegraph.common.error_messages import RetrievalErrorMessages
-from cinegraph.domain.enums.enum import Language, RightsStatus
+from cinegraph.domain.enums.enum import Language, RightsStatus, SpoilerMode
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
 from cinegraph.domain.models.watch_state.episode_watch_state import (
     EpisodeRef,
@@ -22,8 +22,11 @@ from cinegraph.domain.models.watch_state.series_watch_state import (
     SeriesWatchState,
 )
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
-from tests.factories import make_episode_ref
-
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
 
 PROFILE_ID = UUID("00000000-0000-0000-0000-000000000701")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
@@ -45,8 +48,10 @@ class StubSeasonEpisodeCatalog:
 class StubTranscriptSegmentReader:
     def __init__(self, segments_by_episode: dict[UUID, tuple[TranscriptSegment, ...]]) -> None:
         self._segments_by_episode = segments_by_episode
+        self.episodes: list[EpisodeRef] = []
 
     def get_active_reviewed_segments(self, episode: EpisodeRef) -> tuple[TranscriptSegment, ...]:
+        self.episodes.append(episode)
         return self._segments_by_episode.get(episode.episode_id, ())
 
 
@@ -86,12 +91,21 @@ def profile_watch_state() -> ProfileWatchState:
     )
 
 
-def query(*, search_query: str = "Luke banister", limit: int = 10) -> SearchVisibleSeasonSegmentsQuery:
+def query(
+    *,
+    search_query: str = "Luke banister",
+    limit: int = 10,
+    corpus_access_scope=None,
+    watch_state=None,
+) -> SearchVisibleSeasonSegmentsQuery:
     return SearchVisibleSeasonSegmentsQuery(
         query=search_query,
         series_id=episode_1.series_id,
         season_id=episode_1.season_id,
-        profile_watch_state=profile_watch_state(),
+        profile_watch_state=watch_state or profile_watch_state(),
+        corpus_access_scope=(
+            corpus_access_scope or make_authenticated_corpus_access_scope()
+        ),
         limit=limit,
     )
 
@@ -239,3 +253,33 @@ def test_season_search_rejects_non_positive_limit() -> None:
 
     with pytest.raises(ValueError, match=RetrievalErrorMessages.SEARCH_LIMIT_MUST_BE_POSITIVE):
         service.execute(query(limit=0))
+
+
+def test_guest_scope_does_not_read_authenticated_only_season() -> None:
+    season_three_episode = make_episode_ref(
+        episode_id=UUID(int=30),
+        season_id=UUID(int=300),
+        season_number=3,
+        episode_number=1,
+    )
+    catalogue = StubSeasonEpisodeCatalog((season_three_episode,))
+    transcript_reader = StubTranscriptSegmentReader({})
+    service = SearchVisibleSeasonSegmentsService(
+        catalogue=catalogue,
+        transcript_reader=transcript_reader,
+        spoiler_policy=SpoilerPolicy(),
+    )
+
+    result = service.execute(
+        query(
+            corpus_access_scope=make_guest_corpus_access_scope(),
+            watch_state=ProfileWatchState(
+                profile_id=PROFILE_ID,
+                profile_name="Guest",
+                spoiler_mode=SpoilerMode.RELAXED,
+            ),
+        )
+    )
+
+    assert result.matches == ()
+    assert transcript_reader.episodes == []

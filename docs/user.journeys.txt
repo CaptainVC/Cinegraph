@@ -18,3 +18,17 @@ And connected her jellyfin
 And she has watched Episodes 1 and 2
 When she ask about an event in the episode 2
 And it responds with a spoiler free answer with proper connecting dots to related events if any
+
+Given a visitor is using guest mode
+When they request Modern Family evidence from Season 1 or Season 2
+Then CineGraph applies the guest corpus grant before spoiler visibility
+And it may retrieve only evidence allowed by both boundaries
+
+Given a visitor is using guest mode
+When they request Season 3 or any other corpus
+Then CineGraph does not read or retrieve that private evidence
+And it returns no grounded evidence without revealing whether the corpus exists
+
+Given a signed-in user has an expanded corpus grant
+When they request an entitled season beyond the guest catalogue
+Then CineGraph may retrieve it subject to that profile's spoiler visibility

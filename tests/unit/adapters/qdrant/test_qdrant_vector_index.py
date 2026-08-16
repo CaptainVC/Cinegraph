@@ -4,6 +4,7 @@ from uuid import UUID
 import pytest
 from qdrant_client.http import models
 
+from cinegraph.adapters.qdrant.qdrant_vector_index import QdrantVectorIndex
 from cinegraph.common.error_messages import RetrievalErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.retrieval.retrieval_scope import (
@@ -16,9 +17,7 @@ from cinegraph.domain.retrieval.vector_data import (
     QueryVector,
     SparseVector,
 )
-from cinegraph.adapters.qdrant.qdrant_vector_index import QdrantVectorIndex
 from tests.factories import make_episode_ref
-
 
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")
 SEASON_ID = UUID("00000000-0000-0000-0000-000000000101")
@@ -211,6 +210,28 @@ def test_malformed_point_id_raises_invalid_model_error() -> None:
     ):
         QdrantVectorIndex(client, "transcript_segments").search_hybrid(
             make_query(), make_scope(), 1
+        )
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        make_payload(episode_id=str(UUID(int=999))),
+        make_payload(season_number=3),
+        make_payload(end_ms=2_001),
+    ],
+)
+def test_backend_result_outside_visibility_scope_is_rejected(
+    payload: dict[str, Any],
+) -> None:
+    client = FakeQdrantClient(points=[make_point(payload=payload)])
+
+    with pytest.raises(
+        InvalidModelError,
+        match=RetrievalErrorMessages.QDRANT_RESULT_MUST_MATCH_VISIBILITY_SCOPE,
+    ):
+        QdrantVectorIndex(client, "transcript_segments").search_hybrid(
+            make_query(), make_scope(safe_until_ms=2_000), 1
         )
 
 

@@ -5,8 +5,8 @@ from langchain.agents.middleware import (
     LLMToolSelectorMiddleware,
     ModelCallLimitMiddleware,
     ModelRetryMiddleware,
-    ToolErrorMiddleware,
     ToolCallLimitMiddleware,
+    ToolErrorMiddleware,
 )
 
 from cinegraph.adapters.workflow.langgraph.agent_middleware import (
@@ -20,10 +20,14 @@ from cinegraph.application.exceptions.errors import AgentRuntimeContextInvalidEr
 from cinegraph.common.error_messages import WorkflowErrorMessages
 from cinegraph.common.prompts import TOOL_SELECTOR_SYSTEM_PROMPT
 from cinegraph.config.agent_middleware import (
-    AgentMiddlewareConfiguration,
     DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION,
+    AgentMiddlewareConfiguration,
 )
-from tests.factories import make_episode_ref
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
 
 
 class SimpleRuntime:
@@ -44,6 +48,7 @@ def valid_context() -> dict[str, object]:
         "episode": make_episode_ref(),
         "summary_source_document_id": UUID(int=2),
         "profile_watch_state": None,
+        "corpus_access_scope": make_authenticated_corpus_access_scope(),
     }
 
 
@@ -71,11 +76,25 @@ def test_runtime_context_integrity_accepts_valid_context() -> None:
             "episode": make_episode_ref(),
             "summary_source_document_id": "not-a-uuid",
             "profile_watch_state": None,
+            "corpus_access_scope": make_authenticated_corpus_access_scope(),
         },
         {
             "episode": make_episode_ref(),
             "summary_source_document_id": UUID(int=2),
             "profile_watch_state": "not-watch-state",
+            "corpus_access_scope": make_authenticated_corpus_access_scope(),
+        },
+        {
+            "episode": make_episode_ref(),
+            "summary_source_document_id": UUID(int=2),
+            "profile_watch_state": None,
+            "corpus_access_scope": "not-an-access-scope",
+        },
+        {
+            "episode": make_episode_ref(season_number=3),
+            "summary_source_document_id": UUID(int=2),
+            "profile_watch_state": None,
+            "corpus_access_scope": make_guest_corpus_access_scope(),
         },
     ],
 )

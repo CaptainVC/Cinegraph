@@ -5,6 +5,9 @@ class ConversationErrorMessages:
     BINDING_PERMISSION_SCOPE_REVISION_MUST_BE_NONEMPTY = (
         "Conversation binding permission-scope revision must be nonempty."
     )
+    BINDING_PERMISSION_SCOPE_REVISION_MUST_MATCH_ACCESS_SCOPE = (
+        "Conversation binding permission revision must match its corpus-access scope."
+    )
     THREAD_PROFILE_MISMATCH = (
         "Conversation thread {thread_id} is bound to a different profile."
     )

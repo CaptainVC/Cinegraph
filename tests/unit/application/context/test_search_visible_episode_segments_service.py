@@ -18,8 +18,7 @@ from cinegraph.domain.models.episode_summary.episode_summary_document import (
     EpisodeSummaryDocument,
 )
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
-from tests.factories import make_episode_ref
-
+from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
@@ -77,6 +76,7 @@ def query(*, search_query: str, limit: int = 5) -> SearchVisibleEpisodeSegmentsQ
         episode=make_episode_ref(),
         summary_source_document_id=SOURCE_DOCUMENT_ID,
         profile_watch_state=None,
+        corpus_access_scope=make_authenticated_corpus_access_scope(),
         limit=limit,
     )
 

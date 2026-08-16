@@ -6,6 +6,11 @@ class SpoilerMode(StrEnum):
     SEQUENTIAL = "sequential"
     RELAXED = "relaxed"
 
+
+class CorpusAccessMode(StrEnum):
+    GUEST = "guest"
+    AUTHENTICATED = "authenticated"
+
 class WatchEventKind(StrEnum):
     EPISODE_MARKED_WATCHED = "episode_marked_watched"
     EPISODE_MARKED_UNWATCHED = "episode_marked_unwatched"

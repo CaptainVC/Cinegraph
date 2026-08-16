@@ -2,11 +2,18 @@
 from uuid import UUID
 
 from cinegraph.common.error_messages import (
+    AccessErrorMessages,
     ConversationErrorMessages,
     SourceErrorMessages,
     WatchErrorMessages,
     WorkflowErrorMessages,
 )
+
+
+class CorpusAccessDeniedError(PermissionError):
+
+    def __init__(self) -> None:
+        super().__init__(AccessErrorMessages.CORPUS_ACCESS_DENIED)
 
 
 class AgentRuntimeContextInvalidError(ValueError):

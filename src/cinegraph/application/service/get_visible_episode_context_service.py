@@ -9,7 +9,9 @@ from cinegraph.application.service.get_visible_episode_summary_service import (
     GetVisibleEpisodeSummaryService,
 )
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
-from cinegraph.ports.subtitle_processing.transcript_segment_reader import TranscriptSegmentReader
+from cinegraph.ports.subtitle_processing.transcript_segment_reader import (
+    TranscriptSegmentReader,
+)
 
 
 class GetVisibleEpisodeContextService:
@@ -29,11 +31,21 @@ class GetVisibleEpisodeContextService:
         self,
         query: GetVisibleEpisodeContextQuery,
     ) -> GetVisibleEpisodeContextResult:
+        # Reject corpus-ineligible episodes before touching either private source port.
+        if not query.corpus_access_scope.allows_episode(query.episode):
+            return GetVisibleEpisodeContextResult(
+                summary=None,
+                transcript_segments=(),
+                safe_until_ms=None,
+                summary_is_model_context_only=False,
+            )
+
         # Resolve summary visibility for this profile.
         summary_result = self._summary_service.execute(
             GetVisibleEpisodeSummaryQuery(
                 source_document_id=query.summary_source_document_id,
                 profile_watch_state=query.profile_watch_state,
+                corpus_access_scope=query.corpus_access_scope,
             )
         )
 

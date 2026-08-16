@@ -19,6 +19,10 @@ This branch establishes the first production boundaries:
   and truthful `automated_reviewed` provenance;
 - typed source provenance for episode summary data;
 - a MediaWiki episode-summary provider with revision and attribution metadata;
+- spoiler-safe lexical and hybrid retrieval, grounded-answer citation verification,
+  and LangGraph/LangChain orchestration boundaries;
+- fail-closed corpus entitlements that restrict guest access to Modern Family
+  seasons 1 and 2 independently of spoiler/watch-progress policy;
 - ports, in-memory adapters, focused unit tests, and centralized identifiers.
 
 ## Architecture
@@ -143,6 +147,20 @@ candidate, allowlisted speaker, and a human rationale. Prior agent artifacts rem
 The resulting SRTs and ledger use truthful `hybrid_reviewed` provenance and become
 eligible for canonical ingestion and indexing only after every queued case resolves.
 
+## Corpus access boundary
+
+Corpus entitlement and spoiler visibility are separate, cumulative restrictions.
+The default guest scope is centrally configured for the canonical Modern Family
+series identifier and seasons 1–2 only. Authenticated scopes may grant additional
+seasons or corpora, but must be constructed by the trusted application boundary;
+model-visible tool arguments cannot supply or widen them.
+
+Episode summaries, transcript readers, season search, hybrid Qdrant scopes,
+conversation-thread bindings, and LangGraph runtime context all carry the immutable
+scope. Disallowed requests return no evidence, and Qdrant results are revalidated
+against the exact compiled episode and timestamp boundary before becoming model
+context.
+
 ## Security
 
 See [SECURITY.md](SECURITY.md) for vulnerability reporting and repository security
@@ -151,7 +169,6 @@ or local environment files.
 
 ## Status
 
-Foundation work is in progress. Retrieval evaluation, Qdrant indexing, grounded
-answering, LangGraph verification, LangChain tool orchestration, authentication,
-and provider actions are planned after the deterministic ingestion and source
-lifecycle layers are complete.
+Foundation work is in progress. Persistent application composition, retrieval
+evaluation against the private corpus, authentication adapters, the HTTP/UI layer,
+and provider actions remain ahead of deployment hardening.
