@@ -8,8 +8,7 @@ from cinegraph.adapters.api.context import ApiContext
 from cinegraph.adapters.api.fastapi_app import create_app
 from cinegraph.adapters.date_time.system_clock import SystemClock
 from cinegraph.adapters.identity import (
-    InMemorySessionRepository,
-    InMemoryUserAccountRepository,
+    InMemoryIdentityUnitOfWorkFactory,
     ScryptPasswordHasher,
 )
 from cinegraph.application.models.episode_recommendation import (
@@ -136,8 +135,7 @@ def make_catalogue() -> CatalogueManifest:
 
 def make_context(tmp_path: Path, *, ready: bool = True):
     identity = IdentitySessionService(
-        InMemoryUserAccountRepository(),
-        InMemorySessionRepository(),
+        InMemoryIdentityUnitOfWorkFactory(),
         ScryptPasswordHasher(),
         SequenceTokenGenerator(),
         SystemClock(),

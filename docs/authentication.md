@@ -11,10 +11,15 @@ which permits only Modern Family seasons 1 and 2. Authenticated sessions expire 
 14 days and carry an unrestricted corpus scope. Revocation is persisted and survives
 application restarts.
 
-VPS development stores accounts, password hashes, session digests, and revocation state
-in the gitignored `CINEGRAPH_IDENTITY_DATABASE_PATH` SQLite database with WAL enabled.
-Repositories are ports: production deployment can replace SQLite with the production
-database without changing identity/session policy or the API contract.
+Development stores accounts, password hashes, session digests, and revocation state in
+the gitignored SQLAlchemy SQLite database derived from
+`CINEGRAPH_IDENTITY_DATABASE_PATH`. Run the documented Alembic migration command before
+starting a new database. The application never calls `create_all` or silently migrates
+at startup.
+
+Production must set `CINEGRAPH_DATABASE_URL` to a `postgresql+psycopg://` URL. The
+checked-in Alembic migrations own schema evolution for both SQLite development and
+PostgreSQL production. Credentials are secret configuration and are never logged.
 
 Never put raw session tokens, password values, or password hashes in logs. The API
 slice must use secure, HTTP-only, same-site cookies and must not expose whether an email

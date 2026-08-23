@@ -33,18 +33,18 @@ from cinegraph.domain.models.identity import (
 )
 from cinegraph.ports.date_time.clock import Clock
 from cinegraph.ports.identity import (
+    DuplicateEmailPersistenceError,
+    IdentityUnitOfWork,
+    IdentityUnitOfWorkFactory,
     PasswordHasher,
-    SessionRepository,
     SessionTokenGenerator,
-    UserAccountRepository,
 )
 
 
 class IdentitySessionService:
     def __init__(
         self,
-        accounts: UserAccountRepository,
-        sessions: SessionRepository,
+        unit_of_work_factory: IdentityUnitOfWorkFactory,
         password_hasher: PasswordHasher,
         token_generator: SessionTokenGenerator,
         clock: Clock,
@@ -52,8 +52,7 @@ class IdentitySessionService:
             DEFAULT_AUTHENTICATION_CONFIGURATION
         ),
     ) -> None:
-        self._accounts = accounts
-        self._sessions = sessions
+        self._unit_of_work_factory = unit_of_work_factory
         self._password_hasher = password_hasher
         self._token_generator = token_generator
         self._clock = clock
@@ -64,8 +63,6 @@ class IdentitySessionService:
 
     def register(self, command: RegisterAccountCommand) -> SessionGrant:
         email = self._normalize_email(command.email)
-        if self._accounts.get_by_email(email) is not None:
-            raise EmailAlreadyRegisteredError()
         password_hash = self._password_hasher.hash_password(command.password)
         now = self._clock.now_utc()
         account = UserAccount(
@@ -78,14 +75,20 @@ class IdentitySessionService:
             created_at=now,
         )
         try:
-            self._accounts.add(account)
-        except ValueError as error:
+            with self._unit_of_work_factory() as unit_of_work:
+                if unit_of_work.accounts.get_by_email(email) is not None:
+                    raise EmailAlreadyRegisteredError()
+                unit_of_work.accounts.add(account)
+                grant = self._issue_authenticated(account, now, unit_of_work)
+                unit_of_work.commit()
+                return grant
+        except DuplicateEmailPersistenceError as error:
             raise EmailAlreadyRegisteredError() from error
-        return self._issue_authenticated(account, now)
 
     def authenticate(self, command: AuthenticateAccountCommand) -> SessionGrant:
         email = self._normalize_email(command.email)
-        account = self._accounts.get_by_email(email)
+        with self._unit_of_work_factory() as unit_of_work:
+            account = unit_of_work.accounts.get_by_email(email)
         password_hash = (
             account.password_hash if account is not None else self._dummy_password_hash
         )
@@ -97,7 +100,10 @@ class IdentitySessionService:
             raise InvalidCredentialsError()
         if account.status is not AccountStatus.ACTIVE:
             raise AccountDisabledError()
-        return self._issue_authenticated(account, self._clock.now_utc())
+        with self._unit_of_work_factory() as unit_of_work:
+            grant = self._issue_authenticated(account, self._clock.now_utc(), unit_of_work)
+            unit_of_work.commit()
+            return grant
 
     def issue_guest(self) -> SessionGrant:
         now = self._clock.now_utc()
@@ -106,37 +112,45 @@ class IdentitySessionService:
             profile_id=IdentifierGenerator.new_id(),
             corpus_access_scope=DEFAULT_GUEST_CORPUS_ACCESS_SCOPE,
         )
-        return self._issue(
-            principal,
-            now,
-            now + self._configuration.guest_session_ttl,
-            account=None,
-        )
+        with self._unit_of_work_factory() as unit_of_work:
+            grant = self._issue(
+                principal,
+                now,
+                now + self._configuration.guest_session_ttl,
+                account=None,
+                unit_of_work=unit_of_work,
+            )
+            unit_of_work.commit()
+            return grant
 
     def resolve(self, token: str) -> SessionPrincipal:
         digest = self._token_digest(token)
-        session = self._sessions.get_by_token_sha256(digest)
-        now = self._clock.now_utc()
-        if (
-            session is None
-            or session.revoked_at is not None
-            or now >= session.expires_at
-        ):
-            raise SessionInvalidError()
-        return session.principal
+        with self._unit_of_work_factory() as unit_of_work:
+            session = unit_of_work.sessions.get_by_token_sha256(digest)
+            now = self._clock.now_utc()
+            if (
+                session is None
+                or session.revoked_at is not None
+                or now >= session.expires_at
+            ):
+                raise SessionInvalidError()
+            return session.principal
 
     def revoke(self, token: str) -> None:
         digest = self._token_digest(token)
-        session = self._sessions.get_by_token_sha256(digest)
-        now = self._clock.now_utc()
-        if session is None or session.revoked_at is not None or now >= session.expires_at:
-            raise SessionInvalidError()
-        self._sessions.save(session.revoke(now))
+        with self._unit_of_work_factory() as unit_of_work:
+            session = unit_of_work.sessions.get_by_token_sha256(digest)
+            now = self._clock.now_utc()
+            if session is None or session.revoked_at is not None or now >= session.expires_at:
+                raise SessionInvalidError()
+            unit_of_work.sessions.save(session.revoke(now))
+            unit_of_work.commit()
 
     def _issue_authenticated(
         self,
         account: UserAccount,
         now: datetime,
+        unit_of_work: IdentityUnitOfWork,
     ) -> SessionGrant:
         principal = SessionPrincipal(
             kind=PrincipalKind.AUTHENTICATED,
@@ -154,6 +168,7 @@ class IdentitySessionService:
             now,
             now + self._configuration.authenticated_session_ttl,
             account=account,
+            unit_of_work=unit_of_work,
         )
 
     def _issue(
@@ -162,6 +177,7 @@ class IdentitySessionService:
         created_at: datetime,
         expires_at: datetime,
         account: UserAccount | None,
+        unit_of_work: IdentityUnitOfWork,
     ) -> SessionGrant:
         token = self._token_generator.generate()
         session = SessionRecord(
@@ -171,7 +187,7 @@ class IdentitySessionService:
             created_at=created_at,
             expires_at=expires_at,
         )
-        self._sessions.save(session)
+        unit_of_work.sessions.save(session)
         return SessionGrant(
             token=token,
             principal=principal,
