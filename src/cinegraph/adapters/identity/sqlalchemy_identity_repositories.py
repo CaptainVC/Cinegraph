@@ -16,21 +16,20 @@ from sqlalchemy import (
 )
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, relationship
+from sqlalchemy.orm import Mapped, Session, mapped_column, relationship
 from sqlalchemy.orm.session import sessionmaker
 
+from cinegraph.adapters.persistence.base import PersistenceBase
 from cinegraph.common.error_messages import AuthenticationErrorMessages
 from cinegraph.domain.enums.enum import AccountStatus, CorpusAccessMode, PrincipalKind
 from cinegraph.domain.models.access import CorpusAccessScope, CorpusSeasonAccess
 from cinegraph.domain.models.identity import SessionPrincipal, SessionRecord, UserAccount
 from cinegraph.ports.identity import DuplicateEmailPersistenceError
 
-
-class IdentityBase(DeclarativeBase):
-    pass
+IdentityBase = PersistenceBase
 
 
-class UserAccountRow(IdentityBase):
+class UserAccountRow(PersistenceBase):
     __tablename__ = "user_accounts"
 
     user_id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True)

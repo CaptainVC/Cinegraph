@@ -12,6 +12,7 @@ from cinegraph.config.authentication import (
     DEFAULT_AUTHENTICATION_CONFIGURATION,
     AuthenticationConfiguration,
 )
+from cinegraph.config.corpus import DEFAULT_CORPUS_LAYOUT, CorpusLayoutConfiguration
 from cinegraph.config.database import (
     DEFAULT_DATABASE_CONFIGURATION,
     DatabaseConfiguration,
@@ -19,6 +20,12 @@ from cinegraph.config.database import (
 from cinegraph.config.embedding import (
     DEFAULT_EMBEDDING_CONFIGURATION,
     EmbeddingConfiguration,
+)
+from cinegraph.config.ingestion_jobs import (
+    ALLOWED_INGESTION_ERROR_CODES,
+    DEFAULT_INGESTION_JOB_CONFIGURATION,
+    MAX_INGESTION_JOB_CLAIM_BATCH_SIZE,
+    IngestionJobConfiguration,
 )
 from cinegraph.config.jellyfin import (
     DEFAULT_JELLYFIN_PROVIDER_CONFIGURATION,
@@ -73,7 +80,10 @@ __all__ = [
     "DEFAULT_API_CONFIGURATION",
     "DEFAULT_AUTHENTICATION_CONFIGURATION",
     "DEFAULT_DATABASE_CONFIGURATION",
+    "DEFAULT_CORPUS_LAYOUT",
     "DEFAULT_EMBEDDING_CONFIGURATION",
+    "DEFAULT_INGESTION_JOB_CONFIGURATION",
+    "ALLOWED_INGESTION_ERROR_CODES",
     "DEFAULT_GUEST_ACCESS_CONFIGURATION",
     "DEFAULT_GUEST_CORPUS_ACCESS_SCOPE",
     "DEFAULT_MODEL_CONFIGURATION",
@@ -91,7 +101,10 @@ __all__ = [
     "AuthenticationConfiguration",
     "CinegraphRuntimeSettings",
     "DatabaseConfiguration",
+    "CorpusLayoutConfiguration",
     "EmbeddingConfiguration",
+    "IngestionJobConfiguration",
+    "MAX_INGESTION_JOB_CLAIM_BATCH_SIZE",
     "GuestAccessConfiguration",
     "ModelConfiguration",
     "MediaActionConfiguration",

@@ -10,11 +10,11 @@ from cinegraph.adapters.identity import (
     ScryptPasswordHasher,
     SecureSessionTokenGenerator,
     SqlAlchemyIdentityUnitOfWorkFactory,
-    create_identity_engine,
 )
 from cinegraph.adapters.ingestion.finalized_srt_canonicalizer import (
     FinalizedSrtCanonicalizer,
 )
+from cinegraph.adapters.persistence.database import create_database_engine
 from cinegraph.adapters.qdrant.qdrant_collection_provisioner import (
     QdrantCollectionProvisioningResult,
     QdrantTranscriptCollectionProvisioner,
@@ -140,7 +140,7 @@ class CinegraphCompositionRoot:
 
     @cached_property
     def identity_engine(self) -> Engine:
-        return create_identity_engine(self.settings)
+        return create_database_engine(self.settings)
 
     @cached_property
     def identity_unit_of_work_factory(self) -> SqlAlchemyIdentityUnitOfWorkFactory:
