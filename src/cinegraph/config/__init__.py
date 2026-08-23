@@ -26,6 +26,11 @@ from cinegraph.config.graph_claims import (
     GRAPH_CLAIM_EXTRACTION_REVISION,
     GraphClaimExtractionConfiguration,
 )
+from cinegraph.config.graph_rag import (
+    DEFAULT_GRAPH_RAG_CONFIGURATION,
+    GRAPH_RAG_QUERY_REVISION,
+    GraphRagConfiguration,
+)
 from cinegraph.config.hybrid_retrieval import (
     DEFAULT_HYBRID_RETRIEVAL_CONFIGURATION,
     HybridRetrievalConfiguration,
@@ -140,6 +145,9 @@ __all__ = [
     "DEFAULT_GRAPH_CLAIM_EXTRACTION_CONFIGURATION",
     "GRAPH_CLAIM_EXTRACTION_REVISION",
     "GraphClaimExtractionConfiguration",
+    "DEFAULT_GRAPH_RAG_CONFIGURATION",
+    "GRAPH_RAG_QUERY_REVISION",
+    "GraphRagConfiguration",
     "RuntimeEnvironment",
     "SecretProvisioningConfiguration",
     "SpeakerReviewConfiguration",

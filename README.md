@@ -223,7 +223,7 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The current branch baseline is 87.74% total branch coverage (603 tests, measured with
+The current branch baseline is 87.86% total branch coverage (657 tests, measured with
 `pytest-cov` on 2026-08-23); the centralized coverage configuration floors it at 87%
 so coverage cannot silently regress. Coverage XML and JSON reports are generated
 locally and uploaded by CI. Ruff syntax/error classes, Pyflakes, and import sorting are

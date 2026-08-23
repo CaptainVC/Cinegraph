@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from cinegraph.adapters.identity import create_identity_engine
 from cinegraph.adapters.persistence.migration_runner import upgrade_database
+from cinegraph.adapters.persistence.sqlalchemy_graph_claim_reader import SqlAlchemyGraphClaimReader
 from cinegraph.adapters.persistence.sqlalchemy_graph_claim_store import (
     GraphClaimEvidenceRow,
     GraphClaimRow,
@@ -33,6 +34,7 @@ from cinegraph.domain.models.graph.graph_models import (
     GraphEntity,
 )
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodePosition, EpisodeRef
+from cinegraph.domain.retrieval.retrieval_scope import EpisodeVisibilityScope, RetrievalScope
 
 
 def test_postgres_graph_claim_commit_retry_replacement_and_rollback() -> None:
@@ -147,6 +149,43 @@ def test_postgres_graph_claim_commit_retry_replacement_and_rollback() -> None:
             )
             assert len(rows) == 1
             assert rows[0].source_version_id == second_source
+
+        reader = SqlAlchemyGraphClaimReader(engine)
+        visible_scope = RetrievalScope(series_id, (EpisodeVisibilityScope(episode, None),))
+        from_subject = reader.read(
+            scope=visible_scope,
+            seed_terms=("alex",),
+            predicates=(),
+            hops=2,
+            claim_limit=25,
+            evidence_per_claim=5,
+            max_frontier=100,
+        )
+        from_object = reader.read(
+            scope=visible_scope,
+            seed_terms=("sam",),
+            predicates=(),
+            hops=2,
+            claim_limit=25,
+            evidence_per_claim=5,
+            max_frontier=100,
+        )
+        assert len(from_subject) == len(from_object) == 1
+        assert from_subject[0].claim_id == from_object[0].claim_id
+        assert from_subject[0].evidence[0].source_version_id == second_source
+        partial_scope = RetrievalScope(series_id, (EpisodeVisibilityScope(episode, 500),))
+        assert (
+            reader.read(
+                scope=partial_scope,
+                seed_terms=("alex",),
+                predicates=(),
+                hops=2,
+                claim_limit=25,
+                evidence_per_claim=5,
+                max_frontier=100,
+            )
+            == ()
+        )
 
         with pytest.raises(ValueError, match=GraphErrorMessages.EVIDENCE_METADATA_CONFLICT):
             store.replace_source_version(
