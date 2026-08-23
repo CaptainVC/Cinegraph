@@ -23,6 +23,9 @@ This branch establishes the first production boundaries:
   and LangGraph/LangChain orchestration boundaries;
 - fail-closed corpus entitlements that restrict guest access to Modern Family
   seasons 1 and 2 independently of spoiler/watch-progress policy;
+- bounded owner-scoped agent jobs at `/api/v1/agent/jobs` with replayable SSE;
+  the Phase 32 queue, job store, and checkpoint are process-local and not crash
+  durable. See `docs/agent-jobs-api.md` for the request and reconnect contract.
 - ports, in-memory adapters, focused unit tests, and centralized identifiers.
 - a same-origin guest/auth web experience for spoiler-scoped, citation-backed chat.
 - an evidence-backed recommendation workflow that ranks only deterministically
@@ -226,7 +229,7 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The current branch baseline is 88.31% total branch coverage (709 tests, measured with
+The current branch baseline is 88.04% total branch coverage (742 tests, measured with
 `pytest-cov` on 2026-08-23); the centralized coverage configuration floors it at 87%
 so coverage cannot silently regress. Coverage XML and JSON reports are generated
 locally and uploaded by CI. Ruff syntax/error classes, Pyflakes, and import sorting are

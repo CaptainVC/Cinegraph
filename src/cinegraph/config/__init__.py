@@ -3,6 +3,7 @@ from cinegraph.config.access import (
     DEFAULT_GUEST_CORPUS_ACCESS_SCOPE,
     GuestAccessConfiguration,
 )
+from cinegraph.config.agent_jobs import DEFAULT_AGENT_JOB_CONFIGURATION, AgentJobConfiguration
 from cinegraph.config.agent_middleware import (
     DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION,
     AgentMiddlewareConfiguration,
@@ -99,6 +100,7 @@ from cinegraph.config.transcript_chunking import (
 
 __all__ = [
     "DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION",
+    "DEFAULT_AGENT_JOB_CONFIGURATION",
     "DEFAULT_API_CONFIGURATION",
     "DEFAULT_AUTHENTICATION_CONFIGURATION",
     "DEFAULT_DATABASE_CONFIGURATION",
@@ -119,6 +121,7 @@ __all__ = [
     "DEFAULT_SECRET_PROVISIONING_CONFIGURATION",
     "DEFAULT_SPEAKER_REVIEW_CONFIGURATION",
     "AgentMiddlewareConfiguration",
+    "AgentJobConfiguration",
     "ApiConfiguration",
     "AuthenticationConfiguration",
     "CinegraphRuntimeSettings",
