@@ -97,6 +97,7 @@ class SourceAcquisitionMethod(StrEnum):
     LOCAL_FILESYSTEM = "local_filesystem"
     EMBEDDED_SUBTITLE_TRACK = "embedded_subtitle_track"
     MEDIAWIKI_API = "mediawiki_api"
+    TVMAZE_API = "tvmaze_api"
     SYNTHETIC_FIXTURE = "synthetic_fixture"
 
 

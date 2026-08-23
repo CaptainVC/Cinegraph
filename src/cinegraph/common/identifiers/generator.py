@@ -120,3 +120,12 @@ class IdentifierGenerator:
                 origin=origin.casefold(),
             ),
         )
+
+    @staticmethod
+    def series_metadata_source_document_id(series_id: UUID, origin: str) -> UUID:
+        return uuid5(
+            IdentifierTemplates.NAMESPACE,
+            IdentifierTemplates.SERIES_METADATA_SOURCE_DOCUMENT.format(
+                series_id=series_id, origin=origin.casefold()
+            ),
+        )

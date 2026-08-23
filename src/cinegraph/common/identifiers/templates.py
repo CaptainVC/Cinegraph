@@ -20,3 +20,6 @@ class IdentifierTemplates:
         "cinegraph:source-document:episode-summary:"
         "{episode_id}:{language}:{origin}"
     )
+    SERIES_METADATA_SOURCE_DOCUMENT = (
+        "cinegraph:source-document:series-metadata:{series_id}:{origin}"
+    )
