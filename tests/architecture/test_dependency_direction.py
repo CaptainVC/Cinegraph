@@ -11,6 +11,7 @@ KNOWN_PORT_OUTER_LAYER_DEPENDENCIES = frozenset(
         "catalogue/reviewed_subtitle_batch_loader.py",
         "conversation/conversation_thread_binding_repository.py",
         "conversation/conversational_agent.py",
+        "conversation/series_conversational_agent.py",
         "evaluation/retrieval_evaluation_dataset_loader.py",
         "llm/chat_model_gateway.py",
         "media/media_provider.py",

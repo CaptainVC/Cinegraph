@@ -32,6 +32,10 @@ class OpenAISettings(BaseSettings):
     speaker_final_review_reasoning_effort: str = (
         DEFAULT_MODEL_CONFIGURATION.speaker_final_review_reasoning_effort
     )
+    agent_synthesis_model: str = DEFAULT_MODEL_CONFIGURATION.agent_synthesis_model
+    agent_tool_selector_model: str = DEFAULT_MODEL_CONFIGURATION.agent_tool_selector_model
+    agent_synthesis_reasoning_effort: str = DEFAULT_MODEL_CONFIGURATION.agent_synthesis_reasoning_effort
+    agent_tool_selector_reasoning_effort: str = DEFAULT_MODEL_CONFIGURATION.agent_tool_selector_reasoning_effort
 
     @field_validator(
         "main_model",
@@ -43,6 +47,10 @@ class OpenAISettings(BaseSettings):
         "speaker_review_reasoning_effort",
         "speaker_adjudication_reasoning_effort",
         "speaker_final_review_reasoning_effort",
+        "agent_synthesis_model",
+        "agent_tool_selector_model",
+        "agent_synthesis_reasoning_effort",
+        "agent_tool_selector_reasoning_effort",
     )
     @classmethod
     def require_trimmed_non_empty_value(cls, value: str) -> str:

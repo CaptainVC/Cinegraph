@@ -35,6 +35,9 @@ This branch establishes the first production boundaries:
   bounded retries/circuit breaking, idempotency, and read-after-write verification.
 - authenticated, review-first Netflix viewing-history CSV reconciliation with strict
   upload validation, deterministic candidates, retention, and idempotent watch events.
+- an authorization-safe series research runtime with bounded transcript and
+  GraphRAG tools, structured current-turn citation verification, and typed safe
+  refusals.
 
 ## Architecture
 
@@ -223,7 +226,7 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The current branch baseline is 87.86% total branch coverage (657 tests, measured with
+The current branch baseline is 88.31% total branch coverage (709 tests, measured with
 `pytest-cov` on 2026-08-23); the centralized coverage configuration floors it at 87%
 so coverage cannot silently regress. Coverage XML and JSON reports are generated
 locally and uploaded by CI. Ruff syntax/error classes, Pyflakes, and import sorting are

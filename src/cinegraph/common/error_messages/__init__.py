@@ -17,6 +17,7 @@ from cinegraph.common.error_messages.netflix_history import NetflixHistoryErrorM
 from cinegraph.common.error_messages.qdrant import QdrantErrorMessages
 from cinegraph.common.error_messages.recommendation import RecommendationErrorMessages
 from cinegraph.common.error_messages.retrieval import RetrievalErrorMessages
+from cinegraph.common.error_messages.series_agent import SeriesAgentErrorMessages
 from cinegraph.common.error_messages.source import SourceErrorMessages
 from cinegraph.common.error_messages.speaker_review import SpeakerReviewErrorMessages
 from cinegraph.common.error_messages.subtitle import SubtitleErrorMessages
@@ -46,6 +47,7 @@ __all__ = [
     "SpeakerReviewErrorMessages",
     "SubtitleErrorMessages",
     "SummaryErrorMessages",
+    "SeriesAgentErrorMessages",
     "TranscriptErrorMessages",
     "WatchErrorMessages",
     "WorkflowErrorMessages",

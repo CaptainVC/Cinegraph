@@ -82,6 +82,10 @@ from cinegraph.config.secrets import (
     DEFAULT_SECRET_PROVISIONING_CONFIGURATION,
     SecretProvisioningConfiguration,
 )
+from cinegraph.config.series_agent import (
+    DEFAULT_SERIES_AGENT_CONFIGURATION,
+    SeriesAgentConfiguration,
+)
 from cinegraph.config.settings import OpenAISettings
 from cinegraph.config.speaker_review import (
     DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
@@ -151,4 +155,6 @@ __all__ = [
     "RuntimeEnvironment",
     "SecretProvisioningConfiguration",
     "SpeakerReviewConfiguration",
+    "DEFAULT_SERIES_AGENT_CONFIGURATION",
+    "SeriesAgentConfiguration",
 ]
