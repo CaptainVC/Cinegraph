@@ -13,11 +13,11 @@ from langchain_core.language_models import BaseChatModel
 from cinegraph.adapters.workflow.langgraph.runtime_context_integrity_middleware import (
     RuntimeContextIntegrityMiddleware,
 )
-from cinegraph.common.prompts import TOOL_SELECTOR_SYSTEM_PROMPT
 from cinegraph.common.error_messages import WorkflowErrorMessages
+from cinegraph.common.prompts import TOOL_SELECTOR_SYSTEM_PROMPT
 from cinegraph.config.agent_middleware import (
-    AgentMiddlewareConfiguration,
     DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION,
+    AgentMiddlewareConfiguration,
 )
 
 

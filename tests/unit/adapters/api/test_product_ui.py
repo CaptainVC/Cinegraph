@@ -1,9 +1,9 @@
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from tests.unit.adapters.api.test_fastapi_app import make_context
 
 from cinegraph.adapters.api.fastapi_app import create_app
-from tests.unit.adapters.api.test_fastapi_app import make_context
 
 
 def test_product_shell_and_assets_are_served_same_origin(tmp_path: Path) -> None:

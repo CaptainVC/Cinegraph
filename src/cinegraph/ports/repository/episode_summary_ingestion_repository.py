@@ -3,7 +3,9 @@ from typing import Protocol
 from uuid import UUID
 
 from cinegraph.domain.enums.enum import SourceReviewStatus
-from cinegraph.domain.models.episode_summary.episode_summary_document import EpisodeSummaryDocument
+from cinegraph.domain.models.episode_summary.episode_summary_document import (
+    EpisodeSummaryDocument,
+)
 from cinegraph.domain.models.source.source_document import SourceDocument
 from cinegraph.domain.models.source.source_version import SourceVersion
 

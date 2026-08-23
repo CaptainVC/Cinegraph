@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from collections.abc import Iterable
 from dataclasses import dataclass
 
 from cinegraph.application.models.netflix_history import (
@@ -122,7 +123,9 @@ class NetflixTitleResolver:
         )
 
     @staticmethod
-    def _candidates(episodes) -> tuple[NetflixEpisodeCandidate, ...]:
+    def _candidates(
+        episodes: Iterable[_CatalogueEpisode],
+    ) -> tuple[NetflixEpisodeCandidate, ...]:
         return tuple(
             episode.candidate
             for episode in sorted(

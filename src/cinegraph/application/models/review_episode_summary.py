@@ -7,6 +7,7 @@ from uuid import UUID
 from cinegraph.domain.enums.enum import SourceReviewStatus
 from cinegraph.domain.models.source.source_version import SourceVersion
 
+
 @dataclass(frozen=True, slots=True)
 class ReviewEpisodeSummaryCommand:
     source_version_id: UUID

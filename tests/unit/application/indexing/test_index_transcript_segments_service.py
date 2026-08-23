@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from uuid import UUID, uuid4
 
 import pytest
+from tests.factories import make_episode_ref
 
 from cinegraph.application.models.index_transcript_segments import (
     IndexTranscriptSegmentsCommand,
@@ -28,8 +29,6 @@ from cinegraph.domain.retrieval.vector_data import (
     SparseVector,
 )
 from cinegraph.ports.retrieval import TranscriptIndexPoint
-from tests.factories import make_episode_ref
-
 
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000701")
 

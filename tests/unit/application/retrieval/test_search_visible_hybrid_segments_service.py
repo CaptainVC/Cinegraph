@@ -2,6 +2,10 @@ from typing import Any
 from uuid import UUID
 
 import pytest
+from tests.factories import (
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
 
 from cinegraph.application.models.search_visible_hybrid_segments import (
     SearchVisibleHybridSegmentsQuery,
@@ -23,11 +27,6 @@ from cinegraph.domain.retrieval import (
     SparseVector,
 )
 from cinegraph.ports.retrieval import RetrievedSegment
-from tests.factories import (
-    make_episode_ref,
-    make_guest_corpus_access_scope,
-)
-
 
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000701")

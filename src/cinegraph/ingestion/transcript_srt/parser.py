@@ -1,9 +1,10 @@
-from cinegraph.ingestion.transcript_srt.constants import SrtConstants
 from pathlib import Path
 
 from cinegraph.common.error_messages import SubtitleErrorMessages
+from cinegraph.ingestion.transcript_srt.constants import SrtConstants
 from cinegraph.ingestion.transcript_srt.models import ParsedSrtCue
 from cinegraph.ingestion.transcript_srt.patterns import SrtPatterns
+
 
 # Read SRT text using the supported encodings, raising a domain error if none work.
 def read_srt_text(source_path: Path) -> str:

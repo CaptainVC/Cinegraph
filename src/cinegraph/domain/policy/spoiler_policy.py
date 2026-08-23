@@ -2,7 +2,10 @@
 from collections.abc import Collection
 
 from cinegraph.domain.enums.enum import SpoilerMode
-from cinegraph.domain.models.watch_state.profile_watch_state import EpisodeRef, ProfileWatchState
+from cinegraph.domain.models.watch_state.profile_watch_state import (
+    EpisodeRef,
+    ProfileWatchState,
+)
 
 
 class SpoilerPolicy:

@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from uuid import UUID
 
 import pytest
+from scripts.ingest_tvmaze_series_metadata import _output_path, write_snapshot
 
 from cinegraph.domain.enums.enum import (
     RightsStatus,
@@ -20,7 +21,6 @@ from cinegraph.domain.models.watch_state import EpisodePosition, EpisodeRef
 from cinegraph.ingestion.series_metadata.ingest_series_metadata import (
     IngestSeriesMetadataResult,
 )
-from scripts.ingest_tvmaze_series_metadata import _output_path, write_snapshot
 
 
 def _result(content_hash: str = "a" * 64):

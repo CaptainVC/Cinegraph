@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "series_id": "00000000-0000-0000-0000-000000000025",
+  "cases": [
+    {
+      "case_id": "glass-harbor-echo",
+      "season_number": 1,
+      "episode_number": 1,
+      "query": "What does Mira discover in the glass harbor?",
+      "evidence_text": "Mira discovers a brass compass beneath the glass harbor steps.",
+      "forbidden_episode_numbers": [2]
+    },
+    {
+      "case_id": "clockwork-garden",
+      "season_number": 1,
+      "episode_number": 2,
+      "query": "Who repairs the clockwork garden gate?",
+      "evidence_text": "Tomas repairs the clockwork garden gate before sunrise.",
+      "forbidden_episode_numbers": [1]
+    }
+  ]
+}

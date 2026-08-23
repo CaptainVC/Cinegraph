@@ -11,7 +11,10 @@ from cinegraph.application.policy.tool_authorization_policy import (
 )
 from cinegraph.common.error_messages import MediaActionErrorMessages
 from cinegraph.common.identifiers import IdentifierGenerator
-from cinegraph.config import DEFAULT_MEDIA_ACTION_CONFIGURATION, MediaActionConfiguration
+from cinegraph.config import (
+    DEFAULT_MEDIA_ACTION_CONFIGURATION,
+    MediaActionConfiguration,
+)
 from cinegraph.domain.enums.enum import ApprovalStatus, MediaActionAuditStage
 from cinegraph.domain.models.identity import SessionPrincipal
 from cinegraph.domain.models.media_action import ApprovalRequest, MediaCommand

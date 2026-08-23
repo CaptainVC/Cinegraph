@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 from cinegraph.application.models.get_visible_episode_context import (
     GetVisibleEpisodeContextResult,
@@ -18,7 +19,6 @@ from cinegraph.domain.models.episode_summary.episode_summary_document import (
     EpisodeSummaryDocument,
 )
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
-from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")

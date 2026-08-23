@@ -19,13 +19,13 @@ from cinegraph.ingestion.speaker_review.batch_requests import (
     build_primary_batch_requests,
 )
 from cinegraph.ingestion.speaker_review.batch_results import parse_batch_results
-from cinegraph.ingestion.speaker_review.decisions import (
-    apply_final_review,
-    decide_primary_consensus,
-)
 from cinegraph.ingestion.speaker_review.costs import (
     actual_batch_output_cost_usd,
     partition_batch_requests,
+)
+from cinegraph.ingestion.speaker_review.decisions import (
+    apply_final_review,
+    decide_primary_consensus,
 )
 
 

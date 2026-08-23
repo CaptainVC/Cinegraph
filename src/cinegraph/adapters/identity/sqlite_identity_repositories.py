@@ -8,7 +8,11 @@ from uuid import UUID
 from cinegraph.common.error_messages import AuthenticationErrorMessages
 from cinegraph.domain.enums.enum import AccountStatus, CorpusAccessMode, PrincipalKind
 from cinegraph.domain.models.access import CorpusAccessScope, CorpusSeasonAccess
-from cinegraph.domain.models.identity import SessionPrincipal, SessionRecord, UserAccount
+from cinegraph.domain.models.identity import (
+    SessionPrincipal,
+    SessionRecord,
+    UserAccount,
+)
 
 
 class SqliteIdentityRepositories:

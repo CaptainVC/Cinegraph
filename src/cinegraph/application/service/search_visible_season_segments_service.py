@@ -6,6 +6,7 @@ from cinegraph.application.models.search_visible_season_segments import (
     SearchVisibleSeasonSegmentsResult,
 )
 from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
 from cinegraph.domain.retrieval.lexical import lexical_score
 from cinegraph.ports.repository.season_episode_catalog import (
@@ -49,7 +50,7 @@ class SearchVisibleSeasonSegmentsService:
             return SearchVisibleSeasonSegmentsResult(matches=())
 
         # 3. Load only reviewed transcript segments from visible episodes.
-        visible_segments = []
+        visible_segments: list[TranscriptSegment] = []
         for episode_ref in episode_refs:
             if not query.corpus_access_scope.allows_episode(episode_ref):
                 continue

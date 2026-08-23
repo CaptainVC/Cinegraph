@@ -1,6 +1,7 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import make_episode_ref
 
 from cinegraph.common.error_messages import RetrievalErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
@@ -8,8 +9,6 @@ from cinegraph.domain.retrieval.retrieval_scope import (
     EpisodeVisibilityScope,
     RetrievalScope,
 )
-from tests.factories import make_episode_ref
-
 
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")
 OTHER_SERIES_ID = UUID("00000000-0000-0000-0000-000000000012")

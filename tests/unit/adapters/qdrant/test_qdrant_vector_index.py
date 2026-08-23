@@ -3,6 +3,7 @@ from uuid import UUID
 
 import pytest
 from qdrant_client.http import models
+from tests.factories import make_episode_ref
 
 from cinegraph.adapters.qdrant.qdrant_vector_index import QdrantVectorIndex
 from cinegraph.common.error_messages import RetrievalErrorMessages
@@ -18,7 +19,6 @@ from cinegraph.domain.retrieval.vector_data import (
     QueryVector,
     SparseVector,
 )
-from tests.factories import make_episode_ref
 
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")
 SEASON_ID = UUID("00000000-0000-0000-0000-000000000101")

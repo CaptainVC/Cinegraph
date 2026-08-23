@@ -1,5 +1,7 @@
 from uuid import UUID
 
+from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
+
 from cinegraph.application.models.retrieval_evaluation import (
     RetrievalEvaluationCase,
     RetrievalEvaluationDataset,
@@ -13,8 +15,6 @@ from cinegraph.application.service.retrieval_evaluation_service import (
 from cinegraph.config import RetrievalEvaluationThresholds
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.ports.retrieval import RetrievedSegment
-from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
-
 
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000701")
 

@@ -4,7 +4,6 @@ from cinegraph.domain.models.transcript.transcript_segment import (
     TranscriptSegment,
 )
 
-
 TOKEN_PATTERN = re.compile(r"[a-z0-9]+")
 
 

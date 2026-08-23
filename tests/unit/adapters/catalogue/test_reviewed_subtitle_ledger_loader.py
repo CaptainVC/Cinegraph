@@ -11,7 +11,6 @@ from cinegraph.adapters.catalogue import (
 from cinegraph.common.error_messages import CorpusIngestionErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
 
-
 REVIEWED_FILENAME = "Example Family - 1x01 - Pilot.reviewed.srt"
 
 

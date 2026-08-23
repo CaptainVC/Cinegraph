@@ -1,6 +1,5 @@
 import re
 
-
 EPISODE_HEADER_PATTERN = re.compile(
     r"^\s*(?P<season>\d+)x(?P<episode>\d+)\s*:?\s+(?P<title>.+?)\s*$",
     re.IGNORECASE,

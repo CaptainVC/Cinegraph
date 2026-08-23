@@ -1,9 +1,12 @@
 from cinegraph.application.exceptions.errors import ProfileWatchStateNotFoundError
-from cinegraph.application.models.mark_episode_watched import MarkEpisodeWatchedCommand, MarkEpisodeWatchedResult
+from cinegraph.application.models.mark_episode_watched import (
+    MarkEpisodeWatchedCommand,
+    MarkEpisodeWatchedResult,
+)
+from cinegraph.application.service.watch_event_factory import create_watch_events
 from cinegraph.domain.enums.enum import WatchEventKind
 from cinegraph.ports.date_time.clock import Clock
 from cinegraph.ports.repository.watch_progress_repository import WatchProgressRepository
-from cinegraph.application.service.watch_event_factory import create_watch_events
 
 
 class MarkEpisodeWatchedService:

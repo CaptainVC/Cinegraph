@@ -1,7 +1,7 @@
-from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from tests.factories import DEFAULT_FIXED_TIME, FixedClock, make_episode_ref
 
 from cinegraph.adapters.repository.in_memory.in_memory_season_episode_catalog import (
     InMemorySeasonEpisodeCatalog,
@@ -34,9 +34,7 @@ from cinegraph.domain.models.watch_state.episode_watch_state import (
 from cinegraph.domain.models.watch_state.profile_watch_state import (
     ProfileWatchState,
 )
-from tests.factories import DEFAULT_FIXED_TIME, FixedClock, make_episode_ref
 from cinegraph.domain.models.watch_state.series_watch_state import SeriesWatchState
-
 
 PROFILE_ID = UUID("00000000-0000-0000-0000-000000000001")
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")

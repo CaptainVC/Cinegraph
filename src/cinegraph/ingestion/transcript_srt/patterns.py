@@ -1,5 +1,6 @@
 import re
 
+
 class SrtPatterns:
 
     CUE_SEPARATOR = re.compile(r"\r?\n\s*\r?\n")

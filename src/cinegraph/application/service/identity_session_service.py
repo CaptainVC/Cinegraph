@@ -26,7 +26,11 @@ from cinegraph.domain.enums.enum import (
     PrincipalKind,
 )
 from cinegraph.domain.models.access import CorpusAccessScope
-from cinegraph.domain.models.identity import SessionPrincipal, SessionRecord, UserAccount
+from cinegraph.domain.models.identity import (
+    SessionPrincipal,
+    SessionRecord,
+    UserAccount,
+)
 from cinegraph.ports.date_time.clock import Clock
 from cinegraph.ports.identity import (
     PasswordHasher,

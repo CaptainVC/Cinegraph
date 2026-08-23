@@ -1,6 +1,7 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 from cinegraph.application.models.grounded_answer import (
     GroundedAnswerQuery,
@@ -17,7 +18,6 @@ from cinegraph.application.service.grounded_answer_service import (
 from cinegraph.common.error_messages import GroundedAnswerErrorMessages
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
-from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")

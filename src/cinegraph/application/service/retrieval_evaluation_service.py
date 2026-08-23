@@ -18,7 +18,6 @@ from cinegraph.config import (
 from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.watch_state import ProfileWatchState
 
-
 EVALUATION_PROFILE_ID = UUID("00000000-0000-0000-0000-0000000000e1")
 
 

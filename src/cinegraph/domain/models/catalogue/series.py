@@ -5,6 +5,7 @@ from cinegraph.common.error_messages import CatalogueErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.catalogue.season import Season
 
+
 @dataclass(frozen=True, slots=True)
 class Series:
     series_id: UUID

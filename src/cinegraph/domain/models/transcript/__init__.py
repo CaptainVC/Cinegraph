@@ -1,3 +1,4 @@
+from cinegraph.domain.models.transcript.speaker_candidate import SpeakerCandidate
 from cinegraph.domain.models.transcript.speaker_review import (
     TERMINAL_SPEAKER_REVIEW_RUN_STATUSES,
     HumanSpeakerReviewResolution,
@@ -6,7 +7,6 @@ from cinegraph.domain.models.transcript.speaker_review import (
     SpeakerReviewEvidence,
     SpeakerReviewVerdict,
 )
-from cinegraph.domain.models.transcript.speaker_candidate import SpeakerCandidate
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
 
 __all__ = [

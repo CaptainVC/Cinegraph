@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from tests.factories import make_episode_ref
+
 from cinegraph.adapters.repository.in_memory.in_memory_transcript_ingestion_repository import (
     InMemoryTranscriptIngestionRepository,
 )
@@ -15,8 +17,6 @@ from cinegraph.domain.enums.enum import (
 from cinegraph.domain.models.source.source_document import SourceDocument
 from cinegraph.domain.models.source.source_version import SourceVersion
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
-from tests.factories import make_episode_ref
-
 
 REVIEWED_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 PENDING_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000402")

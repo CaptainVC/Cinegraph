@@ -4,7 +4,6 @@ from qdrant_client.http import models
 
 from cinegraph.common.error_messages import QdrantErrorMessages
 
-
 QDRANT_SOURCE_VERSION_ID_FIELD = "source_version_id"
 QDRANT_SERIES_ID_FIELD = "series_id"
 QDRANT_SEASON_ID_FIELD = "season_id"

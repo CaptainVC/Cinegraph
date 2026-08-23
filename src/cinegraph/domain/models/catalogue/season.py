@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-
 from uuid import UUID
 
 from cinegraph.common.error_messages import CatalogueErrorMessages

@@ -2,6 +2,11 @@ from dataclasses import replace
 from uuid import UUID
 
 import pytest
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
 
 from cinegraph.adapters.repository.in_memory.in_memory_conversation_thread_binding_repository import (
     InMemoryConversationThreadBindingRepository,
@@ -20,11 +25,6 @@ from cinegraph.application.service.conversational_episode_chat_service import (
 from cinegraph.domain.enums.enum import CorpusAccessMode
 from cinegraph.domain.models.access import CorpusAccessScope, CorpusSeasonAccess
 from cinegraph.domain.models.watch_state.profile_watch_state import ProfileWatchState
-from tests.factories import (
-    make_authenticated_corpus_access_scope,
-    make_episode_ref,
-    make_guest_corpus_access_scope,
-)
 
 PROFILE_ID = UUID("00000000-0000-0000-0000-000000000801")
 OTHER_PROFILE_ID = UUID("00000000-0000-0000-0000-000000000802")

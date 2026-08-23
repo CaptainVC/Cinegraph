@@ -7,6 +7,7 @@ from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 from cinegraph.domain.models.watch_state.series_watch_state import SeriesWatchState
 
+
 @dataclass(frozen=True, slots=True)
 class ProfileWatchState:
 

@@ -10,7 +10,9 @@ from cinegraph.domain.enums.enum import SourceVersionStatus
 from cinegraph.domain.models.source.review_status import is_source_version_approved
 from cinegraph.domain.models.source.source_version import SourceVersion
 from cinegraph.ports.date_time.clock import Clock
-from cinegraph.ports.repository.transcript_ingestion_repository import TranscriptIngestionRepository
+from cinegraph.ports.repository.transcript_ingestion_repository import (
+    TranscriptIngestionRepository,
+)
 from cinegraph.ports.subtitle_processing.finalized_subtitle_canonicalizer import (
     FinalizedSubtitleCanonicalizer,
 )

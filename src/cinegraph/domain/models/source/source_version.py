@@ -4,10 +4,15 @@ from re import fullmatch
 from uuid import UUID
 
 from cinegraph.common.error_messages import SourceErrorMessages
-from cinegraph.domain.enums.enum import RightsStatus, SourceAcquisitionMethod, SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.enums.enum import (
+    RightsStatus,
+    SourceAcquisitionMethod,
+    SourceReviewStatus,
+    SourceVersionStatus,
+)
+from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.source.review_status import is_final_source_review_status
 
-from cinegraph.domain.exceptions.errors import InvalidModelError
 
 @dataclass(frozen=True, slots=True)
 class SourceVersion:

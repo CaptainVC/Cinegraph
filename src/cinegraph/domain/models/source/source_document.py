@@ -5,6 +5,7 @@ from cinegraph.common.error_messages import SourceErrorMessages
 from cinegraph.domain.enums.enum import SourceKind
 from cinegraph.domain.exceptions.errors import InvalidModelError
 
+
 @dataclass(frozen=True, slots=True)
 class SourceDocument:
     source_document_id: UUID

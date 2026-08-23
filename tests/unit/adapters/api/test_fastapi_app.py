@@ -2,33 +2,38 @@ from pathlib import Path
 from uuid import UUID
 
 from fastapi.testclient import TestClient
+from tests.factories import DEFAULT_SERIES_ID
 
 from cinegraph.adapters.api.context import ApiContext
 from cinegraph.adapters.api.fastapi_app import create_app
+from cinegraph.adapters.date_time.system_clock import SystemClock
 from cinegraph.adapters.identity import (
     InMemorySessionRepository,
     InMemoryUserAccountRepository,
     ScryptPasswordHasher,
 )
-from cinegraph.adapters.date_time.system_clock import SystemClock
-from cinegraph.application.models.hybrid_grounded_answer import (
-    HybridGroundedAnswerResult,
-)
 from cinegraph.application.models.episode_recommendation import (
     EpisodeRecommendation,
     RecommendEpisodesResult,
+)
+from cinegraph.application.models.hybrid_grounded_answer import (
+    HybridGroundedAnswerResult,
 )
 from cinegraph.application.service.identity_session_service import (
     IdentitySessionService,
 )
 from cinegraph.config import CinegraphRuntimeSettings
-from cinegraph.domain.enums.enum import Language, PrincipalKind, RightsStatus, SpoilerMode
+from cinegraph.domain.enums.enum import (
+    Language,
+    PrincipalKind,
+    RightsStatus,
+    SpoilerMode,
+)
 from cinegraph.domain.models.catalogue.catalogue_manifest import CatalogueManifest
 from cinegraph.domain.models.catalogue.episode import Episode
 from cinegraph.domain.models.catalogue.season import Season
 from cinegraph.domain.models.catalogue.series import Series
 from cinegraph.ports.retrieval import RetrievedSegment
-from tests.factories import DEFAULT_SERIES_ID
 
 
 class SequenceTokenGenerator:

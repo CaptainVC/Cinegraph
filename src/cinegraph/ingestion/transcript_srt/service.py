@@ -2,17 +2,17 @@
 from pathlib import Path
 from uuid import UUID
 
-from cinegraph.common.identifiers import IdentifierGenerator
 from cinegraph.common.error_messages import SubtitleErrorMessages
+from cinegraph.common.identifiers import IdentifierGenerator
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.models.transcript.speaker_candidate import SpeakerCandidate
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 from cinegraph.ingestion.transcript_srt.constants import SrtConstants
 from cinegraph.ingestion.transcript_srt.models import (
-     ParsedSrtCue,
-     TranscriptIngestionReport,
-     TranscriptIngestionResult,
+    ParsedSrtCue,
+    TranscriptIngestionReport,
+    TranscriptIngestionResult,
 )
 from cinegraph.ingestion.transcript_srt.parser import parse_srt, read_srt_text
 from cinegraph.ingestion.transcript_srt.patterns import SrtPatterns

@@ -4,7 +4,6 @@ from uuid import UUID
 
 from cinegraph.common.error_messages import MediaProviderErrorMessages
 
-
 JELLYFIN_PUBLIC_SYSTEM_INFO_PATH = "/System/Info/Public"
 JELLYFIN_ITEMS_PATH = "/Items"
 JELLYFIN_USER_DATA_PATH = "/UserItems/{item_id}/UserData"

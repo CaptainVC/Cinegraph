@@ -11,7 +11,6 @@ from pathlib import Path
 from cinegraph.common.error_messages import SubtitleErrorMessages
 from cinegraph.ingestion.transcript_srt.patterns import SrtPatterns
 
-
 QUESTION_MARK_SPEAKER_LABEL_PATTERN = re.compile(
     r"^(?P<speaker>[A-Za-z][A-Za-z -]{0,48})\?:\s*(?P<text>.+)$"
 )

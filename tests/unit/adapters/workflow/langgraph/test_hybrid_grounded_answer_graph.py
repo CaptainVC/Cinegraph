@@ -1,5 +1,7 @@
 from uuid import UUID
 
+from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
+
 from cinegraph.adapters.workflow.langgraph.hybrid_grounded_answer_graph import (
     HybridGroundedAnswerGraphWorkflow,
 )
@@ -10,7 +12,6 @@ from cinegraph.application.models.hybrid_grounded_answer import (
 )
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.ports.retrieval import RetrievedSegment
-from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 
 class RecordingService:

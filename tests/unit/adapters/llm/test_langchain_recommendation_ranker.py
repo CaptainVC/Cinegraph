@@ -1,5 +1,7 @@
 from uuid import UUID
 
+from tests.factories import make_episode_ref
+
 from cinegraph.adapters.llm.langchain_recommendation_ranker import (
     LangChainEpisodeRecommendationRanker,
     RecommendationItemSchema,
@@ -11,7 +13,6 @@ from cinegraph.application.models.episode_recommendation import (
 )
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.ports.retrieval import RetrievedSegment
-from tests.factories import make_episode_ref
 
 
 class RecordingInvoker:

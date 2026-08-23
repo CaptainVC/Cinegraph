@@ -19,7 +19,6 @@ from cinegraph.ingestion.subtitle_alignment.subtitle_parser import (
     remove_noise_cues,
 )
 
-
 DEFAULT_MINIMUM_SCORE = 92.0
 FALLBACK_MINIMUM_SCORE = 0.0
 FALLBACK_MATCH_FLOOR = 0.0

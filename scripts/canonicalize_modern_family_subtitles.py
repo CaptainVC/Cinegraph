@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
-
 CANONICAL_FILENAMES = (
     "Modern Family - 1x01 - Pilot.HDTV.2HD.en.srt",
     "Modern Family - 1x02 - The Bicycle Thief.HDTV.2HD.en.srt",

@@ -9,7 +9,6 @@ from pathlib import Path
 from cinegraph.common.error_messages import SpeakerReviewErrorMessages
 from cinegraph.config import DEFAULT_SECRET_PROVISIONING_CONFIGURATION
 
-
 CONFIGURATION = DEFAULT_SECRET_PROVISIONING_CONFIGURATION
 KEY_VALUE_PATTERN = re.compile(
     CONFIGURATION.key_value_pattern

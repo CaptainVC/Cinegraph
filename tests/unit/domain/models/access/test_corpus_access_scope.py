@@ -1,6 +1,7 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 from cinegraph.common.error_messages import AccessErrorMessages
 from cinegraph.config import (
@@ -10,7 +11,6 @@ from cinegraph.config import (
 from cinegraph.domain.enums.enum import CorpusAccessMode
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.access import CorpusAccessScope, CorpusSeasonAccess
-from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 
 def test_default_guest_scope_allows_only_modern_family_seasons_one_and_two() -> None:

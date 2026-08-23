@@ -1,10 +1,14 @@
 
 from dataclasses import dataclass
+
 from cinegraph.domain.enums.enum import Language, RightsStatus
-from cinegraph.domain.models.episode_summary.episode_summary_document import EpisodeSummaryDocument
+from cinegraph.domain.models.episode_summary.episode_summary_document import (
+    EpisodeSummaryDocument,
+)
 from cinegraph.domain.models.source.source_document import SourceDocument
 from cinegraph.domain.models.source.source_version import SourceVersion
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
+
 
 @dataclass(frozen=True, slots=True)
 class IngestEpisodeSummaryCommand:

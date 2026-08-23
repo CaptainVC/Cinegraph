@@ -9,7 +9,6 @@ from cinegraph.adapters.catalogue import JsonCatalogueManifestLoader
 from cinegraph.common.error_messages import CatalogueErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
 
-
 SERIES_ID = "00000000-0000-0000-0000-000000000011"
 SEASON_ONE_ID = "00000000-0000-0000-0000-000000000101"
 SEASON_TWO_ID = "00000000-0000-0000-0000-000000000102"

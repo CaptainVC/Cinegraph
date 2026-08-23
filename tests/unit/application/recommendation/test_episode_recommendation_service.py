@@ -1,6 +1,7 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import DEFAULT_SERIES_ID, make_authenticated_corpus_access_scope
 
 from cinegraph.adapters.workflow.langgraph.episode_recommendation_graph import (
     EpisodeRecommendationGraphWorkflow,
@@ -28,7 +29,6 @@ from cinegraph.domain.models.catalogue.season import Season
 from cinegraph.domain.models.catalogue.series import Series
 from cinegraph.domain.models.watch_state import ProfileWatchState
 from cinegraph.ports.retrieval import RetrievedSegment
-from tests.factories import DEFAULT_SERIES_ID, make_authenticated_corpus_access_scope
 
 
 class RecordingSearch:

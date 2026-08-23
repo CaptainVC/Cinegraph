@@ -8,6 +8,11 @@ from langchain.agents.middleware import (
     ToolCallLimitMiddleware,
     ToolErrorMiddleware,
 )
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
 
 from cinegraph.adapters.workflow.langgraph.agent_middleware import (
     _handle_tool_error,
@@ -22,11 +27,6 @@ from cinegraph.common.prompts import TOOL_SELECTOR_SYSTEM_PROMPT
 from cinegraph.config.agent_middleware import (
     DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION,
     AgentMiddlewareConfiguration,
-)
-from tests.factories import (
-    make_authenticated_corpus_access_scope,
-    make_episode_ref,
-    make_guest_corpus_access_scope,
 )
 
 

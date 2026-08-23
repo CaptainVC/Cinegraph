@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from tests.factories import make_episode_ref
 
 from cinegraph.adapters.identity import (
     InMemorySessionRepository,
@@ -21,7 +22,6 @@ from cinegraph.application.service.identity_session_service import (
 )
 from cinegraph.common.error_messages import AuthenticationErrorMessages
 from cinegraph.domain.enums.enum import PrincipalKind
-from tests.factories import make_episode_ref
 
 
 class MutableClock:

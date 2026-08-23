@@ -1,12 +1,25 @@
 from hashlib import sha256
 
 from cinegraph.common.identifiers.generator import IdentifierGenerator
-from cinegraph.domain.enums.enum import SourceAcquisitionMethod, SourceReviewStatus, SourceVersionStatus
-from cinegraph.domain.models.episode_summary.episode_summary_document import EpisodeSummaryDocument
+from cinegraph.domain.enums.enum import (
+    SourceAcquisitionMethod,
+    SourceReviewStatus,
+    SourceVersionStatus,
+)
+from cinegraph.domain.models.episode_summary.episode_summary_document import (
+    EpisodeSummaryDocument,
+)
 from cinegraph.domain.models.source.source_version import SourceVersion
-from cinegraph.ingestion.episode_summary.ingest_episode_summary import IngestEpisodeSummaryCommand, IngestEpisodeSummaryResult
-from cinegraph.ports.episode_summary.episode_summary_provider import EpisodeSummaryProvider
-from cinegraph.ports.repository.episode_summary_ingestion_repository import EpisodeSummaryIngestionRepository
+from cinegraph.ingestion.episode_summary.ingest_episode_summary import (
+    IngestEpisodeSummaryCommand,
+    IngestEpisodeSummaryResult,
+)
+from cinegraph.ports.episode_summary.episode_summary_provider import (
+    EpisodeSummaryProvider,
+)
+from cinegraph.ports.repository.episode_summary_ingestion_repository import (
+    EpisodeSummaryIngestionRepository,
+)
 
 
 class IngestEpisodeSummaryService:

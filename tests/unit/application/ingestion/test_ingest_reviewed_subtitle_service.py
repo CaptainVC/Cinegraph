@@ -2,6 +2,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
+from tests.factories import FixedClock, make_episode_ref
+
 from cinegraph.adapters.repository.in_memory.in_memory_transcript_ingestion_repository import (
     InMemoryTranscriptIngestionRepository,
 )
@@ -27,8 +29,6 @@ from cinegraph.ingestion.transcript_srt.models import (
     TranscriptIngestionReport,
     TranscriptIngestionResult,
 )
-from tests.factories import FixedClock, make_episode_ref
-
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")

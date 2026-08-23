@@ -3,7 +3,6 @@ from datetime import timedelta
 
 from cinegraph.common.error_messages import NetflixHistoryErrorMessages
 
-
 NETFLIX_HISTORY_TITLE_COLUMN = "Title"
 NETFLIX_HISTORY_DATE_COLUMN = "Date"
 NETFLIX_HISTORY_REQUIRED_COLUMNS = (

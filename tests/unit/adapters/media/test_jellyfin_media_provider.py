@@ -3,6 +3,10 @@ from uuid import UUID
 
 import httpx
 import pytest
+from tests.contracts.media_provider_contract import (
+    MediaProviderContractContext,
+    assert_media_provider_contract,
+)
 
 from cinegraph.adapters.media import JellyfinMediaProvider
 from cinegraph.application.models.media_provider import MediaProviderEpisode
@@ -12,11 +16,6 @@ from cinegraph.config import (
     JellyfinConnectionSettings,
     JellyfinEpisodeMapping,
 )
-from tests.contracts.media_provider_contract import (
-    MediaProviderContractContext,
-    assert_media_provider_contract,
-)
-
 
 CONNECTION_ID = UUID(int=901)
 PROFILE_ID = UUID(int=902)

@@ -6,13 +6,15 @@ from langchain.agents.middleware import AgentMiddleware
 from langchain_core.language_models import BaseChatModel
 from langgraph.checkpoint.base import BaseCheckpointSaver
 
+from cinegraph.adapters.workflow.langgraph.agent_middleware import (
+    build_agent_middleware,
+)
 from cinegraph.adapters.workflow.langgraph.grounded_answer_graph import (
     GroundedAnswerGraphWorkflow,
 )
 from cinegraph.adapters.workflow.langgraph.grounded_episode_answer_tool import (
     build_grounded_episode_answer_tool,
 )
-from cinegraph.adapters.workflow.langgraph.agent_middleware import build_agent_middleware
 from cinegraph.application.models.agent_context import AgentRuntimeContext
 from cinegraph.common.prompts import GROUNDED_ANSWER_AGENT_SYSTEM_PROMPT
 

@@ -1,17 +1,17 @@
 from uuid import UUID
 
+from tests.factories import make_episode_ref
+
 from cinegraph.adapters.llm.langchain_chat_model_gateway import (
     AnswerSchema,
     LangChainChatModelGateway,
 )
 from cinegraph.adapters.llm.prompts import build_prompt
+from cinegraph.application.models.grounded_answer import ModelEvidence, ModelRequest
 from cinegraph.common.prompts import (
     GROUNDED_ANSWER_SYSTEM_PROMPT,
     UNTRUSTED_TRANSCRIPT_EVIDENCE_BOUNDARY,
 )
-from cinegraph.application.models.grounded_answer import ModelEvidence, ModelRequest
-from tests.factories import make_episode_ref
-
 
 SEGMENT_ID_1 = UUID(int=1)
 SEGMENT_ID_2 = UUID(int=2)

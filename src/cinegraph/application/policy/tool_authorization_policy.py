@@ -1,5 +1,8 @@
 from cinegraph.common.error_messages import MediaActionErrorMessages
-from cinegraph.config import DEFAULT_MEDIA_ACTION_CONFIGURATION, MediaActionConfiguration
+from cinegraph.config import (
+    DEFAULT_MEDIA_ACTION_CONFIGURATION,
+    MediaActionConfiguration,
+)
 from cinegraph.domain.enums.enum import PrincipalKind
 from cinegraph.domain.models.identity import SessionPrincipal
 from cinegraph.domain.models.media_action import MediaCommand
