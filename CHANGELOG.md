@@ -7,6 +7,10 @@ All notable changes to Cinegraph are documented here. The format follows
 
 ### Added
 
+- Authorization-first relational GraphRAG reads with bounded two-hop traversal,
+  SQL-capped provenance evidence, guest spoiler regression coverage, and
+  defense-in-depth result validation.
+
 - Relational graph claim extraction foundation with series-scoped normalized entities,
   stable claims, governed source-scoped evidence, replacement-only persistence, and
   Alembic migration `0003`.

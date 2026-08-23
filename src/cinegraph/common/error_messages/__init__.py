@@ -8,6 +8,7 @@ from cinegraph.common.error_messages.corpus_ingestion import (
 )
 from cinegraph.common.error_messages.evaluation import EvaluationErrorMessages
 from cinegraph.common.error_messages.graph import GraphErrorMessages
+from cinegraph.common.error_messages.graph_rag import GraphRagErrorMessages
 from cinegraph.common.error_messages.grounded_answer import GroundedAnswerErrorMessages
 from cinegraph.common.error_messages.ingestion_jobs import IngestionJobErrorMessages
 from cinegraph.common.error_messages.media_action import MediaActionErrorMessages
@@ -34,6 +35,7 @@ __all__ = [
     "EvaluationErrorMessages",
     "GroundedAnswerErrorMessages",
     "GraphErrorMessages",
+    "GraphRagErrorMessages",
     "MediaActionErrorMessages",
     "MediaProviderErrorMessages",
     "NetflixHistoryErrorMessages",
