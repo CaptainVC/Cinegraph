@@ -5,6 +5,7 @@ from uuid import UUID
 from cinegraph.common.error_messages import CatalogueErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
 
+
 @dataclass(frozen=True, slots=True)
 class Episode:
     series_id: UUID

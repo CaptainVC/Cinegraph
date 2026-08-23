@@ -27,7 +27,6 @@ from cinegraph.ingestion.episode_summary.ingest_episode_summary import (
     IngestEpisodeSummaryCommand,
 )
 
-
 WIKIPEDIA_ORIGIN = "wikipedia"
 
 

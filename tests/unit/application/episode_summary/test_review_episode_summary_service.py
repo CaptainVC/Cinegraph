@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from tests.factories import make_episode_ref
 
 from cinegraph.adapters.repository.in_memory.in_memory_episode_summary_ingestion_repository import (
     InMemoryEpisodeSummaryIngestionRepository,
@@ -26,8 +27,6 @@ from cinegraph.domain.models.episode_summary.episode_summary_document import (
 )
 from cinegraph.domain.models.source.source_document import SourceDocument
 from cinegraph.domain.models.source.source_version import SourceVersion
-from tests.factories import make_episode_ref
-
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")

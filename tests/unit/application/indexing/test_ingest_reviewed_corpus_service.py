@@ -3,6 +3,8 @@ from hashlib import sha256
 from pathlib import Path
 from uuid import UUID
 
+from tests.factories import make_episode_ref
+
 from cinegraph.adapters.date_time.system_clock import SystemClock
 from cinegraph.adapters.ingestion.finalized_srt_canonicalizer import (
     FinalizedSrtCanonicalizer,
@@ -26,9 +28,13 @@ from cinegraph.application.service.ingest_reviewed_subtitle_service import (
     IngestReviewedSubtitleService,
 )
 from cinegraph.domain.enums.enum import SourceReviewStatus
-from cinegraph.domain.retrieval import DenseVector, DocumentVector, HybridVector, SparseVector
+from cinegraph.domain.retrieval import (
+    DenseVector,
+    DocumentVector,
+    HybridVector,
+    SparseVector,
+)
 from cinegraph.ports.retrieval import TranscriptIndexPoint
-from tests.factories import make_episode_ref
 
 
 class FixedEncoder:

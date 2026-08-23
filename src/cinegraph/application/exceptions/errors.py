@@ -3,11 +3,11 @@ from uuid import UUID
 
 from cinegraph.common.error_messages import (
     AccessErrorMessages,
+    AuthenticationErrorMessages,
     ConversationErrorMessages,
     SourceErrorMessages,
     WatchErrorMessages,
     WorkflowErrorMessages,
-    AuthenticationErrorMessages,
 )
 
 

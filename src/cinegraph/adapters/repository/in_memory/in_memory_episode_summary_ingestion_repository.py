@@ -1,17 +1,19 @@
 
 from dataclasses import dataclass, replace
 from datetime import datetime
-from cinegraph.domain.enums.enum import SourceReviewStatus
-
 from uuid import UUID
+
 from cinegraph.common.error_messages.source import SourceErrorMessages
-from cinegraph.domain.enums.enum import SourceVersionStatus
-from cinegraph.domain.models.episode_summary.episode_summary_document import EpisodeSummaryDocument
-from cinegraph.domain.models.source.source_document import SourceDocument
+from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.models.episode_summary.episode_summary_document import (
+    EpisodeSummaryDocument,
+)
 from cinegraph.domain.models.source.review_status import (
     is_final_source_review_status,
 )
+from cinegraph.domain.models.source.source_document import SourceDocument
 from cinegraph.domain.models.source.source_version import SourceVersion
+
 
 @dataclass(frozen=True, slots=True)
 class EpisodeSummaryIngestion:

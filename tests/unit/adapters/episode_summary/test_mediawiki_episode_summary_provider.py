@@ -12,7 +12,6 @@ from cinegraph.domain.exceptions.mediawiki_errors import (
     MediaWikiProviderError,
 )
 
-
 FIXED_TIME = datetime(2026, 7, 21, 12, 0, tzinfo=UTC)
 PAGE_TITLE = "Pilot (Modern Family)"
 CANONICAL_URL = "https://en.wikipedia.org/wiki/Pilot_(Modern_Family)"

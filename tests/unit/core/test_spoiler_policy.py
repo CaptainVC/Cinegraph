@@ -2,6 +2,7 @@ from collections.abc import Collection
 from uuid import UUID
 
 import pytest
+from tests.factories import make_episode_ref
 
 from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.watch_state.episode_watch_state import (
@@ -13,9 +14,6 @@ from cinegraph.domain.models.watch_state.profile_watch_state import (
 )
 from cinegraph.domain.models.watch_state.series_watch_state import SeriesWatchState
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
-from tests.factories import make_episode_ref
-
-
 
 PROFILE_ID = UUID("00000000-0000-0000-0000-000000000001")
 SERIES_ONE_ID = UUID("00000000-0000-0000-0000-000000000011")

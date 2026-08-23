@@ -1,6 +1,11 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
 
 from cinegraph.common.error_messages import RetrievalErrorMessages
 from cinegraph.domain.enums.enum import SpoilerMode
@@ -10,11 +15,6 @@ from cinegraph.domain.models.watch_state.series_watch_state import SeriesWatchSt
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
 from cinegraph.domain.retrieval.retrieval_scope import EpisodeVisibilityScope
 from cinegraph.domain.retrieval.retrieval_scope_compiler import RetrievalScopeCompiler
-from tests.factories import (
-    make_authenticated_corpus_access_scope,
-    make_episode_ref,
-    make_guest_corpus_access_scope,
-)
 
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")
 PROFILE_ID = UUID("00000000-0000-0000-0000-000000000001")

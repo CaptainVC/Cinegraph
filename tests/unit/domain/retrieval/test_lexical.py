@@ -1,10 +1,10 @@
 from uuid import UUID
 
+from tests.factories import make_episode_ref
+
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
 from cinegraph.domain.retrieval.lexical import lexical_score, normalize_tokens
-from tests.factories import make_episode_ref
-
 
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
 

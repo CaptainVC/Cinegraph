@@ -4,8 +4,7 @@ from datetime import datetime
 from uuid import UUID
 
 from cinegraph.common.error_messages import AuthenticationErrorMessages
-from cinegraph.domain.enums.enum import PrincipalKind
-from cinegraph.domain.enums.enum import CorpusAccessMode
+from cinegraph.domain.enums.enum import CorpusAccessMode, PrincipalKind
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.access import CorpusAccessScope
 

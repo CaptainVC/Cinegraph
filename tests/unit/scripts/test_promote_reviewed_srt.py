@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from scripts.promote_reviewed_srt import promote_reviewed_srt_directory
 
 

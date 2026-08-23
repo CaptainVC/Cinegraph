@@ -7,19 +7,14 @@ from cinegraph.config.agent_middleware import (
     DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION,
     AgentMiddlewareConfiguration,
 )
+from cinegraph.config.api import DEFAULT_API_CONFIGURATION, ApiConfiguration
 from cinegraph.config.authentication import (
     DEFAULT_AUTHENTICATION_CONFIGURATION,
     AuthenticationConfiguration,
 )
-from cinegraph.config.api import DEFAULT_API_CONFIGURATION, ApiConfiguration
 from cinegraph.config.embedding import (
     DEFAULT_EMBEDDING_CONFIGURATION,
     EmbeddingConfiguration,
-)
-from cinegraph.config.models import DEFAULT_MODEL_CONFIGURATION, ModelConfiguration
-from cinegraph.config.media_actions import (
-    DEFAULT_MEDIA_ACTION_CONFIGURATION,
-    MediaActionConfiguration,
 )
 from cinegraph.config.jellyfin import (
     DEFAULT_JELLYFIN_PROVIDER_CONFIGURATION,
@@ -27,10 +22,15 @@ from cinegraph.config.jellyfin import (
     JellyfinEpisodeMapping,
     JellyfinProviderConfiguration,
 )
+from cinegraph.config.media_actions import (
+    DEFAULT_MEDIA_ACTION_CONFIGURATION,
+    MediaActionConfiguration,
+)
 from cinegraph.config.mock_media_provider import (
     DEFAULT_MOCK_MEDIA_PROVIDER_CONFIGURATION,
     MockMediaProviderConfiguration,
 )
+from cinegraph.config.models import DEFAULT_MODEL_CONFIGURATION, ModelConfiguration
 from cinegraph.config.netflix_history import (
     DEFAULT_NETFLIX_HISTORY_IMPORT_CONFIGURATION,
     NetflixHistoryImportConfiguration,

@@ -3,8 +3,10 @@ from uuid import UUID
 
 from cinegraph.common.error_messages import WatchErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
-from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeWatchProgress
-from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
+from cinegraph.domain.models.watch_state.episode_watch_state import (
+    EpisodeRef,
+    EpisodeWatchProgress,
+)
 
 
 @dataclass(frozen=True, slots=True)

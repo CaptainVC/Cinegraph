@@ -1,5 +1,7 @@
 from uuid import UUID
 
+from tests.factories import make_episode_ref
+
 from cinegraph.adapters.qdrant.retrieval_scope_filter import (
     compile_retrieval_scope_filter,
 )
@@ -8,8 +10,6 @@ from cinegraph.domain.retrieval.retrieval_scope import (
     EpisodeVisibilityScope,
     RetrievalScope,
 )
-from tests.factories import make_episode_ref
-
 
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")
 

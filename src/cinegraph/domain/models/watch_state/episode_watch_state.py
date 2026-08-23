@@ -4,6 +4,7 @@ from uuid import UUID
 from cinegraph.common.error_messages import WatchErrorMessages
 from cinegraph.domain.exceptions.errors import InvalidModelError
 
+
 @dataclass(frozen=True, slots=True, order=True)
 class EpisodePosition:
     season_number: int

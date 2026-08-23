@@ -11,7 +11,6 @@ from cinegraph.ingestion.speaker_review.workflow import (
     load_run_state,
 )
 
-
 SpeakerReviewGraphOperation = Literal[
     "start",
     "submit",

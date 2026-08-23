@@ -7,6 +7,7 @@ from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.transcript.speaker_candidate import SpeakerCandidate
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 
+
 @dataclass(frozen=True, slots=True)
 class TranscriptSegment:
     segment_id: UUID

@@ -2,13 +2,12 @@ from datetime import UTC, datetime
 from uuid import UUID
 
 import pytest
+from tests.factories import make_episode_ref
 
 from cinegraph.common.identifiers import IdentifierGenerator
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.episode_summary import EpisodeSummaryDocument
-from tests.factories import make_episode_ref
-
 
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
 OTHER_SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000502")

@@ -1,6 +1,7 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 from cinegraph.application.models.grounded_answer import ModelDraft
 from cinegraph.application.models.hybrid_grounded_answer import (
@@ -14,7 +15,6 @@ from cinegraph.application.service.hybrid_grounded_answer_service import (
 )
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.ports.retrieval import RetrievedSegment
-from tests.factories import make_authenticated_corpus_access_scope, make_episode_ref
 
 
 class RecordingSearchService:

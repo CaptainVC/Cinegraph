@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
 
-
 from cinegraph.domain.enums.enum import (
     Language,
     RightsStatus,
@@ -13,6 +12,7 @@ from cinegraph.domain.models.source.source_version import SourceVersion
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
 from cinegraph.ingestion.transcript_srt.models import TranscriptIngestionReport
+
 
 @dataclass(frozen=True, slots=True)
 class IngestReviewedSubtitleCommand:

@@ -3,6 +3,10 @@ from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
 import pytest
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_guest_corpus_access_scope,
+)
 
 from cinegraph.adapters.netflix_history import (
     InMemoryNetflixHistoryImportRepository,
@@ -39,11 +43,6 @@ from cinegraph.domain.models.catalogue.season import Season
 from cinegraph.domain.models.catalogue.series import Series
 from cinegraph.domain.models.identity import SessionPrincipal
 from cinegraph.domain.models.watch_state import ProfileWatchState
-from tests.factories import (
-    make_authenticated_corpus_access_scope,
-    make_guest_corpus_access_scope,
-)
-
 
 PROFILE_ID = UUID(int=1001)
 OTHER_PROFILE_ID = UUID(int=1002)

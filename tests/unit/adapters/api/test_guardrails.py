@@ -3,6 +3,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi.testclient import TestClient
+from tests.factories import DEFAULT_SERIES_ID
+from tests.unit.adapters.api.test_fastapi_app import make_context
 
 from cinegraph.adapters.api.fastapi_app import create_app
 from cinegraph.adapters.api.guardrails import (
@@ -11,8 +13,6 @@ from cinegraph.adapters.api.guardrails import (
 )
 from cinegraph.application.models.audit import HttpAuditEvent
 from cinegraph.config import DEFAULT_API_CONFIGURATION
-from tests.factories import DEFAULT_SERIES_ID
-from tests.unit.adapters.api.test_fastapi_app import make_context
 
 
 class MutableMonotonicClock:

@@ -1,8 +1,7 @@
+import logging
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
-import logging
 from pathlib import Path
-from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
@@ -24,10 +23,10 @@ from cinegraph.adapters.api.schemas import (
     ChatRequest,
     ChatResponse,
     CitationResponse,
+    EpisodeRecommendationResponse,
     HealthResponse,
     LoginRequest,
     MessageResponse,
-    EpisodeRecommendationResponse,
     RecommendationRequest,
     RecommendationResponse,
     RegisterRequest,
@@ -39,11 +38,11 @@ from cinegraph.application.exceptions.errors import (
     InvalidCredentialsError,
     SessionInvalidError,
 )
-from cinegraph.application.models.hybrid_grounded_answer import (
-    HybridGroundedAnswerQuery,
-)
 from cinegraph.application.models.episode_recommendation import (
     RecommendEpisodesQuery,
+)
+from cinegraph.application.models.hybrid_grounded_answer import (
+    HybridGroundedAnswerQuery,
 )
 from cinegraph.application.models.identity_sessions import (
     AuthenticateAccountCommand,

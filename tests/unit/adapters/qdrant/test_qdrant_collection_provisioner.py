@@ -11,7 +11,6 @@ from cinegraph.common.error_messages import QdrantErrorMessages
 from cinegraph.config import DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA
 from cinegraph.domain.exceptions.errors import InvalidModelError
 
-
 SCHEMA = DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA
 
 

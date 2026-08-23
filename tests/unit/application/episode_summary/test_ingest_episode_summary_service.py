@@ -1,6 +1,8 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from tests.factories import make_episode_ref
+
 from cinegraph.adapters.repository.in_memory.in_memory_episode_summary_ingestion_repository import (
     InMemoryEpisodeSummaryIngestionRepository,
 )
@@ -20,8 +22,6 @@ from cinegraph.ingestion.episode_summary.ingest_episode_summary import (
     IngestEpisodeSummaryCommand,
 )
 from cinegraph.ports.dto.fetched_episode_summary import FetchedEpisodeSummary
-from tests.factories import make_episode_ref
-
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 RETRIEVED_AT = datetime(2026, 8, 5, 12, 0, tzinfo=UTC)

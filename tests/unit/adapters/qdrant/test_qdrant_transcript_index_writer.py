@@ -2,6 +2,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from qdrant_client.http import models
+from tests.factories import make_episode_ref
 
 from cinegraph.adapters.qdrant.qdrant_transcript_index_writer import (
     QdrantTranscriptIndexWriter,
@@ -19,8 +20,6 @@ from cinegraph.domain.retrieval.vector_data import (
     SparseVector,
 )
 from cinegraph.ports.retrieval import TranscriptIndexPayload, TranscriptIndexPoint
-from tests.factories import make_episode_ref
-
 
 COLLECTION_NAME = "transcript_segments"
 SEGMENT_ID = UUID("00000000-0000-0000-0000-000000002001")

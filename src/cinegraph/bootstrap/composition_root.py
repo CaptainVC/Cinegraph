@@ -5,13 +5,13 @@ from functools import cached_property
 from qdrant_client import QdrantClient
 
 from cinegraph.adapters.date_time.system_clock import SystemClock
-from cinegraph.adapters.ingestion.finalized_srt_canonicalizer import (
-    FinalizedSrtCanonicalizer,
-)
 from cinegraph.adapters.identity import (
     ScryptPasswordHasher,
     SecureSessionTokenGenerator,
     SqliteIdentityRepositories,
+)
+from cinegraph.adapters.ingestion.finalized_srt_canonicalizer import (
+    FinalizedSrtCanonicalizer,
 )
 from cinegraph.adapters.qdrant.qdrant_collection_provisioner import (
     QdrantCollectionProvisioningResult,
@@ -30,11 +30,11 @@ from cinegraph.adapters.retrieval.fastembed_vector_encoder import (
 from cinegraph.adapters.source.local_subtitle_text_reader import (
     LocalSubtitleTextReader,
 )
-from cinegraph.application.service.index_transcript_segments_service import (
-    IndexTranscriptSegmentsService,
-)
 from cinegraph.application.service.identity_session_service import (
     IdentitySessionService,
+)
+from cinegraph.application.service.index_transcript_segments_service import (
+    IndexTranscriptSegmentsService,
 )
 from cinegraph.application.service.ingest_reviewed_corpus_service import (
     IngestReviewedCorpusService,
@@ -54,7 +54,6 @@ from cinegraph.config import (
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
 from cinegraph.domain.retrieval import RetrievalScopeCompiler
 from cinegraph.ports.retrieval import VectorEncoder
-
 
 QdrantClientFactory = Callable[[CinegraphRuntimeSettings], QdrantClient]
 VectorEncoderFactory = Callable[[], VectorEncoder]

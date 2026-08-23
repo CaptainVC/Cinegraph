@@ -1,8 +1,14 @@
 from cinegraph.application.exceptions.errors import SourceVersionNotFoundError
-from cinegraph.application.models.review_episode_summary import ReviewEpisodeSummaryCommand, ReviewEpisodeSummaryResult
+from cinegraph.application.models.review_episode_summary import (
+    ReviewEpisodeSummaryCommand,
+    ReviewEpisodeSummaryResult,
+)
 from cinegraph.common.error_messages import SourceErrorMessages
 from cinegraph.domain.models.source.review_status import is_final_source_review_status
-from cinegraph.ports.repository.episode_summary_ingestion_repository import EpisodeSummaryIngestionRepository
+from cinegraph.ports.repository.episode_summary_ingestion_repository import (
+    EpisodeSummaryIngestionRepository,
+)
+
 
 class ReviewEpisodeSummaryService:
 

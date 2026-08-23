@@ -1,6 +1,12 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
+
 from cinegraph.application.models.get_visible_episode_context import (
     GetVisibleEpisodeContextQuery,
 )
@@ -25,11 +31,6 @@ from cinegraph.domain.models.watch_state.series_watch_state import (
     SeriesWatchState,
 )
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
-from tests.factories import (
-    make_authenticated_corpus_access_scope,
-    make_episode_ref,
-    make_guest_corpus_access_scope,
-)
 
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")

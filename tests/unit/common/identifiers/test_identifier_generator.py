@@ -3,7 +3,6 @@ from uuid import UUID
 from cinegraph.common.identifiers import IdentifierGenerator
 from cinegraph.domain.enums.enum import Language
 
-
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")

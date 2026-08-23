@@ -5,7 +5,6 @@ from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.catalogue.series import Series
 from cinegraph.domain.models.watch_state import EpisodePosition, EpisodeRef
 
-
 SUPPORTED_CATALOGUE_MANIFEST_SCHEMA_VERSION = 1
 
 

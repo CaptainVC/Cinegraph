@@ -9,7 +9,9 @@ from cinegraph.adapters.identity import (
 )
 from cinegraph.application.exceptions.errors import SessionInvalidError
 from cinegraph.application.models.identity_sessions import RegisterAccountCommand
-from cinegraph.application.service.identity_session_service import IdentitySessionService
+from cinegraph.application.service.identity_session_service import (
+    IdentitySessionService,
+)
 
 
 class FixedClock:

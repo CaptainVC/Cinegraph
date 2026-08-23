@@ -1,13 +1,12 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import make_episode_ref
 
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.transcript import SpeakerCandidate, TranscriptSegment
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
-from tests.factories import make_episode_ref
-
 
 SERIES_ID = UUID("00000000-0000-0000-0000-000000000011")
 SEASON_ID = UUID("00000000-0000-0000-0000-000000000101")

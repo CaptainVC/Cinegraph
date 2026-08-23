@@ -15,16 +15,16 @@ from cinegraph.application.service.index_transcript_segments_service import (
 from cinegraph.application.service.ingest_reviewed_subtitle_service import (
     IngestReviewedSubtitleService,
 )
-from cinegraph.common.identifiers import IdentifierGenerator
 from cinegraph.common.error_messages import CorpusIngestionErrorMessages
+from cinegraph.common.identifiers import IdentifierGenerator
 from cinegraph.domain.enums.enum import (
     Language,
     RightsStatus,
     SourceAcquisitionMethod,
     SourceKind,
 )
-from cinegraph.domain.models.source import SourceDocument
 from cinegraph.domain.exceptions.errors import InvalidModelError
+from cinegraph.domain.models.source import SourceDocument
 
 
 class IngestReviewedCorpusService:

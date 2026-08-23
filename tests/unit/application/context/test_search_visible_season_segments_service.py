@@ -1,6 +1,11 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import (
+    make_authenticated_corpus_access_scope,
+    make_episode_ref,
+    make_guest_corpus_access_scope,
+)
 
 from cinegraph.application.models.search_visible_season_segments import (
     SearchVisibleSeasonSegmentsQuery,
@@ -22,11 +27,6 @@ from cinegraph.domain.models.watch_state.series_watch_state import (
     SeriesWatchState,
 )
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
-from tests.factories import (
-    make_authenticated_corpus_access_scope,
-    make_episode_ref,
-    make_guest_corpus_access_scope,
-)
 
 PROFILE_ID = UUID("00000000-0000-0000-0000-000000000701")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")

@@ -20,13 +20,13 @@ from cinegraph.adapters.workflow.langgraph.episode_recommendation_graph import (
 from cinegraph.adapters.workflow.langgraph.hybrid_grounded_answer_graph import (
     HybridGroundedAnswerGraphWorkflow,
 )
-from cinegraph.application.models.hybrid_grounded_answer import (
-    HybridGroundedAnswerQuery,
-    HybridGroundedAnswerResult,
-)
 from cinegraph.application.models.episode_recommendation import (
     RecommendEpisodesQuery,
     RecommendEpisodesResult,
+)
+from cinegraph.application.models.hybrid_grounded_answer import (
+    HybridGroundedAnswerQuery,
+    HybridGroundedAnswerResult,
 )
 from cinegraph.application.service.episode_recommendation_service import (
     EpisodeRecommendationService,

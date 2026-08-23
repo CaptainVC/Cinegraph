@@ -8,7 +8,6 @@ from cinegraph.ingestion.subtitle_alignment.models import (
 )
 from cinegraph.ingestion.subtitle_alignment.text import normalize_text
 
-
 DEFAULT_SKIP_PENALTY = 40.0
 MINIMUM_MATCH_FLOOR = 65.0
 

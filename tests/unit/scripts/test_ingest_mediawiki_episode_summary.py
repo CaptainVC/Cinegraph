@@ -1,10 +1,9 @@
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from uuid import UUID
 
 import pytest
-
 from scripts.ingest_mediawiki_episode_summary import build_parser, parse_uuid
 
 

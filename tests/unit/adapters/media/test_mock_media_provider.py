@@ -2,6 +2,10 @@ from dataclasses import replace
 from uuid import UUID
 
 import pytest
+from tests.contracts.media_provider_contract import (
+    MediaProviderContractContext,
+    assert_media_provider_contract,
+)
 
 from cinegraph.adapters.media import (
     MockMediaProvider,
@@ -13,11 +17,6 @@ from cinegraph.common.error_messages import MediaProviderErrorMessages
 from cinegraph.config import DEFAULT_MOCK_MEDIA_PROVIDER_CONFIGURATION
 from cinegraph.domain.enums.enum import MediaCommandKind
 from cinegraph.domain.models.media_action import MediaCommand
-from tests.contracts.media_provider_contract import (
-    MediaProviderContractContext,
-    assert_media_provider_contract,
-)
-
 
 CONNECTION_ID = UUID(int=701)
 PROFILE_ID = UUID(int=702)

@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
 
+
 @dataclass(frozen=True, slots=True)
 class ParsedSrtCue:
     cue_number: int

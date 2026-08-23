@@ -184,3 +184,37 @@ Foundation work is in progress. Governed retrieval, persistent application
 composition, corpus evaluation, authentication, HTTP contracts, guardrails, and
 the first product UI are present. Provider actions and deployment hardening remain
 ahead.
+
+## Development quality contract
+
+Prerequisites: Python 3.12 or newer, `uv`, and Git. The commands below are
+cross-platform (PowerShell, cmd, Bash, and zsh) and use the committed lock file:
+
+```text
+uv sync --locked --dev
+uv run python scripts/quality.py
+```
+
+The quality runner fails at the first unsuccessful stage and runs Ruff, the staged
+mypy boundary (`domain`, `ports`, `config`, application models/policy/serialization/
+services), full tests with branch coverage, deterministic synthetic retrieval
+evaluation, pre-commit, and a wheel build. Individual checks remain available:
+
+```text
+uv run ruff check .
+uv run mypy
+uv run pytest --cov --cov-report=term-missing --cov-report=xml --cov-report=json
+uv run python scripts/run_synthetic_evaluation.py
+uv run pre-commit run --all-files
+uv build --wheel
+```
+
+The current branch baseline is 87.28% total branch coverage (433 tests, measured with
+`pytest-cov` on 2026-08-23); the centralized coverage configuration floors it at 87%
+so coverage cannot silently regress. Coverage XML and JSON reports are generated
+locally and uploaded by CI. Ruff syntax/error classes, Pyflakes, and import sorting are
+gated across the repository. Formatter enforcement remains intentionally staged to
+avoid mixing a repository-wide style rewrite with behavioral phases.
+
+Architecture boundaries and phase workflow are recorded in [AGENTS.md](AGENTS.md),
+with decisions indexed in [docs/adr/README.md](docs/adr/README.md).

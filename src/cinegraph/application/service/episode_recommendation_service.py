@@ -4,10 +4,10 @@ from dataclasses import replace
 from cinegraph.application.models.episode_recommendation import (
     EpisodeRecommendation,
     RankedRecommendationDraft,
-    RecommendEpisodesQuery,
-    RecommendEpisodesResult,
     RecommendationCandidate,
     RecommendationRankingRequest,
+    RecommendEpisodesQuery,
+    RecommendEpisodesResult,
 )
 from cinegraph.application.models.search_visible_hybrid_segments import (
     SearchVisibleHybridSegmentsQuery,

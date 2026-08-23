@@ -4,9 +4,9 @@ from langgraph.graph import END, START, StateGraph
 
 from cinegraph.application.models.episode_recommendation import (
     RankedRecommendationDraft,
+    RecommendationCandidate,
     RecommendEpisodesQuery,
     RecommendEpisodesResult,
-    RecommendationCandidate,
 )
 from cinegraph.application.service.episode_recommendation_service import (
     EpisodeRecommendationService,

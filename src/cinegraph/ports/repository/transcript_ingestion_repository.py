@@ -1,5 +1,4 @@
 from typing import Protocol
-
 from uuid import UUID
 
 from cinegraph.domain.models.source.source_document import SourceDocument

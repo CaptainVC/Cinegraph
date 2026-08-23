@@ -50,9 +50,9 @@ class ArtworkAsset:
     def __post_init__(self) -> None:
         for value in (self.source_url, self.canonical_url, self.license_url):
             _url(value)
-        for value in (self.medium_url, self.original_url):
-            if value is not None:
-                _url(value)
+        for optional_url in (self.medium_url, self.original_url):
+            if optional_url is not None:
+                _url(optional_url)
         for value in (self.attribution, self.license_name):
             _text(value)
         if self.provider_asset_id is not None:

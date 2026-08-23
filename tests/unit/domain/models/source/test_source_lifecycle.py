@@ -13,7 +13,6 @@ from cinegraph.domain.enums.enum import (
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.source import SourceDocument, SourceVersion
 
-
 SOURCE_DOCUMENT_ID = UUID("00000000-0000-0000-0000-000000000401")
 SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000501")
 PARENT_SOURCE_VERSION_ID = UUID("00000000-0000-0000-0000-000000000502")

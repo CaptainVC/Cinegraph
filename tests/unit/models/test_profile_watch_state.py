@@ -1,6 +1,7 @@
 from uuid import UUID
 
 import pytest
+from tests.factories import make_episode_ref
 
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.catalogue.episode import Episode
@@ -15,8 +16,6 @@ from cinegraph.domain.models.watch_state.profile_watch_state import (
     ProfileWatchState,
 )
 from cinegraph.domain.models.watch_state.series_watch_state import SeriesWatchState
-from tests.factories import make_episode_ref
-
 
 SERIES_ONE_ID = UUID("00000000-0000-0000-0000-000000000001")
 SERIES_TWO_ID = UUID("00000000-0000-0000-0000-000000000002")

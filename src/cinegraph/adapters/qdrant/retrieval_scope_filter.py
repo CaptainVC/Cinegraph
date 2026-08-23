@@ -1,9 +1,5 @@
-from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
-from cinegraph.domain.models.source.review_status import (
-    APPROVED_SOURCE_REVIEW_STATUSES,
-)
-from cinegraph.domain.retrieval.retrieval_scope import RetrievalScope
 from qdrant_client.http import models
+
 from cinegraph.config.qdrant import (
     QDRANT_END_MS_FIELD,
     QDRANT_EPISODE_ID_FIELD,
@@ -11,6 +7,11 @@ from cinegraph.config.qdrant import (
     QDRANT_SERIES_ID_FIELD,
     QDRANT_SOURCE_STATUS_FIELD,
 )
+from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.domain.models.source.review_status import (
+    APPROVED_SOURCE_REVIEW_STATUSES,
+)
+from cinegraph.domain.retrieval.retrieval_scope import RetrievalScope
 
 
 # Compile visible episode scopes into a Qdrant filter with per-episode time bounds.
