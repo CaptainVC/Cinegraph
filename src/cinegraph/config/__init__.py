@@ -21,6 +21,10 @@ from cinegraph.config.embedding import (
     DEFAULT_EMBEDDING_CONFIGURATION,
     EmbeddingConfiguration,
 )
+from cinegraph.config.hybrid_retrieval import (
+    DEFAULT_HYBRID_RETRIEVAL_CONFIGURATION,
+    HybridRetrievalConfiguration,
+)
 from cinegraph.config.ingestion_jobs import (
     ALLOWED_INGESTION_ERROR_CODES,
     DEFAULT_INGESTION_JOB_CONFIGURATION,
@@ -74,6 +78,10 @@ from cinegraph.config.speaker_review import (
     ModelTokenPricing,
     SpeakerReviewConfiguration,
 )
+from cinegraph.config.transcript_chunking import (
+    DEFAULT_TRANSCRIPT_CHUNKING_CONFIGURATION,
+    TranscriptChunkingConfiguration,
+)
 
 __all__ = [
     "DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION",
@@ -120,6 +128,10 @@ __all__ = [
     "QdrantTranscriptCollectionSchema",
     "RecommendationConfiguration",
     "RetrievalEvaluationThresholds",
+    "TranscriptChunkingConfiguration",
+    "DEFAULT_TRANSCRIPT_CHUNKING_CONFIGURATION",
+    "HybridRetrievalConfiguration",
+    "DEFAULT_HYBRID_RETRIEVAL_CONFIGURATION",
     "RuntimeEnvironment",
     "SecretProvisioningConfiguration",
     "SpeakerReviewConfiguration",

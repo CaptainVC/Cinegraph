@@ -77,6 +77,27 @@ class IdentifierGenerator:
         )
 
     @staticmethod
+    def transcript_chunk_id(
+        revision: str,
+        source_version_id: UUID,
+        series_id: UUID,
+        season_id: UUID,
+        episode_id: UUID,
+        segment_ids: tuple[UUID, ...],
+    ) -> UUID:
+        return uuid5(
+            IdentifierTemplates.NAMESPACE,
+            IdentifierTemplates.TRANSCRIPT_CHUNK.format(
+                revision=revision,
+                source_version_id=source_version_id,
+                series_id=series_id,
+                season_id=season_id,
+                episode_id=episode_id,
+                segment_ids=",".join(str(identifier) for identifier in segment_ids),
+            ),
+        )
+
+    @staticmethod
     # Generate a stable UUID from a summary version, episode, and language.
     def episode_summary_id(
         source_version_id: UUID,

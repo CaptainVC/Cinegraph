@@ -13,12 +13,13 @@ class IdentifierTemplates:
         "cinegraph:transcript-segment:{source_version_id}:{episode_id}:"
         "{cue_number}:{start_ms}:{end_ms}:{text}"
     )
-    EPISODE_SUMMARY = (
-        "cinegraph:episode-summary:{source_version_id}:{episode_id}:{language}"
+    TRANSCRIPT_CHUNK = (
+        "cinegraph:transcript-chunk:{revision}:{source_version_id}:"
+        "{series_id}:{season_id}:{episode_id}:{segment_ids}"
     )
+    EPISODE_SUMMARY = "cinegraph:episode-summary:{source_version_id}:{episode_id}:{language}"
     EPISODE_SUMMARY_SOURCE_DOCUMENT = (
-        "cinegraph:source-document:episode-summary:"
-        "{episode_id}:{language}:{origin}"
+        "cinegraph:source-document:episode-summary:{episode_id}:{language}:{origin}"
     )
     SERIES_METADATA_SOURCE_DOCUMENT = (
         "cinegraph:source-document:series-metadata:{series_id}:{origin}"

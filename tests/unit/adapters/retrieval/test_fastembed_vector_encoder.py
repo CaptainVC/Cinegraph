@@ -7,6 +7,7 @@ from cinegraph.adapters.retrieval.fastembed_vector_encoder import (
     FastEmbedVectorEncoder,
 )
 from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.config import EmbeddingConfiguration
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.retrieval.vector_data import DocumentVector, QueryVector
 
@@ -29,7 +30,7 @@ class FakeBackend:
 
     def passage_embed(self, texts: tuple[str, ...]):
         self.passage_texts.append(texts)
-        return iter((self.result,))
+        return iter(self.result for _ in texts)
 
 
 class EmptyBackend:
@@ -43,11 +44,27 @@ class EmptyBackend:
 def make_encoder(
     dense_result: object = (1, 2),
     sparse_result: object | None = None,
+    max_batch_size: int = 64,
 ) -> tuple[FastEmbedVectorEncoder, FakeBackend, FakeBackend]:
     sparse_result = sparse_result or FakeSparseEmbedding((0, 2), (0.5, 0.25))
     dense_backend = FakeBackend(dense_result)
     sparse_backend = FakeBackend(sparse_result)
-    return FastEmbedVectorEncoder(dense_backend, sparse_backend), dense_backend, sparse_backend
+    return (
+        FastEmbedVectorEncoder(
+            dense_backend,
+            sparse_backend,
+            EmbeddingConfiguration(
+                "dense",
+                "sparse",
+                2_147_483_647,
+                1e-12,
+                2,
+                max_batch_size,
+            ),
+        ),
+        dense_backend,
+        sparse_backend,
+    )
 
 
 def test_encode_query_returns_query_vector_and_only_calls_query_methods() -> None:
@@ -74,10 +91,16 @@ def test_encode_document_returns_document_vector_and_passes_single_text_batch() 
     assert sparse_backend.query_texts == []
 
 
+def test_empty_document_batch_returns_without_backend_calls() -> None:
+    encoder, dense_backend, sparse_backend = make_encoder()
+
+    assert encoder.encode_documents(()) == ()
+    assert dense_backend.passage_texts == []
+    assert sparse_backend.passage_texts == []
+
+
 def test_unsorted_sparse_results_are_sorted_with_matching_values() -> None:
-    encoder, _, _ = make_encoder(
-        sparse_result=FakeSparseEmbedding((4, 1, 3), (0.4, 0.1, 0.3))
-    )
+    encoder, _, _ = make_encoder(sparse_result=FakeSparseEmbedding((4, 1, 3), (0.4, 0.1, 0.3)))
 
     result = encoder.encode_query("query")
 
@@ -86,9 +109,7 @@ def test_unsorted_sparse_results_are_sorted_with_matching_values() -> None:
 
 
 def test_empty_sparse_values_use_reserved_negligible_fallback() -> None:
-    encoder, _, _ = make_encoder(
-        sparse_result=FakeSparseEmbedding((), ())
-    )
+    encoder, _, _ = make_encoder(sparse_result=FakeSparseEmbedding((), ()))
 
     result = encoder.encode_document("music or punctuation only")
 
@@ -99,8 +120,10 @@ def test_empty_sparse_values_use_reserved_negligible_fallback() -> None:
 @pytest.mark.parametrize("empty_backend", ["dense", "sparse"])
 def test_empty_backend_result_raises_central_error(empty_backend: str) -> None:
     dense_backend = EmptyBackend() if empty_backend == "dense" else FakeBackend((1,))
-    sparse_backend = EmptyBackend() if empty_backend == "sparse" else FakeBackend(
-        FakeSparseEmbedding((0,), (1,))
+    sparse_backend = (
+        EmptyBackend()
+        if empty_backend == "sparse"
+        else FakeBackend(FakeSparseEmbedding((0,), (1,)))
     )
     encoder = FastEmbedVectorEncoder(dense_backend, sparse_backend)
 
@@ -117,5 +140,51 @@ def test_nonfinite_dense_output_is_rejected_by_domain_validation() -> None:
     with pytest.raises(
         InvalidModelError,
         match=RetrievalErrorMessages.DENSE_VECTOR_VALUES_MUST_BE_FINITE,
+    ):
+        encoder.encode_query("query")
+
+
+def test_document_encoding_batches_once_per_backend_and_preserves_order() -> None:
+    encoder, dense_backend, sparse_backend = make_encoder(max_batch_size=2)
+    texts = ("one", "two", "three", "four", "five")
+
+    result = encoder.encode_documents(texts)
+
+    assert len(result) == len(texts)
+    assert dense_backend.passage_texts == [
+        ("one", "two"),
+        ("three", "four"),
+        ("five",),
+    ]
+    assert sparse_backend.passage_texts == dense_backend.passage_texts
+
+
+def test_document_backend_cardinality_mismatch_is_rejected() -> None:
+    configuration = EmbeddingConfiguration(
+        "dense",
+        "sparse",
+        2_147_483_647,
+        1e-12,
+        2,
+    )
+    encoder = FastEmbedVectorEncoder(
+        FakeBackend((1, 2)),
+        EmptyBackend(),
+        configuration,
+    )
+
+    with pytest.raises(
+        ValueError,
+        match=RetrievalErrorMessages.VECTOR_ENCODER_BACKEND_RESULT_CARDINALITY_MUST_MATCH,
+    ):
+        encoder.encode_documents(("one", "two"))
+
+
+def test_dense_dimension_must_match_configuration() -> None:
+    encoder, _, _ = make_encoder(dense_result=(1, 2, 3))
+
+    with pytest.raises(
+        ValueError,
+        match=RetrievalErrorMessages.VECTOR_ENCODER_DENSE_DIMENSION_MUST_MATCH,
     ):
         encoder.encode_query("query")

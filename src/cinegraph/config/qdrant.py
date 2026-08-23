@@ -17,6 +17,9 @@ QDRANT_LANGUAGE_FIELD = "language"
 QDRANT_RIGHTS_STATUS_FIELD = "rights_status"
 QDRANT_SOURCE_STATUS_FIELD = "source_status"
 QDRANT_REVIEW_STATUS_FIELD = "review_status"
+QDRANT_INDEX_REVISION_FIELD = "index_revision"
+QDRANT_MEMBER_SEGMENT_IDS_FIELD = "member_segment_ids"
+QDRANT_CHUNK_ORDINAL_FIELD = "chunk_ordinal"
 
 QDRANT_TRANSCRIPT_REQUIRED_PAYLOAD_FIELDS = frozenset(
     {
@@ -31,6 +34,11 @@ QDRANT_TRANSCRIPT_REQUIRED_PAYLOAD_FIELDS = frozenset(
         QDRANT_TEXT_FIELD,
         QDRANT_LANGUAGE_FIELD,
         QDRANT_RIGHTS_STATUS_FIELD,
+        QDRANT_SOURCE_STATUS_FIELD,
+        QDRANT_REVIEW_STATUS_FIELD,
+        QDRANT_INDEX_REVISION_FIELD,
+        QDRANT_MEMBER_SEGMENT_IDS_FIELD,
+        QDRANT_CHUNK_ORDINAL_FIELD,
     }
 )
 
@@ -57,9 +65,7 @@ class QdrantTranscriptCollectionSchema:
             or not self.collection_name
             or self.collection_name.strip() != self.collection_name
         ):
-            raise ValueError(
-                QdrantErrorMessages.COLLECTION_NAME_MUST_BE_TRIMMED_NONEMPTY
-            )
+            raise ValueError(QdrantErrorMessages.COLLECTION_NAME_MUST_BE_TRIMMED_NONEMPTY)
         if any(
             not isinstance(name, str) or not name or name.strip() != name
             for name in (self.dense_vector_name, self.sparse_vector_name)
@@ -72,9 +78,7 @@ class QdrantTranscriptCollectionSchema:
         ):
             raise ValueError(QdrantErrorMessages.DENSE_VECTOR_SIZE_MUST_BE_POSITIVE)
         if not isinstance(self.payload_indexes, tuple):
-            raise ValueError(
-                QdrantErrorMessages.PAYLOAD_INDEX_DEFINITIONS_MUST_BE_IMMUTABLE
-            )
+            raise ValueError(QdrantErrorMessages.PAYLOAD_INDEX_DEFINITIONS_MUST_BE_IMMUTABLE)
         fields = tuple(item.field_name for item in self.payload_indexes)
         if len(set(fields)) != len(fields):
             raise ValueError(QdrantErrorMessages.PAYLOAD_INDEX_FIELDS_MUST_BE_UNIQUE)
@@ -136,5 +140,10 @@ DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA = QdrantTranscriptCollectionSchema(
             QDRANT_REVIEW_STATUS_FIELD,
             models.PayloadSchemaType.KEYWORD,
         ),
+        QdrantPayloadIndexDefinition(QDRANT_INDEX_REVISION_FIELD, models.PayloadSchemaType.KEYWORD),
+        QdrantPayloadIndexDefinition(
+            QDRANT_MEMBER_SEGMENT_IDS_FIELD, models.PayloadSchemaType.KEYWORD
+        ),
+        QdrantPayloadIndexDefinition(QDRANT_CHUNK_ORDINAL_FIELD, models.PayloadSchemaType.INTEGER),
     ),
 )

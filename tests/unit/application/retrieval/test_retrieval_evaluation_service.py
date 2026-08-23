@@ -13,6 +13,7 @@ from cinegraph.application.service.retrieval_evaluation_service import (
     RetrievalEvaluationService,
 )
 from cinegraph.config import RetrievalEvaluationThresholds
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.ports.retrieval import RetrievedSegment
 
@@ -43,6 +44,9 @@ def make_match(episode, segment_id: int, score: float) -> RetrievedSegment:
         language=Language.ENGLISH,
         rights_status=RightsStatus.ALLOWED,
         score=score,
+        member_segment_ids=(UUID(int=segment_id + 1000),),
+        index_revision=TRANSCRIPT_INDEX_REVISION,
+        ordinal=0,
     )
 
 
@@ -103,11 +107,36 @@ def test_report_passes_when_every_expected_episode_ranks_first_without_leaks() -
     case = make_case("pass", "pass", (episode,), (episode,))
     search = FakeSearchService({"pass": (make_match(episode, 10, 1.0),)})
 
-    report = RetrievalEvaluationService(search).execute(
-        RetrievalEvaluationDataset(1, (case,))
-    )
+    report = RetrievalEvaluationService(search).execute(RetrievalEvaluationDataset(1, (case,)))
 
     assert report.hit_rate == 1.0
     assert report.mean_reciprocal_rank == 1.0
     assert report.forbidden_episode_leak_count == 0
     assert report.passed is True
+
+
+def test_rank_metrics_count_each_episode_only_once() -> None:
+    first = make_episode_ref(episode_id=UUID(int=11), episode_number=1)
+    expected = make_episode_ref(episode_id=UUID(int=12), episode_number=2)
+    case = make_case("deduplicated", "deduplicated", (first, expected), (expected,))
+    search = FakeSearchService(
+        {
+            "deduplicated": (
+                make_match(first, 20, 1.0),
+                make_match(first, 21, 0.9),
+                make_match(expected, 22, 0.8),
+            )
+        }
+    )
+
+    report = RetrievalEvaluationService(
+        search,
+        RetrievalEvaluationThresholds(0.0, 0.0, 0, 0.0, 0.0),
+    ).execute(RetrievalEvaluationDataset(1, (case,)))
+
+    assert report.case_results[0].retrieved_episode_ids == (
+        first.episode_id,
+        expected.episode_id,
+    )
+    assert report.case_results[0].first_expected_rank == 2
+    assert report.mean_reciprocal_rank == 0.5

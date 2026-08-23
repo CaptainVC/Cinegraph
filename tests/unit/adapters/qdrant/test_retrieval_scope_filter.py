@@ -5,7 +5,12 @@ from tests.factories import make_episode_ref
 from cinegraph.adapters.qdrant.retrieval_scope_filter import (
     compile_retrieval_scope_filter,
 )
-from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
+from cinegraph.domain.enums.enum import (
+    RightsStatus,
+    SourceReviewStatus,
+    SourceVersionStatus,
+)
 from cinegraph.domain.retrieval.retrieval_scope import (
     EpisodeVisibilityScope,
     RetrievalScope,
@@ -35,7 +40,7 @@ def test_full_scope_has_episode_match_without_end_range() -> None:
         )
     )
 
-    visibility = result["must"][3]["should"][0]
+    visibility = next(item for item in result["must"] if "should" in item)["should"][0]
     assert visibility == {
         "must": [
             {
@@ -55,7 +60,7 @@ def test_partial_scope_pairs_episode_id_with_inclusive_cutoff() -> None:
         )
     )
 
-    visibility = result["must"][3]["should"][0]
+    visibility = next(item for item in result["must"] if "should" in item)["should"][0]
     assert visibility == {
         "must": [
             {
@@ -80,10 +85,11 @@ def test_mixed_scopes_preserve_input_order_in_visibility_should() -> None:
         )
     )
 
-    visibility = result["must"][3]["should"]
-    assert [
-        item["must"][0]["match"]["value"] for item in visibility
-    ] == [str(full_episode.episode_id), str(partial_episode.episode_id)]
+    visibility = next(item for item in result["must"] if "should" in item)["should"]
+    assert [item["must"][0]["match"]["value"] for item in visibility] == [
+        str(full_episode.episode_id),
+        str(partial_episode.episode_id),
+    ]
     assert "range" not in visibility[0]["must"][0]
     assert visibility[1]["must"][1] == {
         "key": "end_ms",
@@ -111,11 +117,21 @@ def test_outer_conditions_require_series_active_and_reviewed_values() -> None:
             "key": "review_status",
             "match": {
                 "any": [
-                        SourceReviewStatus.AUTOMATED_REVIEWED.value,
-                        SourceReviewStatus.HYBRID_REVIEWED.value,
-                        SourceReviewStatus.REVIEWED.value,
+                    SourceReviewStatus.AUTOMATED_REVIEWED.value,
+                    SourceReviewStatus.HYBRID_REVIEWED.value,
+                    SourceReviewStatus.REVIEWED.value,
                 ]
             },
+        },
+    ]
+    assert result["must"][3:5] == [
+        {
+            "key": "rights_status",
+            "match": {"value": RightsStatus.ALLOWED.value},
+        },
+        {
+            "key": "index_revision",
+            "match": {"value": TRANSCRIPT_INDEX_REVISION},
         },
     ]
 
@@ -131,6 +147,5 @@ def test_uuid_match_values_are_serialized_as_strings() -> None:
     )
 
     assert result["must"][0]["match"]["value"] == str(SERIES_ID)
-    assert result["must"][3]["should"][0]["must"][0]["match"]["value"] == str(
-        episode.episode_id
-    )
+    visibility = next(item for item in result["must"] if "should" in item)
+    assert visibility["should"][0]["must"][0]["match"]["value"] == str(episode.episode_id)

@@ -4,8 +4,9 @@ Private evaluation datasets live under gitignored `knowledge/` and refer to cata
 episodes by season and episode number. The loader resolves those positions to stable
 UUIDs and rejects missing, overlapping, or duplicate cases before invoking an encoder.
 
-The gate measures hit rate, mean reciprocal rank, and explicit forbidden-episode
-leakage. Defaults are centralized at 0.80 hit rate, 0.60 MRR, and zero leaks. The CLI
+The gate measures unique-episode hit rate, mean reciprocal rank, recall@k, nDCG@k, and
+explicit forbidden-episode leakage. Defaults are centralized at 0.80 hit rate, 0.60
+MRR, 0.80 recall, 0.60 nDCG, and zero leaks. The CLI
 prints one JSON report and exits nonzero when any threshold fails:
 
 ```shell
@@ -17,3 +18,8 @@ uv run python scripts/evaluate_retrieval.py \
 The evaluation command reads Qdrant and creates local query embeddings; it does not
 mutate the collection or call OpenAI. Use the synthetic example only to understand the
 contract—real questions and expected evidence remain private and gitignored.
+
+The CI smoke gate runs the complete chunker → batch encoder → Qdrant writer → scoped
+hybrid search route with invented fixture data. Any entitlement or safe-until leak
+fails the gate. A changed transcript index revision requires a complete reindex;
+legacy cue points are excluded by the exact-revision filter.

@@ -67,9 +67,7 @@ def _default_qdrant_client_factory(
     if settings.qdrant_mode is QdrantRuntimeMode.LOCAL:
         return QdrantClient(path=str(settings.qdrant_local_path))
     api_key = (
-        settings.qdrant_api_key.get_secret_value()
-        if settings.qdrant_api_key is not None
-        else None
+        settings.qdrant_api_key.get_secret_value() if settings.qdrant_api_key is not None else None
     )
     return QdrantClient(url=str(settings.qdrant_url), api_key=api_key)
 
@@ -80,9 +78,7 @@ class CinegraphCompositionRoot:
         self,
         settings: CinegraphRuntimeSettings,
         qdrant_client_factory: QdrantClientFactory = _default_qdrant_client_factory,
-        vector_encoder_factory: VectorEncoderFactory = (
-            FastEmbedVectorEncoder.from_default_models
-        ),
+        vector_encoder_factory: VectorEncoderFactory = (FastEmbedVectorEncoder.from_default_models),
     ) -> None:
         self.settings = settings
         self._qdrant_client_factory = qdrant_client_factory
@@ -115,7 +111,7 @@ class CinegraphCompositionRoot:
             self.vector_encoder,
             QdrantVectorIndex(
                 self.qdrant_client,
-                self.qdrant_schema.collection_name,
+                self.qdrant_schema,
             ),
         )
 
@@ -133,7 +129,7 @@ class CinegraphCompositionRoot:
                 self.vector_encoder,
                 QdrantTranscriptIndexWriter(
                     self.qdrant_client,
-                    self.qdrant_schema.collection_name,
+                    self.qdrant_schema,
                 ),
             ),
         )

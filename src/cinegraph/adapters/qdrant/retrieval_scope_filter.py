@@ -3,11 +3,14 @@ from qdrant_client.http import models
 from cinegraph.config.qdrant import (
     QDRANT_END_MS_FIELD,
     QDRANT_EPISODE_ID_FIELD,
+    QDRANT_INDEX_REVISION_FIELD,
     QDRANT_REVIEW_STATUS_FIELD,
+    QDRANT_RIGHTS_STATUS_FIELD,
     QDRANT_SERIES_ID_FIELD,
     QDRANT_SOURCE_STATUS_FIELD,
 )
-from cinegraph.domain.enums.enum import SourceReviewStatus, SourceVersionStatus
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
+from cinegraph.domain.enums.enum import RightsStatus, SourceReviewStatus, SourceVersionStatus
 from cinegraph.domain.models.source.review_status import (
     APPROVED_SOURCE_REVIEW_STATUSES,
 )
@@ -60,6 +63,14 @@ def compile_retrieval_scope_filter(
                         if status in APPROVED_SOURCE_REVIEW_STATUSES
                     ]
                 ),
+            ),
+            models.FieldCondition(
+                key=QDRANT_RIGHTS_STATUS_FIELD,
+                match=models.MatchValue(value=RightsStatus.ALLOWED.value),
+            ),
+            models.FieldCondition(
+                key=QDRANT_INDEX_REVISION_FIELD,
+                match=models.MatchValue(value=TRANSCRIPT_INDEX_REVISION),
             ),
             models.Filter(should=visibility_filters),
         ]

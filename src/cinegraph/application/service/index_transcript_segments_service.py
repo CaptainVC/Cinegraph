@@ -1,9 +1,12 @@
+from uuid import UUID
+
 from cinegraph.application.models.index_transcript_segments import (
     IndexTranscriptSegmentsCommand,
     IndexTranscriptSegmentsResult,
 )
+from cinegraph.application.service.transcript_chunking_service import TranscriptChunkingService
 from cinegraph.common.error_messages import TranscriptErrorMessages
-from cinegraph.domain.enums.enum import SourceVersionStatus
+from cinegraph.domain.enums.enum import RightsStatus, SourceVersionStatus
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.source.review_status import is_source_version_approved
 from cinegraph.ports.retrieval.transcript_index_writer import (
@@ -15,74 +18,91 @@ from cinegraph.ports.retrieval.vector_encoder import VectorEncoder
 
 
 class IndexTranscriptSegmentsService:
-    # Store the encoder and governed transcript index writer dependencies.
     def __init__(
         self,
         encoder: VectorEncoder,
         writer: TranscriptIndexWriter,
+        chunker: TranscriptChunkingService | None = None,
     ) -> None:
         self._encoder = encoder
         self._writer = writer
+        self._chunker = chunker or TranscriptChunkingService()
 
-    # Validate, encode, and persist approved transcript segments as one batch.
-    def execute(
-        self,
-        command: IndexTranscriptSegmentsCommand,
-    ) -> IndexTranscriptSegmentsResult:
-        # Validate source governance before inspecting or encoding segments.
-        if (
-            command.source_version.status is not SourceVersionStatus.ACTIVE
-            or not is_source_version_approved(command.source_version.review_status)
+    def execute(self, command: IndexTranscriptSegmentsCommand) -> IndexTranscriptSegmentsResult:
+        source = command.source_version
+        if source.rights_status is not RightsStatus.ALLOWED:
+            raise InvalidModelError(
+                TranscriptErrorMessages.TRANSCRIPT_SOURCE_RIGHTS_STATUS_MUST_BE_ALLOWED
+            )
+        if source.status is not SourceVersionStatus.ACTIVE or not is_source_version_approved(
+            source.review_status
         ):
             raise InvalidModelError(
                 TranscriptErrorMessages.SOURCE_VERSION_MUST_BE_ACTIVE_AND_REVIEWED
             )
-
-        # Validate every segment reference and ID before calling the encoder.
-        segment_ids = {segment.segment_id for segment in command.segments}
-        if len(segment_ids) != len(command.segments):
-            raise InvalidModelError(
-                TranscriptErrorMessages.TRANSCRIPT_SEGMENT_IDS_MUST_BE_UNIQUE
-            )
+        seen = set()
         for segment in command.segments:
-            if segment.source_version_id != command.source_version.source_version_id:
+            if segment.segment_id in seen:
+                raise InvalidModelError(
+                    TranscriptErrorMessages.TRANSCRIPT_SEGMENT_IDS_MUST_BE_UNIQUE
+                )
+            seen.add(segment.segment_id)
+            if segment.source_version_id != source.source_version_id:
                 raise InvalidModelError(
                     TranscriptErrorMessages.TRANSCRIPT_SEGMENT_SOURCE_VERSION_MUST_MATCH
                 )
-
-        # Avoid encoding or writing when there are no approved segments.
-        if not command.segments:
-            return IndexTranscriptSegmentsResult(indexed_segment_count=0)
-
-        points: list[TranscriptIndexPoint] = []
-        for segment in command.segments:
-            # Encode in caller order and map the episode and timing payload exactly.
-            vector = self._encoder.encode_document(segment.text)
-            payload = TranscriptIndexPayload(
-                source_version_id=segment.source_version_id,
-                series_id=segment.episode.series_id,
-                season_id=segment.episode.season_id,
-                episode_id=segment.episode.episode_id,
-                season_number=segment.episode.position.season_number,
-                episode_number=segment.episode.position.episode_number,
-                start_ms=segment.start_ms,
-                end_ms=segment.end_ms,
-                text=segment.text,
-                language=segment.language,
-                rights_status=segment.rights_status,
-                source_status=command.source_version.status,
-                review_status=command.source_version.review_status,
-            )
-            points.append(
-                TranscriptIndexPoint(
-                    segment_id=segment.segment_id,
-                    vector=vector,
-                    payload=payload,
+            if (
+                segment.rights_status is not RightsStatus.ALLOWED
+                or segment.rights_status is not source.rights_status
+            ):
+                raise InvalidModelError(
+                    TranscriptErrorMessages.TRANSCRIPT_SEGMENT_RIGHTS_STATUS_MUST_MATCH
                 )
-            )
 
-        # Write the complete ordered batch exactly once after all points are built.
-        self._writer.upsert(tuple(points))
-        return IndexTranscriptSegmentsResult(
-            indexed_segment_count=len(points),
+        chunks = self._chunker.chunk(command.segments)
+        if not chunks:
+            self._replace(source.source_version_id, source.parent_source_version_id, ())
+            return IndexTranscriptSegmentsResult(input_segment_count=0, indexed_chunk_count=0)
+        texts = tuple(chunk.text for chunk in chunks)
+        vectors = self._encoder.encode_documents(texts)
+        if len(vectors) != len(chunks):
+            raise InvalidModelError(
+                TranscriptErrorMessages.TRANSCRIPT_INDEX_VECTOR_CARDINALITY_MUST_MATCH
+            )
+        points = tuple(
+            TranscriptIndexPoint(
+                chunk_id=chunk.chunk_id,
+                vector=vector,
+                payload=TranscriptIndexPayload(
+                    source_version_id=chunk.source_version_id,
+                    series_id=chunk.episode.series_id,
+                    season_id=chunk.episode.season_id,
+                    episode_id=chunk.episode.episode_id,
+                    season_number=chunk.episode.position.season_number,
+                    episode_number=chunk.episode.position.episode_number,
+                    start_ms=chunk.start_ms,
+                    end_ms=chunk.end_ms,
+                    text=chunk.text,
+                    language=chunk.language,
+                    rights_status=chunk.rights_status,
+                    source_status=source.status,
+                    review_status=source.review_status,
+                    member_segment_ids=chunk.member_segment_ids,
+                    chunk_ordinal=chunk.ordinal,
+                    index_revision=chunk.index_revision,
+                ),
+            )
+            for chunk, vector in zip(chunks, vectors)
         )
+        self._replace(source.source_version_id, source.parent_source_version_id, points)
+        return IndexTranscriptSegmentsResult(
+            input_segment_count=len(command.segments), indexed_chunk_count=len(points)
+        )
+
+    def _replace(
+        self,
+        new_id: UUID,
+        retired_id: UUID | None,
+        points: tuple[TranscriptIndexPoint, ...],
+    ) -> None:
+        self._writer.replace_source_version(new_id, retired_id, points)
