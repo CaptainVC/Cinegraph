@@ -3,12 +3,14 @@ from dataclasses import replace
 from functools import cached_property
 
 from qdrant_client import QdrantClient
+from sqlalchemy.engine import Engine
 
 from cinegraph.adapters.date_time.system_clock import SystemClock
 from cinegraph.adapters.identity import (
     ScryptPasswordHasher,
     SecureSessionTokenGenerator,
-    SqliteIdentityRepositories,
+    SqlAlchemyIdentityUnitOfWorkFactory,
+    create_identity_engine,
 )
 from cinegraph.adapters.ingestion.finalized_srt_canonicalizer import (
     FinalizedSrtCanonicalizer,
@@ -137,14 +139,17 @@ class CinegraphCompositionRoot:
         )
 
     @cached_property
-    def identity_repositories(self) -> SqliteIdentityRepositories:
-        return SqliteIdentityRepositories(self.settings.identity_database_path)
+    def identity_engine(self) -> Engine:
+        return create_identity_engine(self.settings)
+
+    @cached_property
+    def identity_unit_of_work_factory(self) -> SqlAlchemyIdentityUnitOfWorkFactory:
+        return SqlAlchemyIdentityUnitOfWorkFactory(self.identity_engine)
 
     @cached_property
     def identity_session_service(self) -> IdentitySessionService:
         return IdentitySessionService(
-            self.identity_repositories,
-            self.identity_repositories,
+            self.identity_unit_of_work_factory,
             ScryptPasswordHasher(),
             SecureSessionTokenGenerator(),
             SystemClock(),
@@ -159,7 +164,7 @@ class CinegraphCompositionRoot:
         ).provision()
 
     def close(self) -> None:
-        if "identity_repositories" in self.__dict__:
-            self.identity_repositories.close()
+        if "identity_engine" in self.__dict__:
+            self.identity_engine.dispose()
         if "qdrant_client" in self.__dict__:
             self.qdrant_client.close()

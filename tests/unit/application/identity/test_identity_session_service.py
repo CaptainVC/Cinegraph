@@ -4,8 +4,7 @@ import pytest
 from tests.factories import make_episode_ref
 
 from cinegraph.adapters.identity import (
-    InMemorySessionRepository,
-    InMemoryUserAccountRepository,
+    InMemoryIdentityUnitOfWorkFactory,
     ScryptPasswordHasher,
 )
 from cinegraph.application.exceptions.errors import (
@@ -44,18 +43,21 @@ class SequenceTokenGenerator:
         return f"opaque-session-token-{self.index:04d}"
 
 
+class FailingTokenGenerator:
+    def generate(self) -> str:
+        raise RuntimeError("token generation failed")
+
+
 def make_service():
-    accounts = InMemoryUserAccountRepository()
-    sessions = InMemorySessionRepository()
+    factory = InMemoryIdentityUnitOfWorkFactory()
     clock = MutableClock()
     service = IdentitySessionService(
-        accounts,
-        sessions,
+        factory,
         ScryptPasswordHasher(),
         SequenceTokenGenerator(),
         clock,
     )
-    return service, accounts, sessions, clock
+    return service, factory, factory, clock
 
 
 def test_registration_normalizes_identity_hashes_password_and_issues_session() -> None:
@@ -105,6 +107,28 @@ def test_duplicate_registration_and_invalid_credentials_use_stable_errors() -> N
             service.authenticate(
                 AuthenticateAccountCommand(email=email, password="wrong password value")
             )
+
+
+def test_registration_rolls_back_account_when_session_issuance_fails() -> None:
+    factory = InMemoryIdentityUnitOfWorkFactory()
+    service = IdentitySessionService(
+        factory,
+        ScryptPasswordHasher(),
+        FailingTokenGenerator(),
+        MutableClock(),
+    )
+
+    with pytest.raises(RuntimeError, match="token generation failed"):
+        service.register(
+            RegisterAccountCommand(
+                email="rollback@example.com",
+                password="correct horse battery staple",
+                display_name="Rollback",
+            )
+        )
+
+    assert factory.get_by_email("rollback@example.com") is None
+    assert factory.sessions == ()
 
 
 def test_authentication_issues_a_new_token_for_existing_account() -> None:

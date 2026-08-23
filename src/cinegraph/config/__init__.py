@@ -12,6 +12,10 @@ from cinegraph.config.authentication import (
     DEFAULT_AUTHENTICATION_CONFIGURATION,
     AuthenticationConfiguration,
 )
+from cinegraph.config.database import (
+    DEFAULT_DATABASE_CONFIGURATION,
+    DatabaseConfiguration,
+)
 from cinegraph.config.embedding import (
     DEFAULT_EMBEDDING_CONFIGURATION,
     EmbeddingConfiguration,
@@ -68,6 +72,7 @@ __all__ = [
     "DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION",
     "DEFAULT_API_CONFIGURATION",
     "DEFAULT_AUTHENTICATION_CONFIGURATION",
+    "DEFAULT_DATABASE_CONFIGURATION",
     "DEFAULT_EMBEDDING_CONFIGURATION",
     "DEFAULT_GUEST_ACCESS_CONFIGURATION",
     "DEFAULT_GUEST_CORPUS_ACCESS_SCOPE",
@@ -85,6 +90,7 @@ __all__ = [
     "ApiConfiguration",
     "AuthenticationConfiguration",
     "CinegraphRuntimeSettings",
+    "DatabaseConfiguration",
     "EmbeddingConfiguration",
     "GuestAccessConfiguration",
     "ModelConfiguration",

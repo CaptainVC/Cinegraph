@@ -65,6 +65,18 @@ uv run pytest
 uv build --wheel
 ```
 
+Identity persistence uses SQLAlchemy behind an explicit unit of work. Apply the
+checked-in Alembic schema before using authentication against a fresh database:
+
+```zsh
+uv run python scripts/migrate_identity_database.py upgrade
+```
+
+Development defaults to a gitignored SQLite URL. Production fails closed unless
+`CINEGRAPH_DATABASE_URL` parses to a `postgresql+psycopg://` URL. The API never calls
+`create_all` or silently migrates at startup; see `docs/database.md` for lifecycle,
+pool, and downgrade guidance.
+
 ## Privacy And Corpus Policy
 
 Private subtitle files, review ledgers, source documents, generated transcript

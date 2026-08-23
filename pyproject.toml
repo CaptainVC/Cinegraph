@@ -5,6 +5,7 @@ description = "Spoiler-aware, self-hosted intelligence for episodic media"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "alembic>=1.16,<2",
     "dotenv>=0.9.9",
     "fastapi>=0.141.1",
     "fastembed==0.8.0",
@@ -16,9 +17,11 @@ dependencies = [
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
     "pypdf>=6.15.0",
+    "psycopg[binary]>=3.2,<4",
     "pytest-bdd>=8.1.0",
     "qdrant-client==1.19.0",
     "rapidfuzz>=3.14.5",
+    "sqlalchemy>=2.0,<3",
     "uvicorn>=0.52.3",
 ]
 
@@ -63,6 +66,7 @@ files = [
     "src/cinegraph/domain",
     "src/cinegraph/ports",
     "src/cinegraph/config",
+    "src/cinegraph/adapters/identity",
     "src/cinegraph/application/models",
     "src/cinegraph/application/policy",
     "src/cinegraph/application/serialization",

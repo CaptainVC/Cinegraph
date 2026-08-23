@@ -19,3 +19,6 @@ All notable changes to Cinegraph are documented here. The format follows
   branch coverage, deterministic retrieval evaluation, pre-commit, and package builds.
 - Architecture dependency checks and contributor governance boundaries for spoiler-aware,
   entitlement-gated retrieval and human-approved media actions.
+- A SQLAlchemy 2 and Alembic persistence foundation with mandatory identity units of
+  work, PostgreSQL production validation, normalized guest entitlements, and a live
+  PostgreSQL CI contract.

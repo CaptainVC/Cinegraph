@@ -34,6 +34,7 @@ def test_remote_settings_load_from_prefixed_environment_file(tmp_path: Path) -> 
                 "CINEGRAPH_QDRANT_URL=https://qdrant.example.test",
                 "CINEGRAPH_QDRANT_API_KEY=private-value",
                 "CINEGRAPH_QDRANT_COLLECTION_NAME=transcript_segments_production",
+                "CINEGRAPH_DATABASE_URL=postgresql+psycopg://cinegraph:secret@db.example.test/cinegraph",
             )
         ),
         encoding="utf-8",
@@ -66,8 +67,27 @@ def test_remote_settings_load_from_prefixed_environment_file(tmp_path: Path) -> 
             },
             ConfigurationErrorMessages.PRODUCTION_QDRANT_MUST_BE_REMOTE,
         ),
+        (
+            {
+                "environment": RuntimeEnvironment.PRODUCTION,
+                "qdrant_mode": QdrantRuntimeMode.REMOTE,
+                "qdrant_url": "https://qdrant.example.test",
+            },
+            ConfigurationErrorMessages.PRODUCTION_DATABASE_MUST_BE_POSTGRES,
+        ),
     ],
 )
 def test_incompatible_runtime_settings_fail_closed(values: dict, message: str) -> None:
     with pytest.raises(ValidationError, match=message):
         CinegraphRuntimeSettings(_env_file=None, **values)
+
+
+def test_development_rejects_unapproved_database_driver() -> None:
+    with pytest.raises(
+        ValidationError,
+        match=ConfigurationErrorMessages.DATABASE_DIALECT_MUST_BE_SUPPORTED,
+    ):
+        CinegraphRuntimeSettings(
+            _env_file=None,
+            database_url="mysql+pymysql://cinegraph@example.test/cinegraph",
+        )
