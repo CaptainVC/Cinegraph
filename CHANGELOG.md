@@ -7,6 +7,10 @@ All notable changes to Cinegraph are documented here. The format follows
 
 ### Added
 
+- Relational graph claim extraction foundation with series-scoped normalized entities,
+  stable claims, governed source-scoped evidence, replacement-only persistence, and
+  Alembic migration `0003`.
+
 - Revisioned deterministic transcript retrieval chunks with speaker-aware evidence,
   batched encoding, idempotent source-version replacement, Qdrant defense-in-depth,
   bounded redundancy filtering, and an in-memory end-to-end evaluation gate. Existing
