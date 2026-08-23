@@ -10,6 +10,7 @@ from cinegraph.application.models.hybrid_grounded_answer import (
     HybridGroundedAnswerQuery,
     HybridGroundedAnswerResult,
 )
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.ports.retrieval import RetrievedSegment
 
@@ -48,6 +49,9 @@ def make_match() -> RetrievedSegment:
         language=Language.ENGLISH,
         rights_status=RightsStatus.ALLOWED,
         score=0.91,
+        member_segment_ids=(UUID(int=101),),
+        index_revision=TRANSCRIPT_INDEX_REVISION,
+        ordinal=0,
     )
 
 

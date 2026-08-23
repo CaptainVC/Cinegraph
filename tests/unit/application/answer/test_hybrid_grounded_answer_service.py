@@ -13,6 +13,7 @@ from cinegraph.application.models.search_visible_hybrid_segments import (
 from cinegraph.application.service.hybrid_grounded_answer_service import (
     HybridGroundedAnswerService,
 )
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.ports.retrieval import RetrievedSegment
 
@@ -51,6 +52,9 @@ def make_match(segment_id: UUID = UUID(int=101)) -> RetrievedSegment:
         language=Language.ENGLISH,
         rights_status=RightsStatus.ALLOWED,
         score=0.91,
+        member_segment_ids=(segment_id,),
+        index_revision=TRANSCRIPT_INDEX_REVISION,
+        ordinal=0,
     )
 
 

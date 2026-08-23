@@ -45,21 +45,34 @@ class RecordingEncoder:
         self.texts.append(text)
         return self.document_vector
 
+    def encode_documents(self, texts: tuple[str, ...]) -> tuple[DocumentVector, ...]:
+        self.texts.extend(texts)
+        return tuple(self.document_vector for _ in texts)
+
 
 class RecordingWriter:
     # Record every writer batch received by the service.
     def __init__(self) -> None:
         self.batches: list[tuple[TranscriptIndexPoint, ...]] = []
+        self.replacements: list[tuple[UUID, UUID | None, tuple[TranscriptIndexPoint, ...]]] = []
 
     # Record one complete upsert batch.
-    def upsert(self, points: tuple[TranscriptIndexPoint, ...]) -> None:
+    def replace_source_version(
+        self,
+        new_source_version_id: UUID,
+        retired_source_version_id: UUID | None,
+        points: tuple[TranscriptIndexPoint, ...],
+    ) -> None:
         self.batches.append(points)
+        self.replacements.append((new_source_version_id, retired_source_version_id, points))
 
 
 def make_source_version(
     *,
     status: SourceVersionStatus = SourceVersionStatus.ACTIVE,
     review_status: SourceReviewStatus = SourceReviewStatus.REVIEWED,
+    rights_status: RightsStatus = RightsStatus.ALLOWED,
+    parent_source_version_id: UUID | None = None,
 ) -> SourceVersion:
     # Build a source version with metadata valid for the requested lifecycle state.
     reviewed = review_status in (
@@ -72,11 +85,12 @@ def make_source_version(
         source_version_id=SOURCE_VERSION_ID,
         source_document_id=uuid4(),
         content_hash="a" * 64,
-        rights_status=RightsStatus.ALLOWED,
+        rights_status=rights_status,
         acquisition_method=SourceAcquisitionMethod.SYNTHETIC_FIXTURE,
         review_status=review_status,
         status=status,
         acquired_at=datetime(2026, 7, 19, 12, 0, tzinfo=UTC),
+        parent_source_version_id=parent_source_version_id,
         reviewed_by="test-reviewer" if reviewed else None,
         reviewed_at=datetime(2026, 7, 19, 13, 0, tzinfo=UTC) if reviewed else None,
     )
@@ -118,12 +132,13 @@ def test_active_reviewed_segments_index_in_input_order_with_one_batch() -> None:
 
     result = service.execute(IndexTranscriptSegmentsCommand(source, (first, second)))
 
-    assert result.indexed_segment_count == 2
-    assert encoder.texts == ["First line", "Second line"]
+    assert result.input_segment_count == 2
+    assert result.indexed_chunk_count == 1
+    assert encoder.texts == ["First line\nSecond line"]
     assert len(writer.batches) == 1
     points = writer.batches[0]
-    assert [point.segment_id for point in points] == [first.segment_id, second.segment_id]
-    assert [point.vector for point in points] == [encoder.document_vector] * 2
+    assert len(points) == 1
+    assert points[0].vector == encoder.document_vector
     assert points[0].payload.source_version_id == first.source_version_id
     assert points[0].payload.series_id == first.episode.series_id
     assert points[0].payload.season_id == first.episode.season_id
@@ -131,44 +146,47 @@ def test_active_reviewed_segments_index_in_input_order_with_one_batch() -> None:
     assert points[0].payload.season_number == 1
     assert points[0].payload.episode_number == 2
     assert points[0].payload.start_ms == first.start_ms
-    assert points[0].payload.end_ms == first.end_ms
-    assert points[0].payload.text == first.text
+    assert points[0].payload.end_ms == second.end_ms
+    assert points[0].payload.text == "First line\nSecond line"
     assert points[0].payload.language is first.language
     assert points[0].payload.rights_status is first.rights_status
     assert points[0].payload.source_status is SourceVersionStatus.ACTIVE
     assert points[0].payload.review_status is SourceReviewStatus.REVIEWED
 
 
-def test_active_automated_reviewed_segments_are_approved_for_indexing() -> None:
-    service, encoder, writer = make_service()
-    source = make_source_version(
-        review_status=SourceReviewStatus.AUTOMATED_REVIEWED
+def test_indexing_passes_parent_source_to_replacement_writer() -> None:
+    service, _, writer = make_service()
+    parent_source_version_id = uuid4()
+    source = make_source_version(parent_source_version_id=parent_source_version_id)
+
+    service.execute(IndexTranscriptSegmentsCommand(source, (make_segment(),)))
+
+    assert writer.replacements[0][:2] == (
+        SOURCE_VERSION_ID,
+        parent_source_version_id,
     )
 
-    result = service.execute(
-        IndexTranscriptSegmentsCommand(source, (make_segment(),))
-    )
+
+def test_active_automated_reviewed_segments_are_approved_for_indexing() -> None:
+    service, encoder, writer = make_service()
+    source = make_source_version(review_status=SourceReviewStatus.AUTOMATED_REVIEWED)
+
+    result = service.execute(IndexTranscriptSegmentsCommand(source, (make_segment(),)))
 
     assert result.indexed_segment_count == 1
     assert encoder.texts == ["Claire asks about dinner"]
-    assert writer.batches[0][0].payload.review_status is (
-        SourceReviewStatus.AUTOMATED_REVIEWED
-    )
+    assert writer.batches[0][0].payload.review_status is (SourceReviewStatus.AUTOMATED_REVIEWED)
 
 
 def test_active_hybrid_reviewed_segments_are_approved_for_indexing() -> None:
     service, encoder, writer = make_service()
     source = make_source_version(review_status=SourceReviewStatus.HYBRID_REVIEWED)
 
-    result = service.execute(
-        IndexTranscriptSegmentsCommand(source, (make_segment(),))
-    )
+    result = service.execute(IndexTranscriptSegmentsCommand(source, (make_segment(),)))
 
     assert result.indexed_segment_count == 1
     assert encoder.texts == ["Claire asks about dinner"]
-    assert writer.batches[0][0].payload.review_status is (
-        SourceReviewStatus.HYBRID_REVIEWED
-    )
+    assert writer.batches[0][0].payload.review_status is (SourceReviewStatus.HYBRID_REVIEWED)
 
 
 @pytest.mark.parametrize(
@@ -220,6 +238,24 @@ def test_wrong_source_segment_rejects_before_encoder_or_writer() -> None:
     assert writer.batches == []
 
 
+def test_disallowed_source_rights_reject_before_encoder_or_writer() -> None:
+    service, encoder, writer = make_service()
+
+    with pytest.raises(
+        InvalidModelError,
+        match=TranscriptErrorMessages.TRANSCRIPT_SOURCE_RIGHTS_STATUS_MUST_BE_ALLOWED,
+    ):
+        service.execute(
+            IndexTranscriptSegmentsCommand(
+                make_source_version(rights_status=RightsStatus.RESTRICTED),
+                (),
+            )
+        )
+
+    assert encoder.texts == []
+    assert writer.batches == []
+
+
 def test_duplicate_segment_ids_reject_before_encoder_or_writer() -> None:
     # Verify duplicate IDs are rejected before any dependency call.
     service, encoder, writer = make_service()
@@ -239,9 +275,7 @@ def test_duplicate_segment_ids_reject_before_encoder_or_writer() -> None:
         InvalidModelError,
         match=TranscriptErrorMessages.TRANSCRIPT_SEGMENT_IDS_MUST_BE_UNIQUE,
     ):
-        service.execute(
-            IndexTranscriptSegmentsCommand(make_source_version(), (first, duplicate))
-        )
+        service.execute(IndexTranscriptSegmentsCommand(make_source_version(), (first, duplicate)))
 
     assert encoder.texts == []
     assert writer.batches == []
@@ -251,10 +285,28 @@ def test_empty_approved_segments_return_zero_without_calls() -> None:
     # Verify an approved empty input performs no encoding or writing.
     service, encoder, writer = make_service()
 
-    result = service.execute(
-        IndexTranscriptSegmentsCommand(make_source_version(), ())
-    )
+    result = service.execute(IndexTranscriptSegmentsCommand(make_source_version(), ()))
 
     assert result.indexed_segment_count == 0
     assert encoder.texts == []
+    assert writer.batches == [()]
+
+
+def test_encoder_cardinality_mismatch_rejects_before_writer() -> None:
+    class MissingVectorEncoder(RecordingEncoder):
+        def encode_documents(self, texts: tuple[str, ...]) -> tuple[DocumentVector, ...]:
+            self.texts.extend(texts)
+            return ()
+
+    encoder = MissingVectorEncoder()
+    writer = RecordingWriter()
+    service = IndexTranscriptSegmentsService(encoder, writer)
+
+    with pytest.raises(
+        InvalidModelError,
+        match=TranscriptErrorMessages.TRANSCRIPT_INDEX_VECTOR_CARDINALITY_MUST_MATCH,
+    ):
+        service.execute(IndexTranscriptSegmentsCommand(make_source_version(), (make_segment(),)))
+
+    assert encoder.texts == ["Claire asks about dinner"]
     assert writer.batches == []

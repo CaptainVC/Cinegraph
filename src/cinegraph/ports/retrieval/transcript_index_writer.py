@@ -26,15 +26,23 @@ class TranscriptIndexPayload:
     rights_status: RightsStatus
     source_status: SourceVersionStatus
     review_status: SourceReviewStatus
+    member_segment_ids: tuple[UUID, ...]
+    chunk_ordinal: int
+    index_revision: str
 
 
 @dataclass(frozen=True, slots=True)
 class TranscriptIndexPoint:
-    segment_id: UUID
+    chunk_id: UUID
     vector: DocumentVector
     payload: TranscriptIndexPayload
 
 
 class TranscriptIndexWriter(Protocol):
-    # Persist one complete batch of governed transcript index points.
-    def upsert(self, points: tuple[TranscriptIndexPoint, ...]) -> None: ...
+    # Replace one source version safely, writing new points before retiring the parent.
+    def replace_source_version(
+        self,
+        new_source_version_id: UUID,
+        retired_source_version_id: UUID | None,
+        points: tuple[TranscriptIndexPoint, ...],
+    ) -> None: ...

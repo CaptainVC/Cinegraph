@@ -22,6 +22,7 @@ from cinegraph.application.service.identity_session_service import (
     IdentitySessionService,
 )
 from cinegraph.config import CinegraphRuntimeSettings
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import (
     Language,
     PrincipalKind,
@@ -61,6 +62,9 @@ class RecordingAnswerWorkflow:
             language=Language.ENGLISH,
             rights_status=RightsStatus.ALLOWED,
             score=0.92,
+            member_segment_ids=(UUID(int=9001),),
+            index_revision=TRANSCRIPT_INDEX_REVISION,
+            ordinal=0,
         )
         return HybridGroundedAnswerResult(
             answer="Phil introduces his family.",
@@ -86,6 +90,9 @@ class RecordingRecommendationWorkflow:
             language=Language.ENGLISH,
             rights_status=RightsStatus.ALLOWED,
             score=0.89,
+            member_segment_ids=(UUID(int=9101),),
+            index_revision=TRANSCRIPT_INDEX_REVISION,
+            ordinal=0,
         )
         return RecommendEpisodesResult(
             recommendations=(
@@ -182,10 +189,10 @@ def test_guest_cookie_and_catalogue_are_limited_to_seasons_one_and_two(
     cookie = session.headers["set-cookie"]
     assert "HttpOnly" in cookie
     assert "SameSite=lax" in cookie
-    assert [
-        season["season_number"]
-        for season in catalogue.json()["series"][0]["seasons"]
-    ] == [1, 2]
+    assert [season["season_number"] for season in catalogue.json()["series"][0]["seasons"]] == [
+        1,
+        2,
+    ]
 
 
 def test_chat_uses_server_catalogue_and_session_scope_and_returns_provenance(
@@ -313,9 +320,9 @@ def test_recommendations_use_session_scope_and_return_visible_citations(
 
     assert response.status_code == 200
     assert response.json()["visible_candidate_count"] == 2
-    assert response.json()["recommendations"][0]["citations"][0][
-        "source_version_id"
-    ] == str(UUID(int=9102))
+    assert response.json()["recommendations"][0]["citations"][0]["source_version_id"] == str(
+        UUID(int=9102)
+    )
     query = workflow.queries[0]
     assert query.corpus_access_scope.revision == "guest-modern-family-s01-s02-v1"
     assert query.profile_watch_state.spoiler_mode is SpoilerMode.RELAXED

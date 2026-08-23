@@ -7,6 +7,11 @@ All notable changes to Cinegraph are documented here. The format follows
 
 ### Added
 
+- Revisioned deterministic transcript retrieval chunks with speaker-aware evidence,
+  batched encoding, idempotent source-version replacement, Qdrant defense-in-depth,
+  bounded redundancy filtering, and an in-memory end-to-end evaluation gate. Existing
+  cue points are excluded after revision changes and must be reindexed.
+
 - Governed hybrid retrieval with spoiler and corpus authorization boundaries, grounded
   answers with citations, recommendations, and deterministic evaluation support.
 - Guest and registered sessions, a dark same-origin product shell, and guest access

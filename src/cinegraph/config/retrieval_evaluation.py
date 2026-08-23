@@ -8,6 +8,8 @@ class RetrievalEvaluationThresholds:
     minimum_hit_rate: float
     minimum_mean_reciprocal_rank: float
     maximum_forbidden_episode_leaks: int
+    minimum_recall_at_k: float = 0.80
+    minimum_ndcg_at_k: float = 0.60
 
     def __post_init__(self) -> None:
         if any(
@@ -17,6 +19,8 @@ class RetrievalEvaluationThresholds:
             for value in (
                 self.minimum_hit_rate,
                 self.minimum_mean_reciprocal_rank,
+                self.minimum_recall_at_k,
+                self.minimum_ndcg_at_k,
             )
         ):
             raise ValueError(
@@ -36,4 +40,6 @@ DEFAULT_RETRIEVAL_EVALUATION_THRESHOLDS = RetrievalEvaluationThresholds(
     minimum_hit_rate=0.80,
     minimum_mean_reciprocal_rank=0.60,
     maximum_forbidden_episode_leaks=0,
+    minimum_recall_at_k=0.80,
+    minimum_ndcg_at_k=0.60,
 )

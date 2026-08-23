@@ -14,6 +14,7 @@ from cinegraph.application.service.search_visible_hybrid_segments_service import
     SearchVisibleHybridSegmentsService,
 )
 from cinegraph.common.error_messages import RetrievalErrorMessages
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import Language, RightsStatus, SpoilerMode
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.watch_state import EpisodeRef, ProfileWatchState
@@ -76,6 +77,9 @@ def make_match(
         language=Language.ENGLISH,
         rights_status=RightsStatus.ALLOWED,
         score=score,
+        member_segment_ids=(segment_id,),
+        index_revision=TRANSCRIPT_INDEX_REVISION,
+        ordinal=0,
     )
 
 

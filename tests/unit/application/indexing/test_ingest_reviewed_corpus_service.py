@@ -39,16 +39,22 @@ from cinegraph.ports.retrieval import TranscriptIndexPoint
 
 class FixedEncoder:
     def encode_document(self, text: str) -> DocumentVector:
-        return DocumentVector(
-            HybridVector(DenseVector((0.5,)), SparseVector((1,), (1.0,)))
-        )
+        return DocumentVector(HybridVector(DenseVector((0.5,)), SparseVector((1,), (1.0,))))
+
+    def encode_documents(self, texts: tuple[str, ...]) -> tuple[DocumentVector, ...]:
+        return tuple(self.encode_document(text) for text in texts)
 
 
 class RecordingWriter:
     def __init__(self) -> None:
         self.batches: list[tuple[TranscriptIndexPoint, ...]] = []
 
-    def upsert(self, points: tuple[TranscriptIndexPoint, ...]) -> None:
+    def replace_source_version(
+        self,
+        new_source_version_id,
+        retired_source_version_id,
+        points: tuple[TranscriptIndexPoint, ...],
+    ) -> None:
         self.batches.append(points)
 
 
@@ -60,9 +66,7 @@ def test_corpus_orchestration_is_deterministic_and_skips_duplicate_reindex(
         "1\n00:00:00,000 --> 00:00:01,000\nClaire: Hello.\n",
         encoding="utf-8",
     )
-    content_hash = sha256(
-        source_path.read_text(encoding="utf-8").encode("utf-8")
-    ).hexdigest()
+    content_hash = sha256(source_path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
     item = ReviewedSubtitleBatchItem(
         episode=make_episode_ref(episode_id=UUID(int=1001)),
         episode_title="Example Family: Pilot",

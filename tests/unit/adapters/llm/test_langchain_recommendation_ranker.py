@@ -11,6 +11,7 @@ from cinegraph.application.models.episode_recommendation import (
     RecommendationCandidate,
     RecommendationRankingRequest,
 )
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import Language, RightsStatus
 from cinegraph.ports.retrieval import RetrievedSegment
 
@@ -37,6 +38,9 @@ def test_renders_untrusted_candidate_evidence_and_maps_structured_output() -> No
         language=Language.ENGLISH,
         rights_status=RightsStatus.ALLOWED,
         score=0.9,
+        member_segment_ids=(UUID(int=71),),
+        index_revision=TRANSCRIPT_INDEX_REVISION,
+        ordinal=0,
     )
     invoker = RecordingInvoker(
         RecommendationResponseSchema(

@@ -7,6 +7,7 @@ from cinegraph.domain.models.transcript.speaker_review import (
     SpeakerReviewEvidence,
     SpeakerReviewVerdict,
 )
+from cinegraph.domain.models.transcript.transcript_retrieval_chunk import TranscriptRetrievalChunk
 from cinegraph.domain.models.transcript.transcript_segment import TranscriptSegment
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     "SpeakerReviewEvidence",
     "SpeakerReviewVerdict",
     "TranscriptSegment",
+    "TranscriptRetrievalChunk",
 ]

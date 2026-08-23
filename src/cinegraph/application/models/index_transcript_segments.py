@@ -12,4 +12,9 @@ class IndexTranscriptSegmentsCommand:
 
 @dataclass(frozen=True, slots=True)
 class IndexTranscriptSegmentsResult:
-    indexed_segment_count: int
+    input_segment_count: int = 0
+    indexed_chunk_count: int = 0
+
+    @property
+    def indexed_segment_count(self) -> int:
+        return self.indexed_chunk_count

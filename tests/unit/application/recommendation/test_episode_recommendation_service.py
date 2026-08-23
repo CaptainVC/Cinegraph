@@ -17,6 +17,7 @@ from cinegraph.application.service.episode_recommendation_service import (
     EpisodeRecommendationService,
 )
 from cinegraph.common.error_messages import RecommendationErrorMessages
+from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import (
     Language,
     RightsStatus,
@@ -40,9 +41,7 @@ class RecordingSearch:
         self.queries.append(query)
         return SearchVisibleHybridSegmentsResult(
             matches=tuple(
-                item
-                for item in self.matches
-                if item.episode in query.candidate_episodes
+                item for item in self.matches if item.episode in query.candidate_episodes
             ),
             visible_episode_count=len(query.candidate_episodes),
         )
@@ -105,6 +104,9 @@ def make_segment(episode, *, text: str, identifier: int) -> RetrievedSegment:
         language=Language.ENGLISH,
         rights_status=RightsStatus.ALLOWED,
         score=0.8 + identifier / 100_000,
+        member_segment_ids=(UUID(int=identifier + 1000),),
+        index_revision=TRANSCRIPT_INDEX_REVISION,
+        ordinal=0,
     )
 
 
