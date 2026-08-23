@@ -9,6 +9,12 @@ from cinegraph.adapters.identity.sqlalchemy_identity_repositories import (  # no
     UserAccountRow,
 )
 from cinegraph.adapters.persistence.base import PersistenceBase
+from cinegraph.adapters.persistence.sqlalchemy_graph_claim_store import (  # noqa: F401
+    GraphClaimEvidenceRow,
+    GraphClaimRow,
+    GraphEntityAliasRow,
+    GraphEntityRow,
+)
 from cinegraph.adapters.persistence.sqlalchemy_ingestion_job_repository import (  # noqa: F401
     IngestionJobEventRow,
     IngestionJobRow,

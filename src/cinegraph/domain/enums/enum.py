@@ -146,6 +146,23 @@ class IngestionJobKind(StrEnum):
     EPISODE_SUMMARY = "episode_summary"
     SERIES_METADATA = "series_metadata"
     SUBTITLE_ALIGNMENT = "subtitle_alignment"
+    GRAPH_CLAIM_EXTRACTION = "graph_claim_extraction"
+
+
+class GraphEntityKind(StrEnum):
+    CHARACTER = "character"
+    PERSON = "person"
+    LOCATION = "location"
+    ORGANIZATION = "organization"
+    OBJECT = "object"
+    EVENT = "event"
+    CONCEPT = "concept"
+
+
+class GraphClaimPolarity(StrEnum):
+    ASSERTED = "asserted"
+    NEGATED = "negated"
+    UNCERTAIN = "uncertain"
 
 
 class IngestionJobStatus(StrEnum):

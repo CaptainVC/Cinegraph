@@ -19,6 +19,7 @@ ALLOWED_INGESTION_ERROR_CODES = frozenset(
         "vector_index_failed",
         "episode_summary_failed",
         "series_metadata_failed",
+        "graph_claim_extraction_failed",
         "unknown_retryable",
     }
 )

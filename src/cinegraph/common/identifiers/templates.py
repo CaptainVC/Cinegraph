@@ -24,3 +24,7 @@ class IdentifierTemplates:
     SERIES_METADATA_SOURCE_DOCUMENT = (
         "cinegraph:source-document:series-metadata:{series_id}:{origin}"
     )
+    GRAPH_ENTITY = "cinegraph:graph-entity:{series_id}:{kind}:{normalized_key}"
+    GRAPH_ENTITY_ALIAS = "cinegraph:graph-entity-alias:{entity_id}:{normalized_alias}"
+    GRAPH_CLAIM = "cinegraph:graph-claim:{revision}:{series_id}:{subject}:{predicate}:{object}:{polarity}"
+    GRAPH_EVIDENCE = "cinegraph:graph-evidence:{claim_id}:{source_version_id}:{chunk_id}"

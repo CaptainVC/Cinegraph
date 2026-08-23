@@ -20,6 +20,11 @@ The database includes the shared identity tables plus `ingestion_jobs` and appen
 `ingestion_job_events`. The API never auto-migrates. Run the migration command before
 using the durable planning CLI.
 
+Migration `0003` adds `graph_entities`, `graph_entity_aliases`, `graph_claims`, and
+`graph_claim_evidence`. Claims are stable semantic rows while evidence is source-
+version scoped and replaced transactionally. The relational database remains the
+graph system of record; traversal and authorization are a later application layer.
+
 The migration environment reads centralized settings and passes the URL only to the
 migration engine; it never prints the URL. The initial migration creates
 `user_accounts`, `sessions`, and normalized `session_entitlements`, including unique

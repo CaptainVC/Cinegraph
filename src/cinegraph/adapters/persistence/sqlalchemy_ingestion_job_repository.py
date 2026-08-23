@@ -57,7 +57,7 @@ class IngestionJobRow(PersistenceBase):
     __table_args__ = (
         UniqueConstraint("idempotency_key", name="uq_ingestion_jobs_idempotency_key"),
         CheckConstraint(
-            "kind IN ('speaker_review', 'transcript_ingestion', 'vector_index', 'episode_summary', 'series_metadata', 'subtitle_alignment')",
+            "kind IN ('speaker_review', 'transcript_ingestion', 'vector_index', 'episode_summary', 'series_metadata', 'subtitle_alignment', 'graph_claim_extraction')",
             name="ck_ingestion_jobs_kind_allowed",
         ),
         CheckConstraint(
@@ -137,7 +137,7 @@ class IngestionJobRow(PersistenceBase):
             name="ck_ingestion_jobs_next_attempt_status_coherence",
         ),
         CheckConstraint(
-            "last_error_code IS NULL OR last_error_code IN ('lease_expired', 'lease_expired_max_attempts', 'source_invalid', 'alignment_failed', 'speaker_review_failed', 'transcript_ingestion_failed', 'vector_index_failed', 'episode_summary_failed', 'series_metadata_failed', 'unknown_retryable')",
+            "last_error_code IS NULL OR last_error_code IN ('lease_expired', 'lease_expired_max_attempts', 'source_invalid', 'alignment_failed', 'speaker_review_failed', 'transcript_ingestion_failed', 'vector_index_failed', 'episode_summary_failed', 'series_metadata_failed', 'graph_claim_extraction_failed', 'unknown_retryable')",
             name="ck_ingestion_jobs_error_code_allowed",
         ),
         CheckConstraint(
@@ -210,7 +210,7 @@ class IngestionJobEventRow(PersistenceBase):
             name="ck_ingestion_job_events_error_coherence",
         ),
         CheckConstraint(
-            "error_code IS NULL OR error_code IN ('lease_expired', 'lease_expired_max_attempts', 'source_invalid', 'alignment_failed', 'speaker_review_failed', 'transcript_ingestion_failed', 'vector_index_failed', 'episode_summary_failed', 'series_metadata_failed', 'unknown_retryable')",
+            "error_code IS NULL OR error_code IN ('lease_expired', 'lease_expired_max_attempts', 'source_invalid', 'alignment_failed', 'speaker_review_failed', 'transcript_ingestion_failed', 'vector_index_failed', 'episode_summary_failed', 'series_metadata_failed', 'graph_claim_extraction_failed', 'unknown_retryable')",
             name="ck_ingestion_job_events_error_code_allowed",
         ),
     )

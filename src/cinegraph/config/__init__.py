@@ -21,6 +21,11 @@ from cinegraph.config.embedding import (
     DEFAULT_EMBEDDING_CONFIGURATION,
     EmbeddingConfiguration,
 )
+from cinegraph.config.graph_claims import (
+    DEFAULT_GRAPH_CLAIM_EXTRACTION_CONFIGURATION,
+    GRAPH_CLAIM_EXTRACTION_REVISION,
+    GraphClaimExtractionConfiguration,
+)
 from cinegraph.config.hybrid_retrieval import (
     DEFAULT_HYBRID_RETRIEVAL_CONFIGURATION,
     HybridRetrievalConfiguration,
@@ -132,6 +137,9 @@ __all__ = [
     "DEFAULT_TRANSCRIPT_CHUNKING_CONFIGURATION",
     "HybridRetrievalConfiguration",
     "DEFAULT_HYBRID_RETRIEVAL_CONFIGURATION",
+    "DEFAULT_GRAPH_CLAIM_EXTRACTION_CONFIGURATION",
+    "GRAPH_CLAIM_EXTRACTION_REVISION",
+    "GraphClaimExtractionConfiguration",
     "RuntimeEnvironment",
     "SecretProvisioningConfiguration",
     "SpeakerReviewConfiguration",
