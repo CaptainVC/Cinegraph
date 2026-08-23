@@ -67,6 +67,7 @@ files = [
     "src/cinegraph/ports",
     "src/cinegraph/config",
     "src/cinegraph/adapters/identity",
+    "src/cinegraph/adapters/persistence",
     "src/cinegraph/application/models",
     "src/cinegraph/application/policy",
     "src/cinegraph/application/serialization",

@@ -20,7 +20,8 @@ coverage.json
 .ipynb_checkpoints/
 
 # Private corpus and all of its derived artifacts
-knowledge/
+knowledge/*
+!knowledge/catalogue.json
 
 # Local learning artifacts and captured provider output
 notebooks/

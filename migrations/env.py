@@ -3,14 +3,23 @@ from logging.config import fileConfig
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from cinegraph.adapters.identity.sqlalchemy_identity_repositories import IdentityBase
+from cinegraph.adapters.identity.sqlalchemy_identity_repositories import (  # noqa: F401
+    SessionEntitlementRow,
+    SessionRow,
+    UserAccountRow,
+)
+from cinegraph.adapters.persistence.base import PersistenceBase
+from cinegraph.adapters.persistence.sqlalchemy_ingestion_job_repository import (  # noqa: F401
+    IngestionJobEventRow,
+    IngestionJobRow,
+)
 from cinegraph.config import CinegraphRuntimeSettings
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-target_metadata = IdentityBase.metadata
+target_metadata = PersistenceBase.metadata
 
 
 def _database_url() -> str:

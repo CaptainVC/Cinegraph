@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "series": [
+    {
+      "series_id": "00000000-0000-0000-0000-000000000011",
+      "series_name": "Modern Family",
+      "seasons": [
+        {
+          "season_id": "00000000-0000-0000-0000-000000000101",
+          "season_number": 1,
+          "episodes": [
+            {"episode_id": "00000000-0000-0000-0000-000000001001", "episode_number": 1, "episode_title": "Pilot", "reviewed_subtitle_filename": "Modern Family - 1x01 - Pilot.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001002", "episode_number": 2, "episode_title": "The Bicycle Thief", "reviewed_subtitle_filename": "Modern Family - 1x02 - The Bicycle Thief.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001003", "episode_number": 3, "episode_title": "Come Fly With Me", "reviewed_subtitle_filename": "Modern Family - 1x03 - Come Fly With Me.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001004", "episode_number": 4, "episode_title": "The Incident", "reviewed_subtitle_filename": "Modern Family - 1x04 - The Incident.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001005", "episode_number": 5, "episode_title": "Coal Digger", "reviewed_subtitle_filename": "Modern Family - 1x05 - Coal Digger.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001006", "episode_number": 6, "episode_title": "Run for Your Wife", "reviewed_subtitle_filename": "Modern Family - 1x06 - Run for Your Wife.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001007", "episode_number": 7, "episode_title": "En Garde", "reviewed_subtitle_filename": "Modern Family - 1x07 - En Garde.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001008", "episode_number": 8, "episode_title": "Great Expectations", "reviewed_subtitle_filename": "Modern Family - 1x08 - Great Expectations.HDTV.POW4.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001009", "episode_number": 9, "episode_title": "Fizbo", "reviewed_subtitle_filename": "Modern Family - 1x09 - Fizbo.HDTV.P0W4.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001010", "episode_number": 10, "episode_title": "Undeck the Halls", "reviewed_subtitle_filename": "Modern Family - 1x10 - Undeck the Halls.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001011", "episode_number": 11, "episode_title": "Up All Night", "reviewed_subtitle_filename": "Modern Family - 1x11 - Up All Night.HDTV.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001012", "episode_number": 12, "episode_title": "Not in My House", "reviewed_subtitle_filename": "Modern Family - 1x12 - Not in My House.HDTV.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001013", "episode_number": 13, "episode_title": "Fifteen Percent", "reviewed_subtitle_filename": "Modern Family - 1x13 - Fifteen Percent.HDTV.POW4.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001014", "episode_number": 14, "episode_title": "Moon Landing", "reviewed_subtitle_filename": "Modern Family - 1x14 - Moon Landing.HDTV.FQM.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001015", "episode_number": 15, "episode_title": "My Funky Valentine", "reviewed_subtitle_filename": "Modern Family - 1x15 - My Funky Valentine.DVDRip.CLERKS.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001016", "episode_number": 16, "episode_title": "Fears", "reviewed_subtitle_filename": "Modern Family - 1x16 - Fears.HDTV.PropER-NoTV.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001017", "episode_number": 17, "episode_title": "Truth Be Told", "reviewed_subtitle_filename": "Modern Family - 1x17 - Truth Be Told.HDTV.FQM.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001018", "episode_number": 18, "episode_title": "Starry Night", "reviewed_subtitle_filename": "Modern Family - 1x18 - Starry Night.HDTV.NoTV.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001019", "episode_number": 19, "episode_title": "Game Changer", "reviewed_subtitle_filename": "Modern Family - 1x19 - Game Changer.720p HDTV.DIMENSION.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001020", "episode_number": 20, "episode_title": "Benched", "reviewed_subtitle_filename": "Modern Family - 1x20 - Benched.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001021", "episode_number": 21, "episode_title": "Travels With Scout", "reviewed_subtitle_filename": "Modern Family - 1x21 - Travels With Scout.HDTV.FQM.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001022", "episode_number": 22, "episode_title": "Airport 2010", "reviewed_subtitle_filename": "Modern Family - 1x22 - Airport 2010.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001023", "episode_number": 23, "episode_title": "Hawaii", "reviewed_subtitle_filename": "Modern Family - 1x23 - Hawaii.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000001024", "episode_number": 24, "episode_title": "Family Portrait", "reviewed_subtitle_filename": "Modern Family - 1x24 - Family Portrait.HDTV.LOL.reviewed.srt"}
+          ]
+        },
+        {
+          "season_id": "00000000-0000-0000-0000-000000000102",
+          "season_number": 2,
+          "episodes": [
+            {"episode_id": "00000000-0000-0000-0000-000000002001", "episode_number": 1, "episode_title": "The Old Wagon", "reviewed_subtitle_filename": "Modern Family - 2x01 - The Old Wagon.HDTV.FQM.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002002", "episode_number": 2, "episode_title": "The Kiss", "reviewed_subtitle_filename": "Modern Family - 2x02 - The Kiss.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002003", "episode_number": 3, "episode_title": "Earthquake", "reviewed_subtitle_filename": "Modern Family - 2x03 - Earthquake.720p HDTV.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002004", "episode_number": 4, "episode_title": "Strangers on a Treadmill", "reviewed_subtitle_filename": "Modern Family - 2x04 - Strangers on a Treadmill.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002005", "episode_number": 5, "episode_title": "Unplugged", "reviewed_subtitle_filename": "Modern Family - 2x05 - Unplugged.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002006", "episode_number": 6, "episode_title": "Halloween", "reviewed_subtitle_filename": "Modern Family - 2x06 - Halloween.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002007", "episode_number": 7, "episode_title": "Chirp", "reviewed_subtitle_filename": "Modern Family - 2x07 - Chirp.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002008", "episode_number": 8, "episode_title": "Manny Get Your Gun", "reviewed_subtitle_filename": "Modern Family - 2x08 - Manny Get Your Gun.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002009", "episode_number": 9, "episode_title": "Mother Tucker", "reviewed_subtitle_filename": "Modern Family - 2x09 - Mother Tucker.HDTV.2HD.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002010", "episode_number": 10, "episode_title": "Dance Dance Revelation", "reviewed_subtitle_filename": "Modern Family - 2x10 - Dance Dance Revelation.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002011", "episode_number": 11, "episode_title": "Slow Down Your Neighbors", "reviewed_subtitle_filename": "Modern Family - 2x11 - Slow Down Your Neighbors.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002012", "episode_number": 12, "episode_title": "Our Children, Ourselves", "reviewed_subtitle_filename": "Modern Family - 2x12 - Our Children  Ourselves.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002013", "episode_number": 13, "episode_title": "Caught in the Act", "reviewed_subtitle_filename": "Modern Family - 2x13 - Caught in the Act.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002014", "episode_number": 14, "episode_title": "Bixby's Back", "reviewed_subtitle_filename": "Modern Family - 2x14 - Bixby's Back.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002015", "episode_number": 15, "episode_title": "Princess Party", "reviewed_subtitle_filename": "Modern Family - 2x15 - Princess Party.HDTV.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002016", "episode_number": 16, "episode_title": "Regrets Only", "reviewed_subtitle_filename": "Modern Family - 2x16 - Regrets Only.HDTV.Angie.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002017", "episode_number": 17, "episode_title": "Two Monkeys and a Panda", "reviewed_subtitle_filename": "Modern Family - 2x17 - Two Monkeys and a Panda.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002018", "episode_number": 18, "episode_title": "Boys' Night", "reviewed_subtitle_filename": "Modern Family - 2x18 - Boys' Night.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002019", "episode_number": 19, "episode_title": "The Musical Man", "reviewed_subtitle_filename": "Modern Family - 2x19 - The Musical Man.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002020", "episode_number": 20, "episode_title": "Someone to Watch Over Lily", "reviewed_subtitle_filename": "Modern Family - 2x20 - Someone to Watch Over Lily.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002021", "episode_number": 21, "episode_title": "Mother's Day", "reviewed_subtitle_filename": "Modern Family - 2x21 - Mother's Day.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002022", "episode_number": 22, "episode_title": "Good Cop Bad Dog", "reviewed_subtitle_filename": "Modern Family - 2x22 - Good Cop Bad Dog.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002023", "episode_number": 23, "episode_title": "See You Next Fall", "reviewed_subtitle_filename": "Modern Family - 2x23 - See You Next Fall.HDTV.LOL.reviewed.srt"},
+            {"episode_id": "00000000-0000-0000-0000-000000002024", "episode_number": 24, "episode_title": "The One That Got Away", "reviewed_subtitle_filename": "Modern Family - 2x24 - The One That Got Away.HDTV.LOL.reviewed.srt"}
+          ]
+        }
+      ]
+    }
+  ]
+}

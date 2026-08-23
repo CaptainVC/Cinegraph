@@ -137,3 +137,52 @@ class SpeakerReviewRunStatus(StrEnum):
     COMPLETED = "completed"
     NEEDS_HUMAN = "needs_human"
     FAILED = "failed"
+
+
+class IngestionJobKind(StrEnum):
+    SPEAKER_REVIEW = "speaker_review"
+    TRANSCRIPT_INGESTION = "transcript_ingestion"
+    VECTOR_INDEX = "vector_index"
+    EPISODE_SUMMARY = "episode_summary"
+    SERIES_METADATA = "series_metadata"
+    SUBTITLE_ALIGNMENT = "subtitle_alignment"
+
+
+class IngestionJobStatus(StrEnum):
+    PENDING = "pending"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+
+class IngestionJobEventKind(StrEnum):
+    ENQUEUED = "enqueued"
+    CLAIMED = "claimed"
+    HEARTBEAT = "heartbeat"
+    RETRIED = "retried"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+    RECLAIMED = "reclaimed"
+
+
+class CorpusReadinessStatus(StrEnum):
+    REVIEWED_READY = "reviewed_ready"
+    AWAITING_AUTOMATED_REVIEW = "awaiting_automated_review"
+    AWAITING_ALIGNMENT = "awaiting_alignment"
+    MISSING = "missing"
+    INVALID = "invalid"
+
+
+class CorpusInventoryReason(StrEnum):
+    VERIFIED_REVIEW_LEDGER = "verified_review_ledger"
+    SCRIPT_ALIGNED_WITHOUT_FINAL_REVIEW = "script_aligned_without_final_review"
+    RAW_SUBTITLE_REQUIRES_SCRIPT_ALIGNMENT = "raw_subtitle_requires_script_alignment"
+    RAW_SUBTITLE_MISSING = "raw_subtitle_missing"
+    MISSING_REVIEWED_LOCATOR = "missing_reviewed_locator"
+    REVIEW_LEDGER_MISSING = "review_ledger_missing"
+    REVIEW_LEDGER_HASH_OR_SCOPE_MISMATCH = "review_ledger_hash_or_scope_mismatch"
+    REVIEW_LEDGER_INVALID = "review_ledger_invalid"
+    ARTIFACT_UNREADABLE = "artifact_unreadable"
+    UNSAFE_LOCATOR = "unsafe_locator"

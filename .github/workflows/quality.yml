@@ -90,7 +90,7 @@ jobs:
         uses: astral-sh/setup-uv@v6
       - name: Install locked development dependencies
         run: uv sync --locked --dev
-      - name: Run PostgreSQL migration and identity contract
+      - name: Run PostgreSQL migration and persistence contract
         env:
           CINEGRAPH_TEST_DATABASE_URL: postgresql+psycopg://cinegraph:cinegraph-contract-only@localhost:5432/cinegraph
         run: uv run pytest tests/integration/identity -q

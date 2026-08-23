@@ -22,3 +22,11 @@ All notable changes to Cinegraph are documented here. The format follows
 - A SQLAlchemy 2 and Alembic persistence foundation with mandatory identity units of
   work, PostgreSQL production validation, normalized guest entitlements, and a live
   PostgreSQL CI contract.
+- Generalized shared persistence metadata and migration `0002` for durable governed
+  ingestion jobs, lease-safe claims, deterministic retries, idempotency and append-only
+  lifecycle events.
+- A deterministic private-corpus inventory and dry-run/durable planning CLI. The local
+  Modern Family corpus aggregate is 24 Season 1 reviewed-ready episodes and 24 Season 2
+  episodes awaiting automated review.
+- The Modern Family Season 2 catalogue with 24 canonical episodes while retaining the
+  guest entitlement boundary at Seasons 1 and 2.

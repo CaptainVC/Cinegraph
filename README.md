@@ -69,7 +69,7 @@ Identity persistence uses SQLAlchemy behind an explicit unit of work. Apply the
 checked-in Alembic schema before using authentication against a fresh database:
 
 ```zsh
-uv run python scripts/migrate_identity_database.py upgrade
+uv run python scripts/migrate_database.py upgrade
 ```
 
 Development defaults to a gitignored SQLite URL. Production fails closed unless
@@ -82,9 +82,10 @@ pool, and downgrade guidance.
 Private subtitle files, review ledgers, source documents, generated transcript
 segments, API keys, and provider credentials are excluded from Git.
 
-The repository contains application code and tests only. A private corpus may be
-used locally through source versions and content hashes, but it is not published or
-required for the test suite.
+The repository contains application code, tests, and the non-sensitive
+`knowledge/catalogue.json` manifest. Subtitle files, ledgers, scripts, PDFs, generated
+metadata and derived artifacts remain ignored; local inventory reports only aggregate
+readiness unless a caller explicitly requests a safe detail file beneath the corpus root.
 
 ## Private Speaker Review
 
@@ -208,9 +209,10 @@ uv run python scripts/quality.py
 ```
 
 The quality runner fails at the first unsuccessful stage and runs Ruff, the staged
-mypy boundary (`domain`, `ports`, `config`, application models/policy/serialization/
-services), full tests with branch coverage, deterministic synthetic retrieval
-evaluation, pre-commit, and a wheel build. Individual checks remain available:
+mypy boundary (`domain`, `ports`, `config`, identity and persistence adapters, and
+application models/policy/serialization/services), full tests with branch coverage,
+deterministic synthetic retrieval evaluation, pre-commit, and a wheel build.
+Individual checks remain available:
 
 ```text
 uv run ruff check .
@@ -221,7 +223,7 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The current branch baseline is 87.28% total branch coverage (433 tests, measured with
+The current branch baseline is 87.37% total branch coverage (464 tests, measured with
 `pytest-cov` on 2026-08-23); the centralized coverage configuration floors it at 87%
 so coverage cannot silently regress. Coverage XML and JSON reports are generated
 locally and uploaded by CI. Ruff syntax/error classes, Pyflakes, and import sorting are

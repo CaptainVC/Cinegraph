@@ -1,4 +1,4 @@
-# Identity database
+# Relational database
 
 Identity persistence uses synchronous SQLAlchemy 2.x repositories behind a port-level
 unit of work. Each identity command owns a short-lived session and explicit commit;
@@ -12,9 +12,13 @@ default, while production settings fail closed unless the parsed URL uses the
 From the repository root:
 
 ```powershell
-uv run python scripts/migrate_identity_database.py upgrade
-uv run python scripts/migrate_identity_database.py downgrade -1
+uv run python scripts/migrate_database.py upgrade
+uv run python scripts/migrate_database.py downgrade -1
 ```
+
+The database includes the shared identity tables plus `ingestion_jobs` and append-only
+`ingestion_job_events`. The API never auto-migrates. Run the migration command before
+using the durable planning CLI.
 
 The migration environment reads centralized settings and passes the URL only to the
 migration engine; it never prints the URL. The initial migration creates
