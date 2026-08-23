@@ -7,6 +7,10 @@ All notable changes to Cinegraph are documented here. The format follows
 
 ### Added
 
+- Authorization-safe series-level LangGraph runtime with trusted invocation context,
+  bounded transcript/GraphRAG tools, structured citation verification, checkpoint
+  turn isolation, and Terra/Luna model routing.
+
 - Authorization-first relational GraphRAG reads with bounded two-hop traversal,
   SQL-capped provenance evidence, guest spoiler regression coverage, and
   defense-in-depth result validation.

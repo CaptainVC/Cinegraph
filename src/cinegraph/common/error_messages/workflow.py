@@ -3,6 +3,9 @@ class WorkflowErrorMessages:
     GROUNDED_ANSWER_TOOL_UNAVAILABLE = (
         "Grounded evidence is unavailable; the assistant must not answer from memory."
     )
+    SERIES_AGENT_TOOL_UNAVAILABLE = (
+        "Authorized research evidence is unavailable; the assistant must not answer from memory."
+    )
     MAX_REGENERATION_ATTEMPTS_MUST_BE_NON_NEGATIVE = (
         "Maximum regeneration attempts must be non-negative."
     )
