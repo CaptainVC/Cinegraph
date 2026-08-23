@@ -7,6 +7,9 @@ All notable changes to Cinegraph are documented here. The format follows
 
 ### Added
 
+- Owner-bound asynchronous agent jobs with canonical idempotency, bounded
+  dispatch, typed status/result resources, and replayable privacy-safe SSE.
+
 - Authorization-safe series-level LangGraph runtime with trusted invocation context,
   bounded transcript/GraphRAG tools, structured citation verification, checkpoint
   turn isolation, and Terra/Luna model routing.

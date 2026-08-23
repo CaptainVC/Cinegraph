@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 
+from cinegraph.adapters.api.agent_jobs import register_agent_job_routes
 from cinegraph.adapters.api.context import ApiContext, build_default_api_context
 from cinegraph.adapters.api.guardrails import (
     ApiGuardrailMiddleware,
@@ -543,5 +544,7 @@ def create_app(
                 for item in result.recommendations
             ),
         )
+
+    register_agent_job_routes(app, prefix)
 
     return app

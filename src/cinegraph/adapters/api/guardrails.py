@@ -14,6 +14,7 @@ from starlette.responses import JSONResponse, Response
 from cinegraph.adapters.observability import JsonLoggingAuditSink
 from cinegraph.application.models.audit import HttpAuditEvent
 from cinegraph.config import (
+    DEFAULT_AGENT_JOB_CONFIGURATION,
     DEFAULT_API_CONFIGURATION,
     ApiConfiguration,
     RuntimeEnvironment,
@@ -273,7 +274,12 @@ class ApiGuardrailMiddleware(BaseHTTPMiddleware):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = "no-store"
+        if response.headers.get("content-type", "").startswith(
+            DEFAULT_AGENT_JOB_CONFIGURATION.sse_media_type
+        ):
+            response.headers["Cache-Control"] = DEFAULT_AGENT_JOB_CONFIGURATION.sse_cache_control
+        else:
+            response.headers["Cache-Control"] = "no-store"
         response.headers["Permissions-Policy"] = (
             "camera=(), microphone=(), geolocation=()"
         )
