@@ -26,6 +26,9 @@ Security-sensitive areas include:
 - media-provider tokens and command authorization;
 - file uploads, parsers, and external HTTP adapters;
 - logs, traces, backups, and source/version provenance records.
+- session rotation, owner-scoped account/profile/session management, CSRF, and
+  same-origin enforcement. Production uses `__Host-` cookies; never report raw
+  cookies, session tokens, CSRF values, passwords, or hashes in tickets.
 
 ## Repository Safeguards
 

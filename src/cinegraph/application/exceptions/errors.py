@@ -94,3 +94,8 @@ class AccountDisabledError(PermissionError):
 class SessionInvalidError(PermissionError):
     def __init__(self) -> None:
         super().__init__(AuthenticationErrorMessages.SESSION_INVALID)
+
+
+class AccountRequiredError(PermissionError):
+    def __init__(self) -> None:
+        super().__init__(AuthenticationErrorMessages.ACCOUNT_REQUIRED)

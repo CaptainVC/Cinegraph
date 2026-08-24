@@ -18,3 +18,8 @@ class AuthenticationErrorMessages:
     SESSION_PRINCIPAL_MUST_MATCH_KIND = (
         "Session principal identity and corpus scope must match its kind."
     )
+    ACCOUNT_REQUIRED = "An authenticated account is required."
+    PASSWORD_MUST_DIFFER = "New password must differ from the current password."
+    SESSION_NOT_FOUND = "Session was not found."
+    CSRF_TOKEN_REQUIRED = "CSRF protection failed."
+    SAME_ORIGIN_REQUIRED = "Same-origin request required."

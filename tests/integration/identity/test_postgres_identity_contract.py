@@ -1,3 +1,4 @@
+import hashlib
 import os
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
@@ -19,7 +20,10 @@ from cinegraph.application.exceptions.errors import (
     EmailAlreadyRegisteredError,
     SessionInvalidError,
 )
-from cinegraph.application.models.identity_sessions import RegisterAccountCommand
+from cinegraph.application.models.identity_sessions import (
+    AuthenticateAccountCommand,
+    RegisterAccountCommand,
+)
 from cinegraph.application.models.ingestion_job import EnqueueIngestionJob
 from cinegraph.application.service.identity_session_service import IdentitySessionService
 from cinegraph.application.service.ingestion_job_service import IngestionJobService
@@ -57,6 +61,64 @@ def test_postgres_migration_and_identity_roundtrip() -> None:
         )
         assert service.resolve(grant.token) == grant.principal
         assert grant.account is not None
+        second = service.authenticate(
+            AuthenticateAccountCommand(
+                email=grant.account.email,
+                password="correct horse battery staple",
+            )
+        )
+        assert second.principal.user_id == grant.principal.user_id
+        assert second.principal.profile_id == grant.principal.profile_id
+        assert second.principal.user_id is not None
+        with SqlAlchemyIdentityUnitOfWorkFactory(engine)() as unit_of_work:
+            locked_account = unit_of_work.accounts.get_by_user_id(
+                grant.account.user_id, for_update=True
+            )
+            assert locked_account == grant.account
+            first_record = unit_of_work.sessions.get_by_token_sha256(
+                hashlib.sha256(grant.token.encode("utf-8")).hexdigest()
+            )
+            second_record = unit_of_work.sessions.get_by_token_sha256(
+                hashlib.sha256(second.token.encode("utf-8")).hexdigest()
+            )
+            assert first_record is not None
+            assert second_record is not None
+            listed = unit_of_work.sessions.list_active_for_user(
+                grant.principal.user_id,
+                grant.principal.profile_id,
+                _FixedClock().now_utc(),
+                20,
+            )
+            assert len(listed) == 2
+            assert not unit_of_work.sessions.revoke_session(
+                first_record.session_id,
+                uuid4(),
+                grant.principal.profile_id,
+                _FixedClock().now_utc(),
+            )
+            assert unit_of_work.sessions.revoke_session(
+                first_record.session_id,
+                grant.principal.user_id,
+                grant.principal.profile_id,
+                _FixedClock().now_utc(),
+            )
+            assert unit_of_work.sessions.revoke_all_for_user(
+                grant.principal.user_id,
+                grant.principal.profile_id,
+                _FixedClock().now_utc(),
+            ) == 1
+            expired_at = second_record.expires_at + timedelta(seconds=1)
+            assert unit_of_work.sessions.revoke_session(
+                second_record.session_id,
+                grant.principal.user_id,
+                grant.principal.profile_id,
+                expired_at,
+            ) is False
+            assert unit_of_work.sessions.revoke_all_for_user(
+                grant.principal.user_id,
+                grant.principal.profile_id,
+                expired_at,
+            ) == 0
         with pytest.raises(EmailAlreadyRegisteredError):
             service.register(
                 RegisterAccountCommand(

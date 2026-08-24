@@ -1,7 +1,11 @@
 import logging
+import secrets
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+from hmac import compare_digest
 from pathlib import Path
+from uuid import UUID
 
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
@@ -17,6 +21,7 @@ from cinegraph.adapters.api.guardrails import (
     error_response,
 )
 from cinegraph.adapters.api.schemas import (
+    AccountResponse,
     CatalogueEpisodeResponse,
     CatalogueResponse,
     CatalogueSeasonResponse,
@@ -28,13 +33,18 @@ from cinegraph.adapters.api.schemas import (
     HealthResponse,
     LoginRequest,
     MessageResponse,
+    PasswordChangeRequest,
+    ProfileUpdateRequest,
     RecommendationRequest,
     RecommendationResponse,
     RegisterRequest,
+    SessionListResponse,
     SessionResponse,
+    SessionSummaryResponse,
 )
 from cinegraph.application.exceptions.errors import (
     AccountDisabledError,
+    AccountRequiredError,
     EmailAlreadyRegisteredError,
     InvalidCredentialsError,
     SessionInvalidError,
@@ -46,9 +56,12 @@ from cinegraph.application.models.hybrid_grounded_answer import (
     HybridGroundedAnswerQuery,
 )
 from cinegraph.application.models.identity_sessions import (
+    AccountSummary,
     AuthenticateAccountCommand,
+    ChangePasswordCommand,
     RegisterAccountCommand,
     SessionGrant,
+    UpdateDisplayNameCommand,
 )
 from cinegraph.common.error_messages import AuthenticationErrorMessages
 from cinegraph.config import (
@@ -66,6 +79,7 @@ STATIC_ROOT = Path(__file__).parent / "static"
 
 ERROR_CODE_BY_STATUS = {
     status.HTTP_401_UNAUTHORIZED: "unauthorized",
+    status.HTTP_403_FORBIDDEN: "forbidden",
     status.HTTP_404_NOT_FOUND: "not_found",
     status.HTTP_409_CONFLICT: "conflict",
     status.HTTP_413_CONTENT_TOO_LARGE: "request_too_large",
@@ -79,10 +93,24 @@ def _context(request: Request) -> ApiContext:
     return request.app.state.cinegraph_context
 
 
+def _is_production(request: Request) -> bool:
+    return _context(request).settings.environment is RuntimeEnvironment.PRODUCTION
+
+
+def _session_cookie_name(request: Request) -> str:
+    return DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_name_for(_is_production(request))
+
+
+def _csrf_cookie_name(request: Request) -> str:
+    return DEFAULT_AUTHENTICATION_CONFIGURATION.csrf_cookie_name_for(_is_production(request))
+
+
+def _session_token_optional(request: Request) -> str | None:
+    return request.cookies.get(_session_cookie_name(request))
+
+
 def _session_token(request: Request) -> str:
-    token = request.cookies.get(
-        DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_name
-    )
+    token = _session_token_optional(request)
     if token is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -127,7 +155,9 @@ def _set_session_cookie(
         int((grant.expires_at - datetime.now(UTC)).total_seconds()),
     )
     response.set_cookie(
-        key=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_name,
+        key=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_name_for(
+            settings_environment is RuntimeEnvironment.PRODUCTION
+        ),
         value=grant.token,
         max_age=maximum_age,
         expires=grant.expires_at,
@@ -136,6 +166,49 @@ def _set_session_cookie(
         httponly=True,
         samesite=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_same_site,
     )
+
+
+def _set_csrf_cookie(response: Response, production: bool) -> None:
+    response.set_cookie(
+        key=DEFAULT_AUTHENTICATION_CONFIGURATION.csrf_cookie_name_for(production),
+        value=secrets.token_urlsafe(DEFAULT_AUTHENTICATION_CONFIGURATION.csrf_token_bytes),
+        path=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_path,
+        secure=production,
+        httponly=False,
+        samesite=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_same_site,
+    )
+
+
+def _clear_auth_cookies(response: Response, production: bool) -> None:
+    response.delete_cookie(
+        key=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_name_for(production),
+        path=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_path,
+        secure=production,
+        httponly=True,
+        samesite=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_same_site,
+    )
+    response.delete_cookie(
+        key=DEFAULT_AUTHENTICATION_CONFIGURATION.csrf_cookie_name_for(production),
+        path=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_path,
+        secure=production,
+        httponly=False,
+        samesite=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_same_site,
+    )
+
+
+def _same_origin_request(request: Request) -> bool:
+    origin = request.headers.get("origin")
+    expected = f"{request.url.scheme}://{request.url.netloc}"
+    if origin is not None:
+        return compare_digest(origin.rstrip("/"), expected.rstrip("/"))
+    fetch_site = request.headers.get("sec-fetch-site")
+    return fetch_site in DEFAULT_AUTHENTICATION_CONFIGURATION.trusted_same_origin_sec_fetch_sites
+
+
+def _csrf_valid(request: Request) -> bool:
+    cookie = request.cookies.get(_csrf_cookie_name(request))
+    header = request.headers.get(DEFAULT_AUTHENTICATION_CONFIGURATION.csrf_header_name)
+    return bool(cookie and header and compare_digest(cookie, header))
 
 
 def _catalogue_response(
@@ -245,7 +318,7 @@ def create_app(
     api_configuration: ApiConfiguration = DEFAULT_API_CONFIGURATION,
 ) -> FastAPI:
     @asynccontextmanager
-    async def lifespan(app: FastAPI):
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         owned_context = context or build_default_api_context()
         app.state.cinegraph_context = owned_context
         try:
@@ -259,11 +332,39 @@ def create_app(
         version=DEFAULT_API_CONFIGURATION.version,
         lifespan=lifespan,
     )
+    @app.middleware("http")
+    async def enforce_browser_request_security(
+        request: Request, call_next: Callable[[Request], Awaitable[Response]]
+    ) -> Response:
+        unsafe = request.method.upper() in DEFAULT_AUTHENTICATION_CONFIGURATION.unsafe_methods
+        is_api = request.url.path.startswith(DEFAULT_API_CONFIGURATION.api_prefix)
+        if unsafe and is_api and _is_production(request):
+            if not _same_origin_request(request):
+                return error_response(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    code="same_origin_required",
+                    message=AuthenticationErrorMessages.SAME_ORIGIN_REQUIRED,
+                    request_id=getattr(request.state, "request_id", "unavailable"),
+                )
+            if not _csrf_valid(request):
+                return error_response(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    code="csrf_failed",
+                    message=AuthenticationErrorMessages.CSRF_TOKEN_REQUIRED,
+                    request_id=getattr(request.state, "request_id", "unavailable"),
+                )
+        return await call_next(request)
+
+    # Register guardrails after the browser-security middleware so Starlette's
+    # reverse middleware construction places guardrails outermost.  That keeps
+    # request IDs, security headers, rate limits, and audit events on early
+    # Origin/CSRF rejections as well as normal responses.
     app.add_middleware(
         ApiGuardrailMiddleware,
         services=guardrail_services or ApiGuardrailServices.defaults(api_configuration),
         configuration=api_configuration,
     )
+
     app.mount("/assets", StaticFiles(directory=STATIC_ROOT), name="assets")
     prefix = DEFAULT_API_CONFIGURATION.api_prefix
 
@@ -281,7 +382,7 @@ def create_app(
             code=ERROR_CODE_BY_STATUS.get(error.status_code, "request_failed"),
             message=message,
             request_id=current_request_id(request),
-            headers=error.headers,
+            headers=dict(error.headers) if error.headers is not None else None,
         )
 
     @app.exception_handler(RequestValidationError)
@@ -328,8 +429,13 @@ def create_app(
         return HealthResponse(status="ok")
 
     @app.get("/", include_in_schema=False, response_class=FileResponse)
-    def product_ui() -> FileResponse:
-        return FileResponse(STATIC_ROOT / "index.html")
+    def product_ui(request: Request) -> FileResponse:
+        # Seed the readable CSRF half of the double-submit pair before the
+        # browser attempts its first unsafe authentication request.
+        page = FileResponse(STATIC_ROOT / "index.html")
+        if _csrf_cookie_name(request) not in request.cookies:
+            _set_csrf_cookie(page, _is_production(request))
+        return page
 
     @app.get("/health/ready", response_model=HealthResponse)
     def ready(request: Request) -> HealthResponse:
@@ -343,8 +449,17 @@ def create_app(
     @app.post(f"{prefix}/auth/guest", response_model=SessionResponse)
     def issue_guest(request: Request, response: Response) -> SessionResponse:
         app_context = _context(request)
-        grant = app_context.identity_sessions.issue_guest()
+        try:
+            grant = app_context.identity_sessions.issue_guest(_session_token_optional(request))
+        except SessionInvalidError as error:
+            # An authenticated session must never be downgraded to guest
+            # access, including when its persisted entitlement is stale.
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=AuthenticationErrorMessages.SESSION_INVALID,
+            ) from error
         _set_session_cookie(response, grant, app_context.settings.environment)
+        _set_csrf_cookie(response, _is_production(request))
         return _session_response(grant)
 
     @app.post(
@@ -364,6 +479,7 @@ def create_app(
                     email=body.email,
                     password=body.password,
                     display_name=body.display_name,
+                    current_session_token=_session_token_optional(request),
                 )
             )
         except EmailAlreadyRegisteredError as error:
@@ -374,6 +490,7 @@ def create_app(
                 detail=str(error),
             ) from error
         _set_session_cookie(response, grant, app_context.settings.environment)
+        _set_csrf_cookie(response, _is_production(request))
         return _session_response(grant)
 
     @app.post(f"{prefix}/auth/login", response_model=SessionResponse)
@@ -385,7 +502,11 @@ def create_app(
         app_context = _context(request)
         try:
             grant = app_context.identity_sessions.authenticate(
-                AuthenticateAccountCommand(email=body.email, password=body.password)
+                AuthenticateAccountCommand(
+                    email=body.email,
+                    password=body.password,
+                    current_session_token=_session_token_optional(request),
+                )
             )
         except (InvalidCredentialsError, AccountDisabledError) as error:
             raise HTTPException(
@@ -393,16 +514,23 @@ def create_app(
                 detail=AuthenticationErrorMessages.INVALID_CREDENTIALS,
             ) from error
         _set_session_cookie(response, grant, app_context.settings.environment)
+        _set_csrf_cookie(response, _is_production(request))
         return _session_response(grant)
 
     @app.get(f"{prefix}/auth/session", response_model=SessionResponse)
-    def session(principal: SessionPrincipal = Depends(_principal)) -> SessionResponse:
-        return SessionResponse(
-            principal_kind=principal.kind,
-            profile_id=principal.profile_id,
-            user_id=principal.user_id,
-            corpus_scope_revision=principal.corpus_access_scope.revision,
-        )
+    def session(
+        request: Request,
+        token: str = Depends(_session_token),
+    ) -> SessionResponse:
+        try:
+            grant = _context(request).identity_sessions.resolve_grant(token)
+        except SessionInvalidError as error:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail=AuthenticationErrorMessages.SESSION_INVALID,
+            ) from error
+        request.state.principal_kind = grant.principal.kind.value
+        return _session_response(grant)
 
     @app.post(f"{prefix}/auth/logout", response_model=MessageResponse)
     def logout(
@@ -417,11 +545,120 @@ def create_app(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail=AuthenticationErrorMessages.SESSION_INVALID,
             ) from error
-        response.delete_cookie(
-            key=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_name,
-            path=DEFAULT_AUTHENTICATION_CONFIGURATION.session_cookie_path,
-        )
+        _clear_auth_cookies(response, _is_production(request))
         return MessageResponse(message="Session ended.")
+
+    def _account_response(account: AccountSummary) -> AccountResponse:
+        return AccountResponse(
+            user_id=account.user_id,
+            profile_id=account.profile_id,
+            email=account.email,
+            display_name=account.display_name,
+            status=account.status,
+            created_at=account.created_at,
+        )
+
+    def _account_token_and_principal(request: Request) -> tuple[str, SessionPrincipal]:
+        token = _session_token(request)
+        try:
+            principal = _context(request).identity_sessions.resolve(token)
+        except SessionInvalidError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.SESSION_INVALID) from error
+        if principal.user_id is None:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=AuthenticationErrorMessages.ACCOUNT_REQUIRED)
+        return token, principal
+
+    @app.get(f"{prefix}/account", response_model=AccountResponse)
+    def account(request: Request) -> AccountResponse:
+        token, _ = _account_token_and_principal(request)
+        try:
+            return _account_response(_context(request).identity_sessions.current_account(token))
+        except AccountRequiredError as error:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=AuthenticationErrorMessages.ACCOUNT_REQUIRED) from error
+        except SessionInvalidError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.SESSION_INVALID) from error
+
+    @app.patch(f"{prefix}/account/profile", response_model=AccountResponse)
+    def update_profile(body: ProfileUpdateRequest, request: Request) -> AccountResponse:
+        token, _ = _account_token_and_principal(request)
+        try:
+            account = _context(request).identity_sessions.update_display_name(
+                token, UpdateDisplayNameCommand(display_name=body.display_name)
+            )
+        except AccountRequiredError as error:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=AuthenticationErrorMessages.ACCOUNT_REQUIRED) from error
+        except SessionInvalidError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.SESSION_INVALID) from error
+        return _account_response(account)
+
+    @app.post(f"{prefix}/account/password", response_model=SessionResponse)
+    def change_password(body: PasswordChangeRequest, request: Request, response: Response) -> SessionResponse:
+        token, _ = _account_token_and_principal(request)
+        try:
+            grant = _context(request).identity_sessions.change_password(
+                token, ChangePasswordCommand(body.current_password, body.new_password)
+            )
+        except AccountRequiredError as error:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=AuthenticationErrorMessages.ACCOUNT_REQUIRED) from error
+        except InvalidCredentialsError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.INVALID_CREDENTIALS) from error
+        except SessionInvalidError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.SESSION_INVALID) from error
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=str(error),
+            ) from error
+        _clear_auth_cookies(response, _is_production(request))
+        _set_session_cookie(response, grant, _context(request).settings.environment)
+        _set_csrf_cookie(response, _is_production(request))
+        return _session_response(grant)
+
+    @app.get(f"{prefix}/account/sessions", response_model=SessionListResponse)
+    def list_account_sessions(request: Request) -> SessionListResponse:
+        token, _ = _account_token_and_principal(request)
+        try:
+            sessions = _context(request).identity_sessions.list_sessions(token)
+        except SessionInvalidError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.SESSION_INVALID) from error
+        return SessionListResponse(
+            sessions=tuple(
+                SessionSummaryResponse(
+                    session_id=item.session_id,
+                    created_at=item.created_at,
+                    expires_at=item.expires_at,
+                    current=item.current,
+                )
+                for item in sessions
+            )
+        )
+
+    @app.delete(f"{prefix}/account/sessions/{{session_id}}", response_model=MessageResponse)
+    def revoke_account_session(session_id: UUID, request: Request, response: Response) -> MessageResponse:
+        token, _ = _account_token_and_principal(request)
+        try:
+            current = any(item.session_id == session_id and item.current for item in _context(request).identity_sessions.list_sessions(token))
+        except SessionInvalidError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.SESSION_INVALID) from error
+        try:
+            revoked = _context(request).identity_sessions.revoke_session(token, session_id)
+        except SessionInvalidError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.SESSION_INVALID) from error
+        if not revoked:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=AuthenticationErrorMessages.SESSION_NOT_FOUND)
+        if current:
+            _clear_auth_cookies(response, _is_production(request))
+        return MessageResponse(message="Session ended.")
+
+    @app.post(f"{prefix}/account/logout-all", response_model=MessageResponse)
+    def logout_all(request: Request, response: Response) -> MessageResponse:
+        token, _ = _account_token_and_principal(request)
+        try:
+            _context(request).identity_sessions.revoke_all(token)
+        except SessionInvalidError as error:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=AuthenticationErrorMessages.SESSION_INVALID) from error
+        _clear_auth_cookies(response, _is_production(request))
+        return MessageResponse(message="Sessions ended.")
 
     @app.get(f"{prefix}/catalogue", response_model=CatalogueResponse)
     def catalogue(

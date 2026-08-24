@@ -26,6 +26,8 @@ def test_product_shell_and_assets_are_served_same_origin(tmp_path: Path) -> None
     assert 'credentials: "same-origin"' in script.text
     assert "/api/v1/auth/guest" in script.text
     assert "/api/v1/chat" in script.text
+    assert "function readCookie(name)" in script.text
+    assert 'readCookie("__Host-cinegraph_csrf") || readCookie("cinegraph_csrf")' in script.text
     assert "localStorage" not in script.text
     assert "sessionStorage" not in script.text
     assert icon.status_code == 200

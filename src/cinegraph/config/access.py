@@ -29,3 +29,13 @@ DEFAULT_GUEST_CORPUS_ACCESS_SCOPE = CorpusAccessScope(
         for season_number in DEFAULT_GUEST_ACCESS_CONFIGURATION.season_numbers
     ),
 )
+
+# Authenticated principals are intentionally unrestricted, but the revision is
+# still persisted and checked so a stale or forged scope cannot be replayed.
+AUTHENTICATED_CORPUS_ACCESS_SCOPE_REVISION = "authenticated-session-v1"
+DEFAULT_AUTHENTICATED_CORPUS_ACCESS_SCOPE = CorpusAccessScope(
+    mode=CorpusAccessMode.AUTHENTICATED,
+    revision=AUTHENTICATED_CORPUS_ACCESS_SCOPE_REVISION,
+    allowed_seasons=frozenset(),
+    unrestricted=True,
+)

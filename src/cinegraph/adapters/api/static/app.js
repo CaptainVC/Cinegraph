@@ -69,12 +69,31 @@ class ApiError extends Error {
   }
 }
 
+function readCookie(name) {
+  const encoded = document.cookie
+    .split(";")
+    .map((part) => part.trim())
+    .find((part) => part.startsWith(`${name}=`));
+  return encoded ? decodeURIComponent(encoded.slice(name.length + 1)) : null;
+}
+
+function csrfToken() {
+  // Prefer the production __Host- cookie if a browser retained both names
+  // during an environment transition.
+  return readCookie("__Host-cinegraph_csrf") || readCookie("cinegraph_csrf");
+}
+
 async function apiRequest(path, options = {}) {
+  const method = (options.method || "GET").toUpperCase();
   const request = {
-    method: options.method || "GET",
+    method,
     credentials: "same-origin",
     headers: { Accept: "application/json", ...(options.headers || {}) },
   };
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
+    const csrf = csrfToken();
+    if (csrf) request.headers["X-CSRF-Token"] = csrf;
+  }
   if (options.body !== undefined) {
     request.headers["Content-Type"] = "application/json";
     request.body = JSON.stringify(options.body);

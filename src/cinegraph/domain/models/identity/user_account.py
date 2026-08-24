@@ -1,5 +1,5 @@
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from uuid import UUID
 
@@ -22,6 +22,11 @@ class UserAccount:
     def __post_init__(self) -> None:
         if (
             not isinstance(self.email, str)
+            or not (
+                DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_email_length
+                <= len(self.email)
+                <= DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_email_length
+            )
             or self.email != self.email.casefold()
             or re.fullmatch(
                 DEFAULT_AUTHENTICATION_CONFIGURATION.email_pattern,
@@ -36,6 +41,11 @@ class UserAccount:
             not isinstance(self.display_name, str)
             or not self.display_name
             or self.display_name.strip() != self.display_name
+            or not (
+                DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_display_name_length
+                <= len(self.display_name)
+                <= DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_display_name_length
+            )
         ):
             raise InvalidModelError(
                 AuthenticationErrorMessages.DISPLAY_NAME_MUST_BE_TRIMMED
@@ -44,3 +54,21 @@ class UserAccount:
             raise InvalidModelError(
                 AuthenticationErrorMessages.PASSWORD_HASH_MUST_BE_VALID
             )
+
+    def with_display_name(self, display_name: str) -> "UserAccount":
+        if (
+            not isinstance(display_name, str)
+            or display_name.strip() != display_name
+            or not (
+                DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_display_name_length
+                <= len(display_name)
+                <= DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_display_name_length
+            )
+        ):
+            raise InvalidModelError(AuthenticationErrorMessages.DISPLAY_NAME_MUST_BE_TRIMMED)
+        return replace(self, display_name=display_name)
+
+    def with_password_hash(self, password_hash: str) -> "UserAccount":
+        if not isinstance(password_hash, str) or not password_hash or password_hash.strip() != password_hash:
+            raise InvalidModelError(AuthenticationErrorMessages.PASSWORD_HASH_MUST_BE_VALID)
+        return replace(self, password_hash=password_hash)

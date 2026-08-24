@@ -1,5 +1,9 @@
 # Authentication and guest sessions
 
+See [authentication-security.md](authentication-security.md) for the complete
+state machine, cookie/CSRF model, owner-scoped account endpoints, and deferred
+security features.
+
 Cinegraph issues opaque 256-bit session tokens. Only each token's SHA-256 digest is
 stored; the raw value is returned once to the caller and will be placed in an
 HTTP-only cookie by the API layer. Passwords use independently salted scrypt hashes
