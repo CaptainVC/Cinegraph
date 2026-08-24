@@ -11,8 +11,9 @@ uv run python scripts/run_api.py
 ```
 
 The server binds to `127.0.0.1:8000` by default. Configure it with
-`CINEGRAPH_API_HOST` and `CINEGRAPH_API_PORT`. Production mode marks the opaque
-session cookie `Secure`; every environment uses `HttpOnly` and `SameSite=Lax`.
+`CINEGRAPH_API_HOST` and `CINEGRAPH_API_PORT`. Production uses `__Host-` Secure
+session/CSRF cookies and double-submit CSRF plus same-origin checks for unsafe
+requests; development uses usable non-Secure names.
 
 ## Contracts
 
@@ -23,6 +24,12 @@ session cookie `Secure`; every environment uses `HttpOnly` and `SameSite=Lax`.
 - `POST /api/v1/auth/login` authenticates an account.
 - `GET /api/v1/auth/session` resolves the current cookie.
 - `POST /api/v1/auth/logout` revokes the current session.
+- `GET /api/v1/account` returns the authenticated account without password data.
+- `PATCH /api/v1/account/profile` updates the current display name.
+- `POST /api/v1/account/password` changes the password and rotates the session.
+- `GET /api/v1/account/sessions` lists bounded owner-scoped active sessions.
+- `DELETE /api/v1/account/sessions/{session_id}` revokes one owner session.
+- `POST /api/v1/account/logout-all` revokes all current-user sessions.
 - `GET /api/v1/catalogue` returns only corpus-visible catalogue entries.
 - `POST /api/v1/chat` runs governed retrieval and grounded generation.
 - `POST /api/v1/recommendations` ranks only entitled, spoiler-visible episode

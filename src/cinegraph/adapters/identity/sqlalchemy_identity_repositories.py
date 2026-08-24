@@ -166,6 +166,15 @@ class SqlAlchemyUserAccountRepository:
         )
         return _account_from_row(row) if row is not None else None
 
+    def get_by_user_id(
+        self, user_id: UUID, *, for_update: bool = False
+    ) -> UserAccount | None:
+        query = select(UserAccountRow).where(UserAccountRow.user_id == user_id)
+        if for_update:
+            query = query.with_for_update()
+        row = self._session.scalar(query)
+        return _account_from_row(row) if row is not None else None
+
     def add(self, account: UserAccount) -> None:
         self._session.add(
             UserAccountRow(
@@ -186,6 +195,16 @@ class SqlAlchemyUserAccountRepository:
                     AuthenticationErrorMessages.EMAIL_ALREADY_REGISTERED
                 ) from error
             raise
+
+    def save(self, account: UserAccount) -> None:
+        row = self._session.get(UserAccountRow, account.user_id)
+        if row is None or row.profile_id != account.profile_id:
+            raise KeyError("Account owner not found.")
+        row.email = account.email
+        row.display_name = account.display_name
+        row.password_hash = account.password_hash
+        row.status = account.status.value
+        self._session.flush()
 
 
 class SqlAlchemySessionRepository:
@@ -235,7 +254,51 @@ class SqlAlchemySessionRepository:
                 for entitlement in sorted(session.principal.corpus_access_scope.allowed_seasons)
             ]
 
+    def list_active_for_user(
+        self, user_id: UUID, profile_id: UUID, now: datetime, limit: int | None
+    ) -> tuple[SessionRecord, ...]:
+        query = (
+            select(SessionRow)
+            .where(
+                SessionRow.user_id == user_id,
+                SessionRow.profile_id == profile_id,
+                SessionRow.revoked_at.is_(None),
+                SessionRow.expires_at > _utc(now),
+            )
+            .order_by(SessionRow.created_at.desc(), SessionRow.session_id.desc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        rows = self._session.scalars(query).all()
+        return tuple(_session_from_row(row) for row in rows)
 
+    def revoke_session(self, session_id: UUID, user_id: UUID, profile_id: UUID, revoked_at: datetime) -> bool:
+        row = self._session.scalar(
+            select(SessionRow).where(
+                SessionRow.session_id == session_id,
+                SessionRow.user_id == user_id,
+                SessionRow.profile_id == profile_id,
+                SessionRow.revoked_at.is_(None),
+                SessionRow.expires_at > _utc(revoked_at),
+            )
+        )
+        if row is None:
+            return False
+        row.revoked_at = _utc(revoked_at)
+        return True
+
+    def revoke_all_for_user(self, user_id: UUID, profile_id: UUID, revoked_at: datetime) -> int:
+        rows = self._session.scalars(
+            select(SessionRow).where(
+                SessionRow.user_id == user_id,
+                SessionRow.profile_id == profile_id,
+                SessionRow.revoked_at.is_(None),
+                SessionRow.expires_at > _utc(revoked_at),
+            )
+        ).all()
+        for row in rows:
+            row.revoked_at = _utc(revoked_at)
+        return len(rows)
 class SqlAlchemyIdentityUnitOfWork:
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory

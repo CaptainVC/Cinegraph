@@ -12,7 +12,7 @@ from cinegraph.adapters.api.guardrails import (
     InMemoryTokenBucketRateLimiter,
 )
 from cinegraph.application.models.audit import HttpAuditEvent
-from cinegraph.config import DEFAULT_API_CONFIGURATION
+from cinegraph.config import DEFAULT_API_CONFIGURATION, RuntimeEnvironment
 
 
 class MutableMonotonicClock:
@@ -91,6 +91,29 @@ def test_request_id_security_headers_and_audit_metadata(tmp_path: Path) -> None:
     assert event.path == "/api/v1/catalogue"
     assert event.principal_kind == "guest"
     assert not hasattr(event, "request_body")
+
+
+def test_early_production_csrf_rejection_keeps_guardrail_request_id_headers_and_audit(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    context.settings.environment = RuntimeEnvironment.PRODUCTION
+    services, _, audit = make_guardrails()
+    with TestClient(create_app(context, services), base_url="https://cinegraph.example") as client:
+        response = client.post(
+            "/api/v1/auth/guest",
+            headers={"Origin": "https://cinegraph.example"},
+        )
+
+    assert response.status_code == 403
+    assert response.json()["error"]["code"] == "csrf_failed"
+    request_id = response.json()["error"]["request_id"]
+    assert request_id == "generated-request-id"
+    assert response.headers["X-Request-ID"] == request_id
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["Cache-Control"] == "no-store"
+    assert audit.events[-1].request_id == request_id
+    assert audit.events[-1].status_code == 403
 
 
 def test_invalid_request_is_sanitized_and_does_not_echo_password(

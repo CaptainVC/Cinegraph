@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from cinegraph.config import (
     DEFAULT_API_CONFIGURATION,
+    DEFAULT_AUTHENTICATION_CONFIGURATION,
     DEFAULT_RECOMMENDATION_CONFIGURATION,
 )
 from cinegraph.domain.enums.enum import PrincipalKind, SpoilerMode, WatchPreference
@@ -23,9 +24,18 @@ class HealthResponse(ApiSchema):
 
 
 class RegisterRequest(ApiSchema):
-    email: str = Field(min_length=3, max_length=320)
-    password: str = Field(min_length=12, max_length=1024)
-    display_name: str = Field(min_length=1, max_length=100)
+    email: str = Field(
+        min_length=DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_email_length,
+        max_length=DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_email_length,
+    )
+    password: str = Field(
+        min_length=DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_password_length,
+        max_length=DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_password_length,
+    )
+    display_name: str = Field(
+        min_length=DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_display_name_length,
+        max_length=DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_display_name_length,
+    )
 
     @field_validator("email", "display_name")
     @classmethod
@@ -36,8 +46,14 @@ class RegisterRequest(ApiSchema):
 
 
 class LoginRequest(ApiSchema):
-    email: str = Field(min_length=3, max_length=320)
-    password: str = Field(min_length=1, max_length=1024)
+    email: str = Field(
+        min_length=DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_email_length,
+        max_length=DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_email_length,
+    )
+    password: str = Field(
+        min_length=1,
+        max_length=DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_password_length,
+    )
 
 
 class SessionResponse(ApiSchema):
@@ -47,6 +63,51 @@ class SessionResponse(ApiSchema):
     corpus_scope_revision: str
     expires_at: datetime | None = None
     display_name: str | None = None
+
+
+class AccountResponse(ApiSchema):
+    user_id: UUID
+    profile_id: UUID
+    email: str
+    display_name: str
+    status: str
+    created_at: datetime
+
+
+class ProfileUpdateRequest(ApiSchema):
+    display_name: str = Field(
+        min_length=DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_display_name_length,
+        max_length=DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_display_name_length,
+    )
+
+    @field_validator("display_name")
+    @classmethod
+    def require_trimmed_display_name(cls, value: str) -> str:
+        if value.strip() != value:
+            raise ValueError("Display name must be trimmed.")
+        return value
+
+
+class PasswordChangeRequest(ApiSchema):
+    current_password: str = Field(
+        min_length=1,
+        max_length=DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_password_length,
+    )
+    new_password: str = Field(
+        min_length=DEFAULT_AUTHENTICATION_CONFIGURATION.minimum_password_length,
+        max_length=DEFAULT_AUTHENTICATION_CONFIGURATION.maximum_password_length,
+    )
+
+
+class SessionSummaryResponse(ApiSchema):
+    session_id: UUID
+    created_at: datetime
+    expires_at: datetime
+    current: bool
+
+
+class SessionListResponse(ApiSchema):
+    sessions: tuple[SessionSummaryResponse, ...]
 
 
 class CatalogueEpisodeResponse(ApiSchema):

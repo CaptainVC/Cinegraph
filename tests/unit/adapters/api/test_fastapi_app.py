@@ -1,6 +1,7 @@
 from pathlib import Path
 from uuid import UUID
 
+import pytest
 from fastapi.testclient import TestClient
 from tests.factories import DEFAULT_SERIES_ID
 
@@ -11,6 +12,7 @@ from cinegraph.adapters.identity import (
     InMemoryIdentityUnitOfWorkFactory,
     ScryptPasswordHasher,
 )
+from cinegraph.application.exceptions.errors import SessionInvalidError
 from cinegraph.application.models.episode_recommendation import (
     EpisodeRecommendation,
     RecommendEpisodesResult,
@@ -21,7 +23,7 @@ from cinegraph.application.models.hybrid_grounded_answer import (
 from cinegraph.application.service.identity_session_service import (
     IdentitySessionService,
 )
-from cinegraph.config import CinegraphRuntimeSettings
+from cinegraph.config import CinegraphRuntimeSettings, RuntimeEnvironment
 from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import (
     Language,
@@ -326,3 +328,281 @@ def test_recommendations_use_session_scope_and_return_visible_citations(
     query = workflow.queries[0]
     assert query.corpus_access_scope.revision == "guest-modern-family-s01-s02-v1"
     assert query.profile_watch_state.spoiler_mode is SpoilerMode.RELAXED
+
+
+def test_production_seeds_host_csrf_cookie_and_requires_origin_and_double_submit(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    context.settings.environment = RuntimeEnvironment.PRODUCTION
+    base_url = "https://cinegraph.example"
+    with TestClient(create_app(context), base_url=base_url) as client:
+        landing = client.get("/")
+        csrf = client.cookies.get("__Host-cinegraph_csrf")
+        missing_origin = client.post(
+            "/api/v1/auth/guest",
+            headers={"X-CSRF-Token": csrf or ""},
+        )
+        missing_header = client.post(
+            "/api/v1/auth/guest",
+            headers={"Origin": base_url},
+        )
+        guest = client.post(
+            "/api/v1/auth/guest",
+            headers={"Origin": base_url, "X-CSRF-Token": csrf or ""},
+        )
+
+    assert landing.status_code == 200
+    assert csrf
+    assert missing_origin.status_code == 403
+    assert missing_origin.json()["error"]["code"] == "same_origin_required"
+    assert missing_header.status_code == 403
+    assert missing_header.json()["error"]["code"] == "csrf_failed"
+    assert guest.status_code == 200
+    assert "__Host-cinegraph_session=" in guest.headers["set-cookie"]
+    assert "Secure" in guest.headers["set-cookie"]
+    assert "Path=/" in guest.headers["set-cookie"]
+
+
+def test_production_csrf_applies_to_authenticated_chat_and_logout_and_clears_host_cookies(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    context.settings.environment = RuntimeEnvironment.PRODUCTION
+    base_url = "https://cinegraph.example"
+    with TestClient(create_app(context), base_url=base_url) as client:
+        client.get("/")
+        csrf = client.cookies.get("__Host-cinegraph_csrf")
+        client.post(
+            "/api/v1/auth/guest",
+            headers={"Origin": base_url, "X-CSRF-Token": csrf or ""},
+        )
+        csrf = client.cookies.get("__Host-cinegraph_csrf")
+        missing = client.post(
+            "/api/v1/chat",
+            headers={"Origin": base_url},
+            json={
+                "series_id": str(DEFAULT_SERIES_ID),
+                "question": "Who introduces the family?",
+            },
+        )
+        chat = client.post(
+            "/api/v1/chat",
+            headers={"Origin": base_url, "X-CSRF-Token": csrf or ""},
+            json={
+                "series_id": str(DEFAULT_SERIES_ID),
+                "question": "Who introduces the family?",
+            },
+        )
+        logout = client.post(
+            "/api/v1/auth/logout",
+            headers={"Origin": base_url, "X-CSRF-Token": csrf or ""},
+        )
+
+    assert missing.status_code == 403
+    assert missing.json()["error"]["code"] == "csrf_failed"
+    assert chat.status_code == 200
+    assert logout.status_code == 200
+    assert '__Host-cinegraph_session="";' in logout.headers["set-cookie"]
+    assert '__Host-cinegraph_csrf="";' in logout.headers["set-cookie"]
+
+
+def test_production_sec_fetch_same_origin_is_accepted_and_csrf_rotation_is_required(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    context.settings.environment = RuntimeEnvironment.PRODUCTION
+    with TestClient(
+        create_app(context), base_url="https://cinegraph.example"
+    ) as client:
+        client.get("/")
+        first_csrf = client.cookies.get("__Host-cinegraph_csrf")
+        first_guest = client.post(
+            "/api/v1/auth/guest",
+            headers={
+                "Sec-Fetch-Site": "same-origin",
+                "X-CSRF-Token": first_csrf or "",
+            },
+        )
+        second_csrf = client.cookies.get("__Host-cinegraph_csrf")
+        stale = client.post(
+            "/api/v1/auth/guest",
+            headers={
+                "Sec-Fetch-Site": "same-origin",
+                "X-CSRF-Token": first_csrf or "",
+            },
+        )
+        current = client.post(
+            "/api/v1/auth/guest",
+            headers={
+                "Sec-Fetch-Site": "same-origin",
+                "X-CSRF-Token": second_csrf or "",
+            },
+        )
+
+    assert first_guest.status_code == 200
+    assert second_csrf and second_csrf != first_csrf
+    assert stale.status_code == 403
+    assert stale.json()["error"]["code"] == "csrf_failed"
+    assert current.status_code == 200
+
+
+def test_guest_cannot_access_account_routes(tmp_path: Path) -> None:
+    context, _ = make_context(tmp_path)
+    with TestClient(create_app(context)) as client:
+        client.post("/api/v1/auth/guest")
+        account = client.get("/api/v1/account")
+        sessions = client.get("/api/v1/account/sessions")
+        profile = client.patch(
+            "/api/v1/account/profile",
+            json={"display_name": "Guest"},
+        )
+
+    assert account.status_code == 403
+    assert sessions.status_code == 403
+    assert profile.status_code == 403
+    assert account.json()["error"]["code"] == "forbidden"
+    assert account.json()["error"]["message"] == "An authenticated account is required."
+
+
+def test_account_profile_password_and_session_routes_preserve_owner_isolation(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    password = "correct horse battery staple"
+    with TestClient(create_app(context)) as first_client, TestClient(
+        create_app(context)
+    ) as second_client:
+        first = first_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "first@example.com",
+                "password": password,
+                "display_name": "First viewer",
+            },
+        )
+        second_client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "second@example.com",
+                "password": password,
+                "display_name": "Second viewer",
+            },
+        )
+        account = first_client.get("/api/v1/account")
+        profile = first_client.patch(
+            "/api/v1/account/profile",
+            json={"display_name": "Renamed viewer"},
+        )
+        sessions = first_client.get("/api/v1/account/sessions")
+        session_id = sessions.json()["sessions"][0]["session_id"]
+        cross_user_revoke = second_client.delete(
+            f"/api/v1/account/sessions/{session_id}"
+        )
+        unchanged_password = first_client.post(
+            "/api/v1/account/password",
+            json={"current_password": password, "new_password": password},
+        )
+        rotated = first_client.post(
+            "/api/v1/account/password",
+            json={
+                "current_password": password,
+                "new_password": "an entirely different password",
+            },
+        )
+        logged_out_all = first_client.post("/api/v1/account/logout-all")
+        after_logout_all = first_client.get("/api/v1/auth/session")
+
+    assert first.status_code == 201
+    assert account.status_code == 200
+    assert account.json()["email"] == "first@example.com"
+    assert profile.status_code == 200
+    assert profile.json()["display_name"] == "Renamed viewer"
+    assert sessions.status_code == 200
+    assert cross_user_revoke.status_code == 404
+    assert unchanged_password.status_code == 422
+    assert rotated.status_code == 200
+    assert logged_out_all.status_code == 200
+    assert after_logout_all.status_code == 401
+
+
+def test_auth_flows_rotate_presented_guest_and_current_sessions_and_expose_session_metadata(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    password = "correct horse battery staple"
+    with TestClient(create_app(context)) as client:
+        guest = client.post("/api/v1/auth/guest")
+        guest_token = client.cookies.get("cinegraph_session")
+        registered = client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "rotate@example.com",
+                "password": password,
+                "display_name": "Rotate viewer",
+            },
+        )
+        first_token = client.cookies.get("cinegraph_session")
+        current = client.get("/api/v1/auth/session")
+        logged_in = client.post(
+            "/api/v1/auth/login",
+            json={"email": "rotate@example.com", "password": password},
+        )
+        second_token = client.cookies.get("cinegraph_session")
+
+    assert guest.status_code == 200
+    assert registered.status_code == 201
+    assert current.status_code == 200
+    assert current.json()["display_name"] == "Rotate viewer"
+    assert current.json()["expires_at"] is not None
+    assert logged_in.status_code == 200
+    assert second_token and second_token != first_token
+    assert guest_token
+    with pytest.raises(SessionInvalidError):
+        context.identity_sessions.resolve(guest_token)
+    assert first_token
+    with pytest.raises(SessionInvalidError):
+        context.identity_sessions.resolve(first_token)
+
+
+def test_guest_current_session_exposes_expiry_without_token_or_account_metadata(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    with TestClient(create_app(context)) as client:
+        issued = client.post("/api/v1/auth/guest")
+        current = client.get("/api/v1/auth/session")
+
+    assert issued.status_code == 200
+    assert current.status_code == 200
+    body = current.json()
+    assert body["principal_kind"] == PrincipalKind.GUEST
+    assert body["user_id"] is None
+    assert body["display_name"] is None
+    assert body["expires_at"] is not None
+    assert "token" not in body
+
+
+def test_deleting_current_session_revokes_it_and_clears_auth_cookies(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    with TestClient(create_app(context)) as client:
+        client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "delete-current@example.com",
+                "password": "correct horse battery staple",
+                "display_name": "Delete current",
+            },
+        )
+        session_id = client.get("/api/v1/account/sessions").json()["sessions"][0][
+            "session_id"
+        ]
+        deleted = client.delete(f"/api/v1/account/sessions/{session_id}")
+        current = client.get("/api/v1/auth/session")
+
+    assert deleted.status_code == 200
+    assert "cinegraph_session=\"\";" in deleted.headers["set-cookie"]
+    assert "cinegraph_csrf=\"\";" in deleted.headers["set-cookie"]
+    assert current.status_code == 401

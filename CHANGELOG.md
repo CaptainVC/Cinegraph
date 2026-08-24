@@ -7,6 +7,11 @@ All notable changes to Cinegraph are documented here. The format follows
 
 ### Added
 
+- Phase 33 authentication hardening: owner-scoped account/profile/password/session
+  routes, deterministic session rotation and eviction, stale corpus-scope rejection,
+  production `__Host-` cookies, double-submit CSRF, same-origin checks, and browser
+  CSRF-header support. Email verification, reset, and MFA remain deferred.
+
 - Owner-bound asynchronous agent jobs with canonical idempotency, bounded
   dispatch, typed status/result resources, and replayable privacy-safe SSE.
 
