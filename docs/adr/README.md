@@ -10,4 +10,5 @@
 - [ADR-0008: Authorization-safe series agent runtime](0008-authorization-safe-series-agent-runtime.md)
 - [ADR-0009: Owner-bound idempotent agent jobs and replayable SSE](0009-owner-bound-agent-jobs-and-sse.md)
 - [ADR-0010: Authentication security, session rotation, and tenant isolation](0010-authentication-security-and-tenancy.md)
+- [ADR-0011: Privacy-safe observability, durable jobs, and bounded runtime](0011-observability-resilience-cost-controls.md)
 - [ADR template](template.md)

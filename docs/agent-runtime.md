@@ -36,5 +36,10 @@ cost-sensitive grounded work. No API client or persistent checkpointer is
 constructed by unrelated bootstrap paths; tests inject deterministic models and
 `InMemorySaver` where needed.
 
-Phase 32 owns HTTP/SSE/API exposure. This phase returns only the typed application
-result and does not add endpoints, deployment, or authentication platform work.
+Phase 32 added HTTP/SSE exposure, and Phase 34 made job/event state durable in SQL.
+Phase 34 also accounts nested synthesis, selector, and grounded-answer model responses
+through a context-local LangChain callback ledger; configured call, token, estimated-
+cost, retry, and cooperative deadline limits fail to stable private terminal codes.
+Structured telemetry contains aggregate usage and lifecycle metadata only. The
+bounded dispatcher and LangGraph checkpoint remain process-local until deployment-
+phase worker recovery.

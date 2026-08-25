@@ -17,6 +17,7 @@ from cinegraph.application.models.series_agent_result import (
 )
 from cinegraph.application.service.agent_job_service import AgentJobService
 from cinegraph.config import AgentJobConfiguration
+from cinegraph.ports.agent_jobs.agent_job_repository import AgentJobUnavailableError
 from cinegraph.ports.agent_jobs.dispatcher import InlineAgentJobDispatcher
 
 
@@ -271,6 +272,50 @@ def test_unavailable_and_unknown_series_have_stable_errors(tmp_path) -> None:
             headers={"Idempotency-Key": str(uuid4())},
         )
         assert missing.status_code == 404
+
+
+def test_repository_outages_are_sanitized_for_submit_status_and_events(tmp_path) -> None:
+    class UnavailableRepository(InMemoryAgentJobRepository):
+        @staticmethod
+        def _unavailable():
+            raise AgentJobUnavailableError("private database detail")
+
+        def create(self, job):
+            del job
+            return self._unavailable()
+
+        def get(self, job_id, owner_profile_id=None):
+            del job_id, owner_profile_id
+            return self._unavailable()
+
+        def list_events_after(self, job_id, sequence=0, owner_profile_id=None):
+            del job_id, sequence, owner_profile_id
+            return self._unavailable()
+
+    context, _ = make_context(tmp_path)
+    context.agent_job_service = AgentJobService(
+        UnavailableRepository(),
+        RefusingConversation(),
+        InlineAgentJobDispatcher(),
+    )
+    body = {
+        "thread_id": str(uuid4()),
+        "series_id": str(DEFAULT_SERIES_ID),
+        "question": "Who?",
+    }
+    job_id = uuid4()
+    with TestClient(create_app(context)) as client:
+        client.post("/api/v1/auth/guest")
+        submit = client.post(
+            "/api/v1/agent/jobs",
+            json=body,
+            headers={"Idempotency-Key": str(uuid4())},
+        )
+        status = client.get(f"/api/v1/agent/jobs/{job_id}")
+        events = client.get(f"/api/v1/agent/jobs/{job_id}/events")
+
+    assert submit.status_code == status.status_code == events.status_code == 503
+    assert "private database detail" not in submit.text + status.text + events.text
 
 
 def test_grounded_result_and_sse_expose_locators_without_transcript_text(tmp_path) -> None:

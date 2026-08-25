@@ -29,7 +29,12 @@ from cinegraph.adapters.workflow.langgraph.series_transcript_answer_tool import 
 from cinegraph.application.exceptions.errors import AgentRuntimeContextInvalidError
 from cinegraph.application.models.graph_rag import GraphRagResult
 from cinegraph.application.models.hybrid_grounded_answer import HybridGroundedAnswerResult
+from cinegraph.application.models.model_usage import ModelUsageLedger
 from cinegraph.application.models.series_agent_context import SeriesAgentRuntimeContext
+from cinegraph.application.service.agent_runtime_resilience import (
+    AgentRuntimeFailure,
+    RuntimeFailureCode,
+)
 from cinegraph.config.series_agent import (
     SERIES_STRUCTURED_RESPONSE_TOOL_MESSAGE,
     SERIES_STRUCTURED_RESPONSE_TOOL_NAME,
@@ -565,3 +570,22 @@ def test_real_default_middleware_bounds_repeated_tool_calls() -> None:
     result = agent.invoke("Loop", context())
     assert result.is_safe_refusal is True
     assert len(model._calls) <= configuration.model_call_limit
+
+
+def test_agent_deadline_blocks_delivery_and_observer_is_best_effort() -> None:
+    observed: list[ModelUsageLedger] = []
+    times = iter((0.0, 121.0))
+    agent = SeriesResearchAgent(
+        CompiledFakeModel(),
+        CompiledWorkflow(),
+        GraphService(),
+        middleware=(),
+        usage_observer=observed.append,
+        monotonic_clock=lambda: next(times),
+    )
+
+    with pytest.raises(AgentRuntimeFailure) as error:
+        agent.invoke("Question", context())
+
+    assert error.value.code is RuntimeFailureCode.EXECUTION_TIMEOUT
+    assert observed == [ModelUsageLedger()]

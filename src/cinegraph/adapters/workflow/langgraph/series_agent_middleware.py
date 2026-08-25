@@ -1,3 +1,5 @@
+from typing import cast
+
 from langchain.agents.middleware import (
     AgentMiddleware,
     LLMToolSelectorMiddleware,
@@ -10,6 +12,9 @@ from langchain_core.language_models import BaseChatModel
 
 from cinegraph.adapters.workflow.langgraph.series_runtime_context_integrity_middleware import (
     SeriesRuntimeContextIntegrityMiddleware,
+)
+from cinegraph.application.service.agent_runtime_resilience import (
+    TRANSIENT_MODEL_EXCEPTIONS,
 )
 from cinegraph.common.error_messages import WorkflowErrorMessages
 from cinegraph.common.prompts import SERIES_TOOL_SELECTOR_SYSTEM_PROMPT
@@ -30,7 +35,7 @@ def build_series_agent_middleware(
     tool_selector_model: BaseChatModel | None = None,
     configuration: SeriesAgentConfiguration = DEFAULT_SERIES_AGENT_CONFIGURATION,
 ) -> tuple[AgentMiddleware, ...]:
-    return (
+    middleware = (
         SeriesRuntimeContextIntegrityMiddleware(configuration),
         ModelCallLimitMiddleware(run_limit=configuration.model_call_limit, exit_behavior="end"),
         ToolCallLimitMiddleware(
@@ -52,7 +57,7 @@ def build_series_agent_middleware(
         ),
         ModelRetryMiddleware(
             max_retries=configuration.model_retry_count,
-            retry_on=(ConnectionError, TimeoutError),
+            retry_on=TRANSIENT_MODEL_EXCEPTIONS,
             on_failure="error",
             initial_delay=configuration.retry_initial_delay,
             jitter=configuration.retry_jitter,
@@ -63,4 +68,5 @@ def build_series_agent_middleware(
             always_include=[SERIES_TRANSCRIPT_TOOL_NAME, SERIES_GRAPH_TOOL_NAME],
             system_prompt=SERIES_TOOL_SELECTOR_SYSTEM_PROMPT,
         ),
-    )  # type: ignore[return-value]
+    )
+    return cast(tuple[AgentMiddleware, ...], middleware)

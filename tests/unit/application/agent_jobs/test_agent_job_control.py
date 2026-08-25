@@ -10,8 +10,19 @@ from cinegraph.adapters.repository.in_memory.in_memory_agent_job_repository impo
     InMemoryAgentJobRepository,
 )
 from cinegraph.application.models.agent_job import AgentJob, AgentJobEvent, AgentJobEventKind
+from cinegraph.application.models.audit import TelemetryOutcome, TelemetryStage
+from cinegraph.application.models.model_usage import (
+    ModelUsage,
+    ModelUsageLedger,
+    current_runtime_usage_observer,
+)
 from cinegraph.application.models.series_agent_result import SeriesAgentResult
 from cinegraph.application.service.agent_job_service import AgentJobService, SubmitAgentJobCommand
+from cinegraph.application.service.agent_runtime_resilience import (
+    AgentRuntimeBudgetExceeded,
+    AgentRuntimeFailure,
+    RuntimeFailureCode,
+)
 from cinegraph.common.error_messages import AgentJobErrorMessages
 from cinegraph.common.identifiers.agent_jobs import (
     canonical_request_fingerprint,
@@ -206,7 +217,7 @@ def test_terminal_transition_rolls_back_when_event_append_fails() -> None:
 
     repository._append_locked = fail_append
     with pytest.raises(ValueError):
-        repository.fail_with_event(job.job_id, "injected")
+        repository.fail_with_event(job.job_id, AgentJobErrorMessages.EXECUTION_FAILED)
     restored = repository.get(job.job_id)
     assert restored is not None and restored.status.value == "running"
     assert all(event.kind.value != "failed" for event in repository.list_events_after(job.job_id))
@@ -358,3 +369,132 @@ def test_rejection_uses_only_the_sanitized_dispatch_failure_code() -> None:
     rejected = job.reject(AgentJobErrorMessages.DISPATCH_UNAVAILABLE, datetime.now(UTC))
     assert rejected.started_at is None
     assert rejected.error_code == AgentJobErrorMessages.DISPATCH_UNAVAILABLE
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_code"),
+    [
+        (AgentRuntimeBudgetExceeded(), RuntimeFailureCode.BUDGET_EXCEEDED.value),
+        (
+            AgentRuntimeFailure(RuntimeFailureCode.EXECUTION_TIMEOUT),
+            RuntimeFailureCode.EXECUTION_TIMEOUT.value,
+        ),
+        (ConnectionError(), RuntimeFailureCode.PROVIDER_UNAVAILABLE.value),
+        (ValueError("private provider detail"), AgentJobErrorMessages.EXECUTION_FAILED),
+    ],
+)
+def test_runtime_failures_map_to_stable_private_event_codes(
+    error: Exception, expected_code: str
+) -> None:
+    class FailingConversation:
+        def execute(self, query):
+            del query
+            raise error
+
+    repository = InMemoryAgentJobRepository()
+    service = AgentJobService(repository, FailingConversation(), InlineAgentJobDispatcher())
+    command = _command()
+
+    job = service.submit(command)
+
+    assert job.status.value == "failed"
+    assert job.error_code == expected_code
+    payload = dict(service.events_after(job.job_id, command.owner_profile_id)[-1].payload)
+    assert payload == {"status": "failed", "error_code": expected_code}
+    assert "private provider detail" not in str(payload)
+
+
+def test_lifecycle_telemetry_is_exact_once_correlated_and_content_free() -> None:
+    usage = ModelUsage(
+        input_tokens=3,
+        cached_input_tokens=1,
+        output_tokens=2,
+        total_tokens=5,
+        cost_micros=7,
+        model_role="synthesis",
+        model_name="terra",
+        response_identity="response-1",
+    )
+    ledger = ModelUsageLedger(
+        entries=(usage,),
+        input_tokens=3,
+        cached_input_tokens=1,
+        output_tokens=2,
+        total_tokens=5,
+        cost_micros=7,
+    )
+
+    class UsageConversation:
+        def execute(self, query):
+            del query
+            observer = current_runtime_usage_observer()
+            assert observer is not None
+            observer(ledger)
+            return SeriesAgentResult(None, True)
+
+    class CollectingSink:
+        def __init__(self) -> None:
+            self.events = []
+
+        def emit(self, event) -> None:
+            self.events.append(event)
+
+    sink = CollectingSink()
+    times = iter((10.0, 10.25))
+    service = AgentJobService(
+        InMemoryAgentJobRepository(),
+        UsageConversation(),
+        InlineAgentJobDispatcher(),
+        telemetry_sink=sink,
+        monotonic_clock=lambda: next(times),
+    )
+    command = replace(_command(), request_id="request-123")
+
+    job = service.submit(command)
+    duplicate = service.submit(command)
+
+    assert duplicate.job_id == job.job_id
+    assert [event.stage for event in sink.events] == [
+        TelemetryStage.QUEUED,
+        TelemetryStage.RUNNING,
+        TelemetryStage.MODEL,
+        TelemetryStage.TERMINAL,
+    ]
+    assert sink.events[-1].outcome is TelemetryOutcome.SUCCESS
+    assert sink.events[-1].duration_ms == 250.0
+    assert sink.events[2].model_calls == 1
+    assert sink.events[2].input_tokens == 3
+    assert sink.events[2].output_tokens == 2
+    assert sink.events[2].estimated_cost_micros == 7
+    assert all(event.correlation_id == job.job_id for event in sink.events)
+    assert all(event.request_id == "request-123" for event in sink.events)
+    assert "A bounded question" not in repr(sink.events)
+
+
+def test_dispatch_rejection_emits_sanitized_terminal_telemetry() -> None:
+    class CollectingSink:
+        def __init__(self) -> None:
+            self.events = []
+
+        def emit(self, event) -> None:
+            self.events.append(event)
+
+    sink = CollectingSink()
+    times = iter((20.0, 20.01))
+    service = AgentJobService(
+        InMemoryAgentJobRepository(),
+        RefusalService(),
+        RejectingDispatcher(),
+        telemetry_sink=sink,
+        monotonic_clock=lambda: next(times),
+    )
+
+    job = service.submit(_command())
+
+    assert job.status.value == "failed"
+    assert [event.stage for event in sink.events] == [
+        TelemetryStage.QUEUED,
+        TelemetryStage.TERMINAL,
+    ]
+    assert sink.events[-1].failure_code == AgentJobErrorMessages.DISPATCH_UNAVAILABLE
+    assert sink.events[-1].outcome is TelemetryOutcome.FAILURE

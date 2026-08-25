@@ -29,7 +29,10 @@ from cinegraph.config import (
     AgentJobConfiguration,
 )
 from cinegraph.domain.models.identity import SessionPrincipal
-from cinegraph.ports.agent_jobs.agent_job_repository import AgentJobIdempotencyConflictError
+from cinegraph.ports.agent_jobs.agent_job_repository import (
+    AgentJobIdempotencyConflictError,
+    AgentJobUnavailableError,
+)
 
 
 def _response(job: AgentJob, status_url: str, events_url: str) -> AgentJobResponse:
@@ -104,7 +107,9 @@ class AgentJobEventStream:
         self._started = clock()
         self._heartbeat_at = self._started
         self._emitted = 0
-        self._pending: list[bytes] = []
+        # Keep event metadata alongside frames so the replay cursor advances only
+        # after a frame has actually been yielded to the client.
+        self._pending: list[tuple[int, bytes, bool]] = []
         self._terminal = False
 
     def __aiter__(self) -> "AgentJobEventStream":
@@ -131,28 +136,35 @@ class AgentJobEventStream:
                 self._job_id, self._owner_profile_id, self._sequence
             )
             batch = events[:batch_size]
-            self._pending.extend(_sse(event) for event in batch)
-            if self._pending:
-                self._sequence = batch[-1].sequence
-                if any(
-                    item.kind
+            self._pending.extend(
+                (
+                    event.sequence,
+                    _sse(event),
+                    event.kind
                     in {
                         AgentJobEventKind.SUCCEEDED,
                         AgentJobEventKind.SAFE_REFUSAL,
                         AgentJobEventKind.FAILED,
-                    }
-                    for item in batch
-                ):
-                    self._terminal = True
+                    },
+                )
+                for event in batch
+            )
+            if self._pending:
+                sequence, frame, terminal = self._pending.pop(0)
+                self._sequence = sequence
+                self._terminal = terminal
                 self._emitted += 1
-                return self._pending.pop(0)
+                return frame
             now = self._clock()
             if now - self._heartbeat_at >= self._configuration.sse_heartbeat_interval_seconds:
                 self._heartbeat_at = now
                 return b": heartbeat\n\n"
             await self._sleeper(self._configuration.sse_poll_interval_seconds)
+        sequence, frame, terminal = self._pending.pop(0)
+        self._sequence = sequence
+        self._terminal = terminal
         self._emitted += 1
-        return self._pending.pop(0)
+        return frame
 
 
 async def _async_sleep(seconds: float) -> None:
@@ -223,11 +235,16 @@ def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
                     corpus_access_scope=principal.corpus_access_scope,
                     candidate_episodes=candidates,
                     idempotency_key=str(key),
+                    request_id=getattr(request.state, "request_id", None),
                 )
             )
         except AgentJobIdempotencyConflictError as error:
             raise HTTPException(
                 status_code=409, detail=AgentJobErrorMessages.IDEMPOTENCY_CONFLICT
+            ) from error
+        except AgentJobUnavailableError as error:
+            raise HTTPException(
+                status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE
             ) from error
         status_url, events_url = _resource_urls(request, job.job_id)
         job_response = _response(job, status_url, events_url)
@@ -243,7 +260,12 @@ def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
         service = _context(request).agent_job_service
         if service is None:
             raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE)
-        job = service.get(job_id, principal.profile_id)
+        try:
+            job = service.get(job_id, principal.profile_id)
+        except AgentJobUnavailableError as error:
+            raise HTTPException(
+                status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE
+            ) from error
         if job is None:
             raise HTTPException(status_code=404, detail=AgentJobErrorMessages.JOB_NOT_FOUND)
         status_url, events_url = _resource_urls(request, job.job_id)
@@ -259,7 +281,12 @@ def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
         service = _context(request).agent_job_service
         if service is None:
             raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE)
-        job = service.get(job_id, principal.profile_id)
+        try:
+            job = service.get(job_id, principal.profile_id)
+        except AgentJobUnavailableError as error:
+            raise HTTPException(
+                status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE
+            ) from error
         if job is None:
             raise HTTPException(status_code=404, detail=AgentJobErrorMessages.JOB_NOT_FOUND)
         sequence = 0

@@ -199,3 +199,32 @@ def test_non_green_collection_fails_readiness_after_schema_verification() -> Non
         match=QdrantErrorMessages.COLLECTION_STATUS_MUST_BE_GREEN,
     ):
         QdrantTranscriptCollectionProvisioner(client).provision()
+
+
+def test_readiness_is_non_mutating_and_requires_complete_green_schema() -> None:
+    ready = FakeQdrantCollectionClient(
+        exists=True,
+        payload_schema=complete_payload_schema(),
+    )
+    missing = FakeQdrantCollectionClient(exists=False)
+    red = FakeQdrantCollectionClient(
+        exists=True,
+        payload_schema=complete_payload_schema(),
+        status=models.CollectionStatus.RED,
+    )
+    incomplete = FakeQdrantCollectionClient(exists=True)
+
+    assert QdrantTranscriptCollectionProvisioner(ready).is_ready() is True
+    assert QdrantTranscriptCollectionProvisioner(missing).is_ready() is False
+    assert QdrantTranscriptCollectionProvisioner(red).is_ready() is False
+    assert QdrantTranscriptCollectionProvisioner(incomplete).is_ready() is False
+    assert (
+        ready.create_calls
+        == missing.create_calls
+        == red.create_calls
+        == incomplete.create_calls
+        == []
+    )
+    assert (
+        ready.index_calls == missing.index_calls == red.index_calls == incomplete.index_calls == []
+    )

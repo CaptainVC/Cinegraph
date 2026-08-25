@@ -23,9 +23,13 @@ This branch establishes the first production boundaries:
   and LangGraph/LangChain orchestration boundaries;
 - fail-closed corpus entitlements that restrict guest access to Modern Family
   seasons 1 and 2 independently of spoiler/watch-progress policy;
-- bounded owner-scoped agent jobs at `/api/v1/agent/jobs` with replayable SSE;
-  the Phase 32 queue, job store, and checkpoint are process-local and not crash
-  durable. See `docs/agent-jobs-api.md` for the request and reconnect contract.
+- bounded owner-scoped agent jobs at `/api/v1/agent/jobs` with a durable SQL job/event
+  store, atomic lifecycle transitions, and cursor-correct replayable SSE; the bounded
+  dispatcher and LangGraph checkpoint remain process-local pending worker recovery
+  supervision. See `docs/agent-jobs-api.md` for the request and reconnect contract.
+- content-free structured runtime telemetry, correlated request/job lifecycle events,
+  classified transient retries, cooperative deadlines, and strict cross-model token/
+  estimated-cost budgets for the series research agent;
 - ports, in-memory adapters, focused unit tests, and centralized identifiers.
 - a same-origin guest/auth web experience for spoiler-scoped, citation-backed chat.
 - an evidence-backed recommendation workflow that ranks only deterministically
@@ -229,8 +233,8 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The current branch baseline is 87.81% total branch coverage (766 tests, measured with
-`pytest-cov` on 2026-08-24); the centralized coverage configuration floors it at 87%
+The current branch baseline is 87.29% total branch coverage (804 passed and 4 skipped,
+measured with `pytest-cov` on 2026-08-25); the centralized coverage configuration floors it at 87%
 so coverage cannot silently regress. Coverage XML and JSON reports are generated
 locally and uploaded by CI. Ruff syntax/error classes, Pyflakes, and import sorting are
 gated across the repository. Formatter enforcement remains intentionally staged to

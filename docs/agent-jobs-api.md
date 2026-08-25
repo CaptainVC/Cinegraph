@@ -23,10 +23,13 @@ running, and terminal events, emits bounded heartbeats while waiting, and closes
 after a terminal event or configured duration/event limit. Responses set
 `Cache-Control: no-cache, no-transform` and `X-Accel-Buffering: no`.
 
-The queue, repository, and checkpoint are process-local in Phase 32 and are not
-crash durable; a later persistence adapter will replace them. Stable errors are
-`401` unauthenticated, `404` missing/cross-owner, `409` idempotency conflict,
-`422` malformed request or replay cursor, and `503` unavailable job system.
+Jobs and append-only replay events are durable in SQL as of Phase 34. Owner/key
+idempotency, status/event transitions, deterministic event IDs, and sequence
+uniqueness are enforced transactionally. The bounded dispatcher and LangGraph
+checkpoint remain process-local: worker lease/requeue and checkpoint recovery are
+deployment-phase work. Stable errors are `401` unauthenticated, `404`
+missing/cross-owner, `409` idempotency conflict, `422` malformed request or replay
+cursor, and `503` unavailable job system.
 
 The complete state machine is `queued -> running -> succeeded`,
 `queued -> running -> safe_refusal`, or `queued -> running -> failed`.

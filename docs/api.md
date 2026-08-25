@@ -18,7 +18,9 @@ requests; development uses usable non-Secure names.
 ## Contracts
 
 - `GET /health/live` checks the process.
-- `GET /health/ready` checks that the configured Qdrant collection is reachable.
+- `GET /health/ready` checks SQL access to the durable agent-job schema and requires
+  the configured Qdrant collection to be green with the expected dense, sparse, and
+  payload-index schema.
 - `POST /api/v1/auth/guest` issues an eight-hour guest session.
 - `POST /api/v1/auth/register` creates an account and session.
 - `POST /api/v1/auth/login` authenticates an account.
