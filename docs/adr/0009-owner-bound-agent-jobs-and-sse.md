@@ -18,8 +18,8 @@ provider state, exception text, and secrets never cross this boundary.
 
 ## Consequences
 
-The Phase 32 queue, in-memory job store, and LangGraph checkpoint are process
-local and not crash durable. A later persistence boundary can replace these
-injected ports without changing the HTTP contract. Guest access derives only
-the entitled Modern Family S1/S2 catalogue candidates; no browser watch state
-or candidate IDs are trusted.
+Phase 34 replaced the in-memory production job store with a durable SQL adapter
+without changing this HTTP contract. The bounded dispatcher and LangGraph checkpoint
+remain process-local and require deployment-phase worker recovery. Guest access
+derives only the entitled Modern Family S1/S2 catalogue candidates; no browser watch
+state or candidate IDs are trusted.

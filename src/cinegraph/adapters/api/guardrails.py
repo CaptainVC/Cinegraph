@@ -69,8 +69,7 @@ class InMemoryTokenBucketRateLimiter:
             elapsed = max(0.0, now - bucket.updated_at)
             bucket.tokens = min(
                 float(self._configuration.rate_limit_capacity),
-                bucket.tokens
-                + elapsed * self._configuration.rate_limit_refill_per_second,
+                bucket.tokens + elapsed * self._configuration.rate_limit_refill_per_second,
             )
             bucket.updated_at = now
             if bucket.tokens >= cost:
@@ -86,23 +85,16 @@ class InMemoryTokenBucketRateLimiter:
                 remaining=max(0, math.floor(bucket.tokens)),
                 retry_after_seconds=max(
                     1,
-                    math.ceil(
-                        missing
-                        / self._configuration.rate_limit_refill_per_second
-                    ),
+                    math.ceil(missing / self._configuration.rate_limit_refill_per_second),
                 ),
             )
 
     def _make_capacity_for_new_bucket(self, now: float) -> None:
         if len(self._buckets) < self._configuration.maximum_rate_limit_buckets:
             return
-        idle_before = (
-            now - self._configuration.rate_limit_bucket_idle_ttl_seconds
-        )
+        idle_before = now - self._configuration.rate_limit_bucket_idle_ttl_seconds
         idle_keys = [
-            key
-            for key, bucket in self._buckets.items()
-            if bucket.updated_at <= idle_before
+            key for key, bucket in self._buckets.items() if bucket.updated_at <= idle_before
         ]
         for key in idle_keys:
             del self._buckets[key]
@@ -280,9 +272,7 @@ class ApiGuardrailMiddleware(BaseHTTPMiddleware):
             response.headers["Cache-Control"] = DEFAULT_AGENT_JOB_CONFIGURATION.sse_cache_control
         else:
             response.headers["Cache-Control"] = "no-store"
-        response.headers["Permissions-Policy"] = (
-            "camera=(), microphone=(), geolocation=()"
-        )
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -290,34 +280,35 @@ class ApiGuardrailMiddleware(BaseHTTPMiddleware):
             "object-src 'none'; base-uri 'none'; form-action 'self'; "
             "frame-ancestors 'none'"
         )
-        response.headers["RateLimit-Limit"] = str(
-            self._configuration.rate_limit_capacity
-        )
+        response.headers["RateLimit-Limit"] = str(self._configuration.rate_limit_capacity)
         response.headers["RateLimit-Remaining"] = str(decision.remaining)
         runtime_context = getattr(request.app.state, "cinegraph_context", None)
         if (
             runtime_context is not None
             and runtime_context.settings.environment is RuntimeEnvironment.PRODUCTION
         ):
-            response.headers["Strict-Transport-Security"] = (
-                "max-age=31536000; includeSubDomains"
-            )
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         duration_ms = max(
             0.0,
             (self._services.monotonic_clock() - started_at) * 1_000,
         )
-        self._services.audit_sink.emit(
-            HttpAuditEvent(
-                occurred_at=self._services.utc_clock(),
-                request_id=request_id,
-                method=request.method,
-                path=request.url.path,
-                status_code=response.status_code,
-                duration_ms=round(duration_ms, 3),
-                outcome=self._outcome(response.status_code),
-                principal_kind=request.state.principal_kind,
+        # Audit is best effort. A broken logger must never alter the response.
+        try:
+            self._services.audit_sink.emit(
+                HttpAuditEvent(
+                    occurred_at=self._services.utc_clock(),
+                    request_id=request_id,
+                    method=request.method,
+                    path=request.url.path,
+                    status_code=response.status_code,
+                    duration_ms=round(duration_ms, 3),
+                    outcome=self._outcome(response.status_code),
+                    principal_kind=request.state.principal_kind,
+                )
             )
-        )
+        except Exception:
+            # Do not expose or recursively log sink exception details.
+            pass
         return response
 
     @staticmethod

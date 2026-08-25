@@ -14,6 +14,7 @@ from cinegraph.application.models.agent_job import (
     JsonPayload,
 )
 from cinegraph.application.models.series_agent_result import SeriesAgentResult
+from cinegraph.application.serialization.agent_job_payload import result_event_payload
 from cinegraph.common.error_messages import AgentJobErrorMessages
 from cinegraph.ports.agent_jobs.agent_job_repository import (
     AgentJobIdempotencyConflictError,
@@ -116,7 +117,7 @@ class InMemoryAgentJobRepository:
                     else AgentJobEventKind.SUCCEEDED
                 )
                 try:
-                    self._append_locked(job_id, kind, _result_payload(result))
+                    self._append_locked(job_id, kind, result_event_payload(result))
                 except Exception:
                     if prior is not None:
                         self._jobs[job_id] = prior
@@ -239,30 +240,3 @@ class InMemoryAgentJobRepository:
             return tuple(event for event in self._events[job_id] if event.sequence > sequence)
 
     events_after = list_events_after
-
-
-def _result_payload(result: SeriesAgentResult) -> dict[str, object]:
-    if result.is_safe_refusal:
-        return {"status": "safe_refusal", "safe_refusal": True}
-    citations = tuple(
-        {
-            "kind": item.kind,
-            "episode_id": str(item.episode.episode_id),
-            "season_number": item.episode.position.season_number,
-            "episode_number": item.episode.position.episode_number,
-            "start_ms": item.start_ms,
-            "end_ms": item.end_ms,
-            **(
-                {"segment_id": str(item.segment_id)}
-                if item.kind == "transcript"
-                else {"claim_id": str(item.claim_id), "evidence_id": str(item.evidence_id)}
-            ),
-        }
-        for item in result.citations
-    )
-    return {
-        "status": "succeeded",
-        "answer": result.answer,
-        "used_tools": tuple(result.used_tools),
-        "citations": citations,
-    }

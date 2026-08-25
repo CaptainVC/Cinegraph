@@ -33,6 +33,5 @@ defense in depth; authorization remains structural and application-owned.
 ## Consequences
 
 The adapter can be tested with deterministic local chat models and injected
-checkpointers without an API key. Phase 32 may expose the typed result through
-HTTP/SSE, but does not need to expose LangGraph state, prompts, context, or raw
-provider payloads.
+checkpointers without an API key. Phase 32 exposes the typed result through HTTP/SSE
+without exposing LangGraph state, prompts, context, or raw provider payloads.

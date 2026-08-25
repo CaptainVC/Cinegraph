@@ -1,5 +1,6 @@
 import json
-from collections.abc import Sequence
+import time
+from collections.abc import Callable, Sequence
 from typing import Any
 from uuid import UUID
 
@@ -21,11 +22,21 @@ from cinegraph.adapters.workflow.langgraph.series_graph_rag_tool import build_se
 from cinegraph.adapters.workflow.langgraph.series_transcript_answer_tool import (
     build_series_transcript_answer_tool,
 )
+from cinegraph.application.models.model_usage import (
+    AgentUsageBudget,
+    ModelUsageLedger,
+    current_runtime_usage_observer,
+)
 from cinegraph.application.models.series_agent_context import SeriesAgentRuntimeContext
 from cinegraph.application.models.series_agent_result import SeriesAgentCitation, SeriesAgentResult
+from cinegraph.application.service.agent_runtime_resilience import RuntimeDeadline
 from cinegraph.application.service.graph_rag_service import GraphRagQueryService
 from cinegraph.common.error_messages import SeriesAgentErrorMessages
 from cinegraph.common.prompts import SERIES_AGENT_SYSTEM_PROMPT
+from cinegraph.config.agent_runtime_controls import (
+    DEFAULT_AGENT_RUNTIME_CONTROLS,
+    AgentRuntimeControlConfiguration,
+)
 from cinegraph.config.series_agent import (
     DEFAULT_SERIES_AGENT_CONFIGURATION,
     SERIES_GRAPH_TOOL_NAME,
@@ -62,14 +73,20 @@ class SeriesResearchAgent:
         tool_selector_model: BaseChatModel | None = None,
         middleware: Sequence[AgentMiddleware] | None = None,
         configuration: SeriesAgentConfiguration = DEFAULT_SERIES_AGENT_CONFIGURATION,
+        usage_controls: AgentRuntimeControlConfiguration = DEFAULT_AGENT_RUNTIME_CONTROLS,
+        usage_observer: Callable[[ModelUsageLedger], None] | None = None,
+        monotonic_clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._configuration = configuration
+        self._usage_controls = usage_controls
+        self._usage_observer = usage_observer
+        self._monotonic_clock = monotonic_clock
         stack = (
             build_series_agent_middleware(tool_selector_model, configuration)
             if middleware is None
             else tuple(middleware)
         )
-        self._agent: Any = create_agent(  # type: ignore[misc]
+        self._agent: Any = create_agent(
             model=model,
             tools=[
                 build_series_transcript_answer_tool(transcript_workflow, configuration),
@@ -97,13 +114,33 @@ class SeriesResearchAgent:
         ):
             raise ValueError(SeriesAgentErrorMessages.QUESTION_INVALID)
         invocation: dict[str, object] = {"messages": [{"role": "user", "content": question}]}
-        if thread_id is None:
-            state = self._agent.invoke(invocation, context=context)
-        else:
-            state = self._agent.invoke(
-                invocation, context=context, config={"configurable": {"thread_id": str(thread_id)}}
-            )
-        return self._project(state, context, question)
+        budget = AgentUsageBudget(self._usage_controls)
+        deadline = RuntimeDeadline(
+            ends_at=(self._monotonic_clock() + self._usage_controls.max_execution_duration_seconds),
+            clock=self._monotonic_clock,
+        )
+        try:
+            with budget.scope():
+                if thread_id is None:
+                    state = self._agent.invoke(invocation, context=context)
+                else:
+                    state = self._agent.invoke(
+                        invocation,
+                        context=context,
+                        config={"configurable": {"thread_id": str(thread_id)}},
+                    )
+                # Python threads cannot safely cancel an in-flight provider call.
+                # Enforce the aggregate deadline before any result is projected.
+                deadline.check()
+                result = self._project(state, context, question)
+            return result
+        finally:
+            observer = self._usage_observer or current_runtime_usage_observer()
+            if observer is not None:
+                try:
+                    observer(budget.ledger)
+                except Exception:
+                    pass
 
     def _project(
         self,
@@ -268,8 +305,11 @@ class SeriesResearchAgent:
                     continue
                 for item in evidence:
                     citation = SeriesResearchAgent._project_graph_evidence(item, claim_id, context)
-                    if citation is not None and citation.evidence_id not in known_ids:
-                        known_ids.add(citation.evidence_id)
+                    if citation is None or not isinstance(citation.evidence_id, UUID):
+                        continue
+                    evidence_id = citation.evidence_id
+                    if evidence_id not in known_ids:
+                        known_ids.add(evidence_id)
                         citations.append(citation)
             except (ValueError, TypeError, KeyError, StopIteration):
                 continue

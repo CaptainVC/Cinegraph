@@ -9,6 +9,7 @@ from types import MappingProxyType
 from typing import Mapping, TypeAlias
 from uuid import UUID
 
+from cinegraph.application.models.agent_runtime import ALLOWED_AGENT_JOB_FAILURE_CODES
 from cinegraph.application.models.series_agent_result import SeriesAgentResult
 from cinegraph.common.error_messages import AgentJobErrorMessages
 from cinegraph.domain.models.access import CorpusAccessScope
@@ -63,6 +64,9 @@ class AgentJob:
     finished_at: datetime | None = None
     result: SeriesAgentResult | None = None
     error_code: str | None = None
+    # Operational correlation only; deliberately excluded from the canonical
+    # idempotency fingerprint and all public serializers.
+    request_id: str | None = None
 
     @property
     def profile_id(self) -> UUID:
@@ -117,6 +121,11 @@ class AgentJob:
             or re.fullmatch(r"[0-9a-f]{64}", self.request_fingerprint) is None
         ):
             raise ValueError(AgentJobErrorMessages.JOB_FINGERPRINT)
+        if (
+            self.request_id is not None
+            and re.fullmatch(r"[A-Za-z0-9._-]{1,64}", self.request_id) is None
+        ):
+            raise ValueError("request_id is not a sanitized request identifier")
         _utc(self.created_at, "created_at")
         if self.started_at is not None:
             _utc(self.started_at, "started_at")
@@ -169,6 +178,11 @@ class AgentJob:
             and self.error_code != AgentJobErrorMessages.DISPATCH_UNAVAILABLE
         ):
             raise ValueError(AgentJobErrorMessages.JOB_FAILED_STATE)
+        if (
+            self.status is AgentJobStatus.FAILED
+            and self.error_code not in ALLOWED_AGENT_JOB_FAILURE_CODES
+        ):
+            raise ValueError(AgentJobErrorMessages.JOB_ERROR_CODE)
 
     def start(self, occurred_at: datetime) -> "AgentJob":
         _utc(occurred_at, "occurred_at")

@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Protocol, TypeVar
 
+import sqlalchemy as sa
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import InMemorySaver
 
@@ -15,9 +16,13 @@ from cinegraph.adapters.llm.langchain_chat_model_gateway import (
 from cinegraph.adapters.llm.langchain_recommendation_ranker import (
     LangChainEpisodeRecommendationRanker,
 )
+from cinegraph.adapters.observability import JsonLoggingRuntimeTelemetrySink
+from cinegraph.adapters.persistence.sqlalchemy_agent_job_repository import (
+    SqlAlchemyAgentJobRepository,
+)
 from cinegraph.adapters.persistence.sqlalchemy_graph_claim_reader import SqlAlchemyGraphClaimReader
-from cinegraph.adapters.repository.in_memory.in_memory_agent_job_repository import (
-    InMemoryAgentJobRepository,
+from cinegraph.adapters.qdrant.qdrant_collection_provisioner import (
+    QdrantTranscriptCollectionProvisioner,
 )
 from cinegraph.adapters.repository.in_memory.in_memory_conversation_thread_binding_repository import (
     InMemoryConversationThreadBindingRepository,
@@ -40,6 +45,7 @@ from cinegraph.application.models.hybrid_grounded_answer import (
     HybridGroundedAnswerQuery,
     HybridGroundedAnswerResult,
 )
+from cinegraph.application.models.model_usage import usage_callback
 from cinegraph.application.service.agent_job_service import AgentJobService, AgentJobServiceProtocol
 from cinegraph.application.service.conversational_series_chat_service import (
     ConversationalSeriesChatService,
@@ -124,6 +130,10 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         model=openai.rag_answer_model,
         api_key=openai.openai_api_key,
         temperature=0,
+        timeout=DEFAULT_AGENT_JOB_CONFIGURATION.provider_timeout_seconds,
+        max_retries=0,
+        store=False,
+        callbacks=[usage_callback("grounded_answer", openai.rag_answer_model)],
     )
     answer_workflow = HybridGroundedAnswerGraphWorkflow(
         HybridGroundedAnswerService(
@@ -131,22 +141,19 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
             LangChainChatModelGateway.from_chat_model(chat_model),
         )
     )
-    recommendation_model = (
-        chat_model
-        if openai.recommendation_model == openai.rag_answer_model
-        else ChatOpenAI(
-            model=openai.recommendation_model,
-            api_key=openai.openai_api_key,
-            temperature=0,
-        )
+    recommendation_model = ChatOpenAI(
+        model=openai.recommendation_model,
+        api_key=openai.openai_api_key,
+        temperature=0,
+        timeout=DEFAULT_AGENT_JOB_CONFIGURATION.provider_timeout_seconds,
+        max_retries=0,
+        store=False,
     )
     recommendation_workflow = EpisodeRecommendationGraphWorkflow(
         EpisodeRecommendationService(
             loaded_catalogue.manifest,
             root.hybrid_search_service,
-            LangChainEpisodeRecommendationRanker.from_chat_model(
-                recommendation_model
-            ),
+            LangChainEpisodeRecommendationRanker.from_chat_model(recommendation_model),
         )
     )
     graph_rag_service = GraphRagQueryService(
@@ -161,6 +168,7 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         timeout=DEFAULT_AGENT_JOB_CONFIGURATION.provider_timeout_seconds,
         max_retries=0,
         store=False,
+        callbacks=[usage_callback("synthesis", openai.agent_synthesis_model)],
     )
     selector_model = ChatOpenAI(
         model=openai.agent_tool_selector_model,
@@ -170,6 +178,7 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         timeout=DEFAULT_AGENT_JOB_CONFIGURATION.provider_timeout_seconds,
         max_retries=0,
         store=False,
+        callbacks=[usage_callback("selector", openai.agent_tool_selector_model)],
     )
     conversation_service = ConversationalSeriesChatService(
         ServerOwnedWatchProgressRepository(),
@@ -183,16 +192,20 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         ),
     )
     agent_job_service = AgentJobService(
-        InMemoryAgentJobRepository(),
+        SqlAlchemyAgentJobRepository(root.identity_engine),
         conversation_service,
         BoundedThreadPoolAgentJobDispatcher(),
+        telemetry_sink=JsonLoggingRuntimeTelemetrySink(),
     )
 
     def readiness_probe() -> bool:
         try:
-            return root.qdrant_client.collection_exists(
-                root.qdrant_schema.collection_name
-            )
+            with root.identity_engine.connect() as connection:
+                connection.execute(sa.text("SELECT 1 FROM agent_jobs LIMIT 1"))
+            return QdrantTranscriptCollectionProvisioner(
+                root.qdrant_client,
+                root.qdrant_schema,
+            ).is_ready()
         except Exception:
             return False
 

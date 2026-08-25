@@ -16,14 +16,21 @@ uv run python scripts/migrate_database.py upgrade
 uv run python scripts/migrate_database.py downgrade -1
 ```
 
-The database includes the shared identity tables plus `ingestion_jobs` and append-only
-`ingestion_job_events`. The API never auto-migrates. Run the migration command before
-using the durable planning CLI.
+The database includes the shared identity tables, `ingestion_jobs` with append-only
+`ingestion_job_events`, and owner-scoped `agent_jobs` with append-only
+`agent_job_events`. The API never auto-migrates. Run the migration command before
+using the durable planning CLI or agent-job API.
 
 Migration `0003` adds `graph_entities`, `graph_entity_aliases`, `graph_claims`, and
 `graph_claim_evidence`. Claims are stable semantic rows while evidence is source-
 version scoped and replaced transactionally. The relational database remains the
 graph system of record; traversal and authorization are a later application layer.
+
+Migration `0004` adds durable asynchronous agent jobs and replay events. It enforces
+owner/key idempotency, coherent lifecycle timestamps/results, a stable failure-code
+allowlist, monotonic positive event sequences, and cascade cleanup of job events.
+Guest owner profile IDs deliberately have no account foreign key because guest
+sessions are not user-account rows.
 
 The migration environment reads centralized settings and passes the URL only to the
 migration engine; it never prints the URL. The initial migration creates

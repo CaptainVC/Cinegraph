@@ -43,7 +43,7 @@ def test_graph_claim_migration_roundtrips_and_reverts_ingestion_kind(tmp_path: P
         with engine.connect() as connection:
             assert connection.execute(
                 text("SELECT version_num FROM alembic_version")
-            ).scalar_one() == ("0003_graph_claims")
+            ).scalar_one() == ("0004_agent_jobs")
     finally:
         engine.dispose()
     assert "graph_claim_extraction" in _kind_check_sql(database_path)
@@ -63,6 +63,6 @@ def test_graph_claim_migration_roundtrips_and_reverts_ingestion_kind(tmp_path: P
     upgrade_database(settings)
     engine = create_engine(f"sqlite+pysqlite:///{database_path.as_posix()}")
     try:
-        assert "graph_claims" in inspect(engine).get_table_names()
+        assert {"graph_claims", "agent_jobs"} <= set(inspect(engine).get_table_names())
     finally:
         engine.dispose()

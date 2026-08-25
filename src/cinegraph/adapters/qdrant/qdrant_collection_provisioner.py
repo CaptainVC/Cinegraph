@@ -47,18 +47,14 @@ class QdrantTranscriptCollectionProvisioner:
     def __init__(
         self,
         client: QdrantCollectionClient,
-        schema: QdrantTranscriptCollectionSchema = (
-            DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA
-        ),
+        schema: QdrantTranscriptCollectionSchema = (DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA),
     ) -> None:
         self._client = client
         self._schema = schema
 
     # Create missing structures, then fail closed unless the resulting schema is ready.
     def provision(self) -> QdrantCollectionProvisioningResult:
-        collection_created = not self._client.collection_exists(
-            self._schema.collection_name
-        )
+        collection_created = not self._client.collection_exists(self._schema.collection_name)
         if collection_created:
             self._client.create_collection(
                 self._schema.collection_name,
@@ -86,6 +82,16 @@ class QdrantTranscriptCollectionProvisioner:
             collection_created=collection_created,
             payload_indexes_created=created_indexes,
         )
+
+    def is_ready(self) -> bool:
+        """Check existence, green status, vectors, and payload indexes without mutation."""
+        try:
+            if not self._client.collection_exists(self._schema.collection_name):
+                return False
+            self._validate_ready(self._client.get_collection(self._schema.collection_name))
+        except Exception:
+            return False
+        return True
 
     def _create_missing_payload_indexes(
         self,
@@ -117,24 +123,16 @@ class QdrantTranscriptCollectionProvisioner:
             or dense.size != self._schema.dense_vector_size
             or dense.distance is not self._schema.distance
         ):
-            raise InvalidModelError(
-                QdrantErrorMessages.DENSE_VECTOR_CONFIGURATION_MUST_MATCH
-            )
+            raise InvalidModelError(QdrantErrorMessages.DENSE_VECTOR_CONFIGURATION_MUST_MATCH)
         sparse_vectors = collection.config.params.sparse_vectors or {}
         if self._schema.sparse_vector_name not in sparse_vectors:
-            raise InvalidModelError(
-                QdrantErrorMessages.SPARSE_VECTOR_CONFIGURATION_MUST_MATCH
-            )
+            raise InvalidModelError(QdrantErrorMessages.SPARSE_VECTOR_CONFIGURATION_MUST_MATCH)
 
     def _validate_ready(self, collection: models.CollectionInfo) -> None:
         self._validate_vectors(collection)
         if collection.status is not models.CollectionStatus.GREEN:
-            raise InvalidModelError(
-                QdrantErrorMessages.COLLECTION_STATUS_MUST_BE_GREEN
-            )
+            raise InvalidModelError(QdrantErrorMessages.COLLECTION_STATUS_MUST_BE_GREEN)
         for definition in self._schema.payload_indexes:
             existing = collection.payload_schema.get(definition.field_name)
             if existing is None or existing.data_type is not definition.field_schema:
-                raise InvalidModelError(
-                    QdrantErrorMessages.PAYLOAD_INDEX_CONFIGURATION_MUST_MATCH
-                )
+                raise InvalidModelError(QdrantErrorMessages.PAYLOAD_INDEX_CONFIGURATION_MUST_MATCH)
