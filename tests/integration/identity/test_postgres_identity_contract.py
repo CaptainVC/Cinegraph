@@ -139,7 +139,7 @@ def test_postgres_migration_and_identity_roundtrip() -> None:
         with engine.connect() as connection:
             assert connection.execute(text("SELECT 1")).scalar_one() == 1
             assert connection.execute(text("SELECT version_num FROM alembic_version")).scalar_one() == (
-                "0003_graph_claims"
+                "0004_agent_jobs"
             )
     finally:
         engine.dispose()
