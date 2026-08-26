@@ -17,6 +17,48 @@ const SPOILER_COPY = Object.freeze({
   strict: "Use only episodes explicitly covered by the selected boundary.",
 });
 
+const UI_COPY = Object.freeze({
+  authTitle: Object.freeze({
+    login: "Continue your story",
+    register: "Create your profile",
+  }),
+  busy: Object.freeze({
+    guest: "Opening the library…",
+    auth: "Please wait…",
+    logout: "Ending…",
+  }),
+  assistant: Object.freeze({
+    loadingLabel: "Searching the story",
+    loadingDescription: "Cinegraph is retrieving evidence",
+    name: "Cinegraph",
+    safeRefusal: "Safe refusal",
+    fallback: "I couldn’t find enough safe, grounded evidence in your current story scope. Try changing the boundary or asking about another moment.",
+    interrupted: "Request interrupted",
+  }),
+  scope: Object.freeze({
+    noCorpus: "No corpus is available",
+    guestTitle: "Guest access",
+    authenticatedTitle: "Authenticated library",
+  }),
+  errors: Object.freeze({
+    requestFailed: "The request could not be completed.",
+    unreachable: "Cinegraph could not be reached. Please try again.",
+  }),
+  service: Object.freeze({ ready: "Ready", unavailable: "Unavailable" }),
+});
+
+const AUTH_MODES = Object.freeze(["login", "register"]);
+const SCOPE_DRAWER_QUERY = "(max-width: 900px)";
+const SCOPE_DRAWER_MEDIA = window.matchMedia(SCOPE_DRAWER_QUERY);
+const FOCUSABLE_SELECTOR = [
+  "a[href]",
+  "button:not([disabled]):not([tabindex='-1'])",
+  "input:not([disabled])",
+  "select:not([disabled])",
+  "textarea:not([disabled])",
+  "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
 const state = {
   session: null,
   catalogue: null,
@@ -57,12 +99,21 @@ const elements = {
   registerPanel: document.querySelector("#register-panel"),
   authError: document.querySelector("#auth-error"),
   toast: document.querySelector("#toast"),
+  skipLink: document.querySelector(".skip-link"),
+  topbar: document.querySelector(".topbar"),
+  corpusPanel: document.querySelector(".corpus-panel"),
+  conversationPanel: document.querySelector(".conversation-panel"),
+  scopeCloseButton: document.querySelector("#scope-close-button"),
+  scopeBackdrop: document.querySelector(".scope-backdrop"),
 };
+
+let authReturnFocus = null;
+let scopeReturnFocus = null;
 
 class ApiError extends Error {
   constructor(response, payload) {
     const detail = payload?.error;
-    super(detail?.message || "The request could not be completed.");
+    super(detail?.message || UI_COPY.errors.requestFailed);
     this.status = response.status;
     this.code = detail?.code || "request_failed";
     this.requestId = detail?.request_id || response.headers.get("X-Request-ID");
@@ -108,11 +159,30 @@ async function apiRequest(path, options = {}) {
 }
 
 function setBusy(button, busy, busyText) {
-  if (!button.dataset.originalText) {
-    button.dataset.originalText = button.textContent.trim();
+  if (!button) return;
+  if (!button.dataset.originalAriaCaptured) {
+    button.dataset.originalAriaCaptured = "true";
+    button.dataset.originalAriaLabel = button.getAttribute("aria-label") || "";
+    button.dataset.hadAriaLabel = button.hasAttribute("aria-label") ? "true" : "false";
   }
+  const labelNode = [...button.childNodes].find(
+    (node) => node.nodeType === Node.TEXT_NODE && node.textContent.trim(),
+  );
+  if (labelNode && !button.dataset.originalText) {
+    button.dataset.originalText = labelNode.textContent;
+  }
+  const originalText = button.dataset.originalText || "";
+  if (labelNode) labelNode.textContent = busy ? ` ${busyText} ` : originalText;
   button.disabled = busy;
-  button.textContent = busy ? busyText : button.dataset.originalText;
+  button.setAttribute("aria-busy", String(busy));
+  button.classList.toggle("is-busy", busy);
+  if (busy) {
+    button.setAttribute("aria-label", busyText);
+  } else if (button.dataset.hadAriaLabel === "true") {
+    button.setAttribute("aria-label", button.dataset.originalAriaLabel);
+  } else {
+    button.removeAttribute("aria-label");
+  }
 }
 
 let toastTimer;
@@ -129,7 +199,7 @@ function describeError(error) {
   if (error instanceof ApiError) {
     return error.requestId ? `${error.message} Reference: ${error.requestId}` : error.message;
   }
-  return "Cinegraph could not be reached. Please try again.";
+  return UI_COPY.errors.unreachable;
 }
 
 async function updateServiceStatus() {
@@ -137,30 +207,122 @@ async function updateServiceStatus() {
     await apiRequest(API.health);
     elements.serviceStatus.classList.add("ready");
     elements.serviceStatus.classList.remove("unavailable");
-    elements.serviceStatusText.textContent = "Ready";
+    elements.serviceStatusText.textContent = UI_COPY.service.ready;
   } catch {
     elements.serviceStatus.classList.add("unavailable");
     elements.serviceStatus.classList.remove("ready");
-    elements.serviceStatusText.textContent = "Unavailable";
+    elements.serviceStatusText.textContent = UI_COPY.service.unavailable;
   }
 }
 
 function openAuth(mode = "login") {
+  authReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   setAuthMode(mode);
   elements.authError.hidden = true;
   elements.authDialog.showModal();
+  focusAuthPanel(mode);
 }
 
 function setAuthMode(mode) {
-  const loginSelected = mode === "login";
+  const selectedMode = AUTH_MODES.includes(mode) ? mode : "login";
+  const loginSelected = selectedMode === "login";
   elements.loginTab.setAttribute("aria-selected", String(loginSelected));
   elements.registerTab.setAttribute("aria-selected", String(!loginSelected));
   elements.loginTab.tabIndex = loginSelected ? 0 : -1;
   elements.registerTab.tabIndex = loginSelected ? -1 : 0;
   elements.loginPanel.hidden = !loginSelected;
   elements.registerPanel.hidden = loginSelected;
-  elements.authTitle.textContent = loginSelected ? "Continue your story" : "Create your profile";
+  elements.authTitle.textContent = UI_COPY.authTitle[selectedMode];
   elements.authError.hidden = true;
+}
+
+function authTabs() {
+  return [elements.loginTab, elements.registerTab];
+}
+
+function authModeForTab(tab) {
+  return tab === elements.registerTab ? "register" : "login";
+}
+
+function focusAuthPanel(mode) {
+  const panel = mode === "register" ? elements.registerPanel : elements.loginPanel;
+  const firstControl = panel.querySelector("input:not([disabled]), button:not([disabled])");
+  if (firstControl) firstControl.focus({ preventScroll: true });
+}
+
+function handleAuthTabKeydown(event) {
+  const tabs = authTabs();
+  const currentIndex = tabs.indexOf(event.currentTarget);
+  if (currentIndex < 0) return;
+  let nextIndex = currentIndex;
+  if (event.key === "ArrowRight" || event.key === "ArrowDown") nextIndex = (currentIndex + 1) % tabs.length;
+  if (event.key === "ArrowLeft" || event.key === "ArrowUp") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+  if (event.key === "Home") nextIndex = 0;
+  if (event.key === "End") nextIndex = tabs.length - 1;
+  if (nextIndex === currentIndex) return;
+  event.preventDefault();
+  const nextTab = tabs[nextIndex];
+  nextTab.focus();
+  setAuthMode(authModeForTab(nextTab));
+}
+
+function closeAuth() {
+  if (elements.authDialog.open) elements.authDialog.close();
+}
+
+function setElementIsolation(element, isolated) {
+  if (!element) return;
+  element.inert = isolated;
+  element.toggleAttribute("inert", isolated);
+  if (isolated) element.setAttribute("aria-hidden", "true");
+  else element.removeAttribute("aria-hidden");
+}
+
+function scopeFocusableElements() {
+  if (!elements.corpusPanel) return [];
+  return [...elements.corpusPanel.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+    (element) => !element.closest("[hidden]") && element.getClientRects().length > 0,
+  );
+}
+
+function setScopeOpen(open, { restoreFocus = true } = {}) {
+  if (!elements.workspaceView || !elements.mobileScopeButton) return;
+  const drawerMode = SCOPE_DRAWER_MEDIA.matches;
+  const isOpen = Boolean(open && drawerMode);
+  elements.workspaceView.classList.toggle("scope-open", isOpen);
+  elements.mobileScopeButton.setAttribute("aria-expanded", String(isOpen));
+  elements.accountButton.setAttribute("aria-expanded", String(isOpen));
+  document.body.classList.toggle("scope-scroll-locked", isOpen);
+  if (elements.scopeBackdrop) {
+    elements.scopeBackdrop.hidden = !isOpen;
+  }
+  setElementIsolation(elements.skipLink, isOpen);
+  setElementIsolation(elements.topbar, isOpen);
+  setElementIsolation(elements.conversationPanel, isOpen);
+  if (elements.corpusPanel) {
+    const closedDrawer = drawerMode && !isOpen;
+    elements.corpusPanel.inert = closedDrawer;
+    elements.corpusPanel.toggleAttribute("inert", closedDrawer);
+    if (drawerMode) {
+      elements.corpusPanel.setAttribute("role", "dialog");
+      elements.corpusPanel.setAttribute("aria-hidden", String(!isOpen));
+      if (isOpen) elements.corpusPanel.setAttribute("aria-modal", "true");
+      else elements.corpusPanel.removeAttribute("aria-modal");
+    } else {
+      elements.corpusPanel.removeAttribute("role");
+      elements.corpusPanel.removeAttribute("aria-hidden");
+      elements.corpusPanel.removeAttribute("aria-modal");
+    }
+  }
+  if (isOpen) {
+    const [firstControl] = scopeFocusableElements();
+    if (firstControl) firstControl.focus({ preventScroll: true });
+  } else if (restoreFocus && scopeReturnFocus instanceof HTMLElement) {
+    scopeReturnFocus.focus({ preventScroll: true });
+    scopeReturnFocus = null;
+  } else if (!isOpen) {
+    scopeReturnFocus = null;
+  }
 }
 
 function showWelcome() {
@@ -168,7 +330,7 @@ function showWelcome() {
   state.catalogue = null;
   state.selectedSeriesId = null;
   elements.workspaceView.hidden = true;
-  elements.workspaceView.classList.remove("scope-open");
+  setScopeOpen(false, { restoreFocus: false });
   elements.welcomeView.hidden = false;
   elements.accountButton.hidden = true;
   elements.signInButton.hidden = false;
@@ -187,6 +349,18 @@ function allEpisodes(series) {
       season_number: season.season_number,
     })),
   );
+}
+
+function formatSeasonScope(seasons) {
+  const numbers = seasons.map((season) => season.season_number);
+  if (!numbers.length) return UI_COPY.scope.noCorpus;
+  if (numbers.length === 1) return `Season ${numbers[0]}`;
+  const contiguous = numbers.every(
+    (seasonNumber, index) => index === 0 || seasonNumber === numbers[index - 1] + 1,
+  );
+  return contiguous
+    ? `Seasons ${numbers[0]}–${numbers[numbers.length - 1]}`
+    : `Seasons ${numbers.join(", ")}`;
 }
 
 function renderSeriesControls() {
@@ -210,7 +384,7 @@ function renderSeriesScope() {
   elements.seasonList.replaceChildren();
   elements.boundarySelect.replaceChildren();
   if (!series) {
-    elements.scopeDetail.textContent = "No corpus is available";
+    elements.scopeDetail.textContent = UI_COPY.scope.noCorpus;
     return;
   }
 
@@ -227,13 +401,14 @@ function renderSeriesScope() {
     option.textContent = `S${episode.season_number} · E${episode.episode_number} — ${episode.episode_title || "Untitled"}`;
     elements.boundarySelect.append(option);
   }
-  const seasons = series.seasons.map((season) => `S${season.season_number}`).join(", ");
-  elements.scopeDetail.textContent = `${series.series_name} · ${seasons}`;
+  elements.scopeDetail.textContent = `${series.series_name} · ${formatSeasonScope(series.seasons)}`;
 }
 
 function updateSessionChrome() {
   const authenticated = state.session?.principal_kind === "authenticated";
-  elements.scopeTitle.textContent = authenticated ? "Authenticated library" : "Guest access";
+  elements.scopeTitle.textContent = authenticated
+    ? UI_COPY.scope.authenticatedTitle
+    : UI_COPY.scope.guestTitle;
   const initialSource = state.session?.display_name || (authenticated ? "A" : "G");
   elements.avatarInitial.textContent = initialSource.trim().charAt(0).toUpperCase();
   elements.accountButton.hidden = false;
@@ -248,19 +423,20 @@ async function enterWorkspace(session) {
   renderSeriesControls();
   elements.welcomeView.hidden = true;
   elements.workspaceView.hidden = false;
+  setScopeOpen(false, { restoreFocus: false });
   window.scrollTo(0, 0);
   elements.questionInput.focus({ preventScroll: true });
 }
 
 async function beginGuestSession() {
-  setBusy(elements.guestStartButton, true, "Opening the library…");
+  setBusy(elements.guestStartButton, true, UI_COPY.busy.guest);
   try {
     const session = await apiRequest(API.guest, { method: "POST" });
     await enterWorkspace(session);
   } catch (error) {
     showToast(describeError(error));
   } finally {
-    setBusy(elements.guestStartButton, false, "");
+  setBusy(elements.guestStartButton, false, UI_COPY.busy.guest);
   }
 }
 
@@ -310,11 +486,16 @@ function addLoadingMessage() {
   content.className = "message-content";
   const label = document.createElement("p");
   label.className = "message-label";
-  label.textContent = "Searching the story";
+  label.textContent = UI_COPY.assistant.loadingLabel;
   const dots = document.createElement("div");
   dots.className = "typing-dots";
-  dots.setAttribute("aria-label", "Cinegraph is retrieving evidence");
-  dots.append(document.createElement("span"), document.createElement("span"), document.createElement("span"));
+  dots.setAttribute("role", "status");
+  dots.setAttribute("aria-label", UI_COPY.assistant.loadingDescription);
+  for (let index = 0; index < 3; index += 1) {
+    const dot = document.createElement("span");
+    dot.setAttribute("aria-hidden", "true");
+    dots.append(dot);
+  }
   content.append(label, dots);
   article.append(avatar, content);
   elements.messages.append(article);
@@ -346,9 +527,11 @@ function completeAssistantMessage(article, result) {
   content.replaceChildren();
   const label = document.createElement("p");
   label.className = "message-label";
-  label.textContent = result.is_safe_refusal ? "Safe refusal" : "Cinegraph";
+  label.textContent = result.is_safe_refusal
+    ? UI_COPY.assistant.safeRefusal
+    : UI_COPY.assistant.name;
   const text = document.createElement("p");
-  text.textContent = result.answer || "I couldn’t find enough safe, grounded evidence in your current story scope. Try changing the boundary or asking about another moment.";
+  text.textContent = result.answer || UI_COPY.assistant.fallback;
   content.append(label, text);
   if (result.citations?.length) {
     const citations = document.createElement("div");
@@ -366,7 +549,7 @@ function failAssistantMessage(article, error) {
   content.replaceChildren();
   const label = document.createElement("p");
   label.className = "message-label";
-  label.textContent = "Request interrupted";
+  label.textContent = UI_COPY.assistant.interrupted;
   const text = document.createElement("p");
   text.textContent = describeError(error);
   content.append(label, text);
@@ -374,7 +557,11 @@ function failAssistantMessage(article, error) {
 }
 
 function scrollMessages() {
-  elements.messages.scrollTo({ top: elements.messages.scrollHeight, behavior: "smooth" });
+  const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  elements.messages.scrollTo({
+    top: elements.messages.scrollHeight,
+    behavior: reducedMotion ? "auto" : "smooth",
+  });
 }
 
 async function submitQuestion(question) {
@@ -383,6 +570,7 @@ async function submitQuestion(question) {
   if (trimmed.length < 2) return;
   state.sending = true;
   elements.sendButton.disabled = true;
+  elements.sendButton.setAttribute("aria-busy", "true");
   elements.suggestionGrid.hidden = true;
   addUserMessage(trimmed);
   const loading = addLoadingMessage();
@@ -410,6 +598,7 @@ async function submitQuestion(question) {
   } finally {
     state.sending = false;
     elements.sendButton.disabled = false;
+    elements.sendButton.setAttribute("aria-busy", "false");
     elements.questionInput.focus();
   }
 }
@@ -424,7 +613,7 @@ function resizeQuestionInput() {
 async function submitAuth(form, path) {
   const button = form.querySelector('button[type="submit"]');
   const data = Object.fromEntries(new FormData(form).entries());
-  setBusy(button, true, "Please wait…");
+  setBusy(button, true, UI_COPY.busy.auth);
   elements.authError.hidden = true;
   try {
     const session = await apiRequest(path, { method: "POST", body: data });
@@ -435,12 +624,12 @@ async function submitAuth(form, path) {
     elements.authError.textContent = describeError(error);
     elements.authError.hidden = false;
   } finally {
-    setBusy(button, false, "");
+    setBusy(button, false, UI_COPY.busy.auth);
   }
 }
 
 async function endSession() {
-  setBusy(elements.logoutButton, true, "Ending…");
+  setBusy(elements.logoutButton, true, UI_COPY.busy.logout);
   try {
     await apiRequest(API.logout, { method: "POST" });
   } catch (error) {
@@ -448,7 +637,7 @@ async function endSession() {
       showToast(describeError(error));
     }
   } finally {
-    setBusy(elements.logoutButton, false, "");
+    setBusy(elements.logoutButton, false, UI_COPY.busy.logout);
     showWelcome();
   }
 }
@@ -456,9 +645,17 @@ async function endSession() {
 elements.guestStartButton.addEventListener("click", beginGuestSession);
 elements.signInButton.addEventListener("click", () => openAuth("login"));
 elements.createAccountButton.addEventListener("click", () => openAuth("register"));
-elements.dialogCloseButton.addEventListener("click", () => elements.authDialog.close());
-elements.loginTab.addEventListener("click", () => setAuthMode("login"));
-elements.registerTab.addEventListener("click", () => setAuthMode("register"));
+elements.dialogCloseButton.addEventListener("click", closeAuth);
+elements.loginTab.addEventListener("click", () => {
+  setAuthMode("login");
+  focusAuthPanel("login");
+});
+elements.registerTab.addEventListener("click", () => {
+  setAuthMode("register");
+  focusAuthPanel("register");
+});
+elements.loginTab.addEventListener("keydown", handleAuthTabKeydown);
+elements.registerTab.addEventListener("keydown", handleAuthTabKeydown);
 elements.loginPanel.addEventListener("submit", (event) => {
   event.preventDefault();
   submitAuth(elements.loginPanel, API.login);
@@ -468,11 +665,16 @@ elements.registerPanel.addEventListener("submit", (event) => {
   submitAuth(elements.registerPanel, API.register);
 });
 elements.authDialog.addEventListener("click", (event) => {
-  if (event.target === elements.authDialog) elements.authDialog.close();
+  if (event.target === elements.authDialog) closeAuth();
+});
+elements.authDialog.addEventListener("close", () => {
+  if (authReturnFocus instanceof HTMLElement) authReturnFocus.focus({ preventScroll: true });
+  authReturnFocus = null;
 });
 elements.seriesSelect.addEventListener("change", () => {
   state.selectedSeriesId = elements.seriesSelect.value;
   renderSeriesScope();
+  if (elements.workspaceView.classList.contains("scope-open")) setScopeOpen(false);
 });
 document.querySelectorAll('input[name="spoiler-mode"]').forEach((input) => {
   input.addEventListener("change", updateSpoilerControls);
@@ -494,15 +696,53 @@ elements.suggestionGrid.addEventListener("click", (event) => {
 });
 elements.logoutButton.addEventListener("click", endSession);
 elements.accountButton.addEventListener("click", () => {
-  elements.workspaceView.classList.toggle("scope-open");
-  elements.mobileScopeButton.setAttribute(
-    "aria-expanded",
-    String(elements.workspaceView.classList.contains("scope-open")),
-  );
+  if (!SCOPE_DRAWER_MEDIA.matches) {
+    const [firstScopeControl] = scopeFocusableElements();
+    if (firstScopeControl) firstScopeControl.focus({ preventScroll: true });
+    return;
+  }
+  const opened = elements.workspaceView.classList.contains("scope-open");
+  if (!opened) scopeReturnFocus = elements.accountButton;
+  setScopeOpen(!opened);
 });
 elements.mobileScopeButton.addEventListener("click", () => {
-  const opened = elements.workspaceView.classList.toggle("scope-open");
-  elements.mobileScopeButton.setAttribute("aria-expanded", String(opened));
+  const opened = elements.workspaceView.classList.contains("scope-open");
+  if (!opened) scopeReturnFocus = elements.mobileScopeButton;
+  setScopeOpen(!opened);
+});
+if (elements.scopeBackdrop) {
+  elements.scopeBackdrop.addEventListener("click", (event) => {
+    if (event.target === event.currentTarget) setScopeOpen(false);
+  });
+}
+elements.scopeCloseButton.addEventListener("click", () => setScopeOpen(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && elements.authDialog.open) {
+    event.preventDefault();
+    closeAuth();
+    return;
+  }
+  if (event.key === "Escape" && elements.workspaceView.classList.contains("scope-open")) {
+    event.preventDefault();
+    setScopeOpen(false);
+    return;
+  }
+  if (event.key === "Tab" && elements.workspaceView.classList.contains("scope-open")) {
+    const focusable = scopeFocusableElements();
+    if (!focusable.length) return;
+    const firstControl = focusable[0];
+    const lastControl = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === firstControl) {
+      event.preventDefault();
+      lastControl.focus();
+    } else if (!event.shiftKey && document.activeElement === lastControl) {
+      event.preventDefault();
+      firstControl.focus();
+    }
+  }
+});
+SCOPE_DRAWER_MEDIA.addEventListener("change", (event) => {
+  if (!event.matches) setScopeOpen(false, { restoreFocus: false });
 });
 
 updateSpoilerControls();
