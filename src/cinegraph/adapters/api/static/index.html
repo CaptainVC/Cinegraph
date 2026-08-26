@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#080b12">
+    <meta name="theme-color" content="#070a12">
     <meta name="description" content="Explore episodic stories through spoiler-aware, citation-backed AI.">
     <title>Cinegraph — Stories, connected</title>
     <link rel="icon" href="/assets/favicon.svg" type="image/svg+xml">
@@ -15,7 +15,7 @@
     <div class="ambient ambient-one" aria-hidden="true"></div>
     <div class="ambient ambient-two" aria-hidden="true"></div>
 
-    <header class="topbar" aria-label="Primary navigation">
+    <header class="topbar" aria-label="Site header">
       <a class="brand" href="/" aria-label="Cinegraph home">
         <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
         <span>Cinegraph</span>
@@ -26,7 +26,7 @@
           <span id="service-status-text">Connecting</span>
         </div>
         <button class="button button-quiet" id="sign-in-button" type="button">Sign in</button>
-        <button class="avatar-button" id="account-button" type="button" aria-label="Account menu" hidden>
+        <button class="avatar-button" id="account-button" type="button" aria-label="Focus story scope" aria-controls="story-scope" aria-expanded="false" hidden>
           <span id="avatar-initial">G</span>
         </button>
       </div>
@@ -34,7 +34,7 @@
 
     <main id="main-content">
       <section class="welcome-shell" id="welcome-view" aria-labelledby="welcome-title">
-        <div class="eyebrow"><span></span> Grounded in the scene</div>
+        <div class="eyebrow"><span aria-hidden="true"></span> Grounded in the scene</div>
         <h1 id="welcome-title">Go beyond the recap.<br><em>Understand the story.</em></h1>
         <p class="welcome-copy">
           Ask what happened, why it mattered, or how a moment connects. Cinegraph
@@ -42,13 +42,44 @@
         </p>
         <div class="welcome-actions">
           <button class="button button-primary button-large" id="guest-start-button" type="button">
-            Explore as guest <span aria-hidden="true">→</span>
+            Explore as guest
           </button>
           <button class="button button-secondary button-large" id="create-account-button" type="button">
             Create an account
           </button>
         </div>
-        <p class="guest-note">No account needed · Modern Family seasons 1–2</p>
+        <p class="guest-note">No account needed · Modern Family · Seasons 1–2</p>
+
+        <section class="landing-preview" aria-labelledby="preview-title">
+          <div class="preview-heading">
+            <p class="panel-kicker">A grounded answer, in context</p>
+            <h2 id="preview-title">See the evidence trail</h2>
+          </div>
+          <div class="preview-path" aria-hidden="true">
+            <svg viewBox="0 0 120 48" role="presentation" focusable="false">
+              <path d="M1 24h29m30 0h29m30 0h0" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-dasharray="2 5"></path>
+              <circle cx="30" cy="24" r="5" fill="currentColor"></circle>
+              <circle cx="60" cy="24" r="5" fill="currentColor"></circle>
+              <circle cx="90" cy="24" r="5" fill="currentColor"></circle>
+            </svg>
+          </div>
+          <div class="preview-grid">
+            <article class="preview-card preview-question">
+              <p class="preview-label">Question</p>
+              <p>Why does Phil call himself a “cool dad”?</p>
+            </article>
+            <article class="preview-card preview-answer">
+              <p class="preview-label">Grounded answer</p>
+              <p>Phil’s enthusiasm is part of the joke: he treats being approachable and involved as proof that he is the family’s “cool dad.”</p>
+            </article>
+            <article class="preview-card preview-evidence">
+              <p class="preview-label">Transcript evidence</p>
+              <blockquote>“I’m a cool dad.”</blockquote>
+              <cite>Modern Family · S01 E01 · transcript excerpt</cite>
+            </article>
+          </div>
+          <p class="preview-note">Preview only. In the workspace, open each cited moment to inspect the source context.</p>
+        </section>
 
         <div class="feature-grid" aria-label="Cinegraph features">
           <article>
@@ -69,17 +100,30 @@
         </div>
       </section>
 
-      <section class="workspace" id="workspace-view" hidden aria-label="Cinegraph workspace">
-        <aside class="corpus-panel" aria-label="Corpus and spoiler controls">
+      <section class="workspace" id="workspace-view" hidden aria-labelledby="conversation-title">
+        <aside class="corpus-panel" id="story-scope" aria-labelledby="scope-heading" aria-describedby="scope-description">
           <div class="panel-heading">
-            <p class="panel-kicker">Your library</p>
-            <h2>Story scope</h2>
+            <div>
+              <p class="panel-kicker">Your library</p>
+              <h2 id="scope-heading">Story scope</h2>
+            </div>
+            <button class="scope-close-button" id="scope-close-button" type="button" aria-label="Close story scope">
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"></path>
+              </svg>
+            </button>
+            <p class="visually-hidden" id="scope-description">Choose the series, seasons, and spoiler boundary used for retrieval.</p>
           </div>
           <div class="scope-card">
-            <span class="scope-icon" aria-hidden="true">◇</span>
+            <span class="scope-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" role="presentation" focusable="false">
+                <path d="M12 3 20 12l-8 9-8-9 8-9Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"></path>
+                <circle cx="12" cy="12" r="2" fill="currentColor"></circle>
+              </svg>
+            </span>
             <div>
               <strong id="scope-title">Guest access</strong>
-              <span id="scope-detail">Modern Family · S1–S2</span>
+              <span id="scope-detail">Modern Family · Seasons 1–2</span>
             </div>
           </div>
 
@@ -131,8 +175,11 @@
               <p class="panel-kicker">Dialogue intelligence</p>
               <h1 id="conversation-title">Ask the story</h1>
             </div>
-            <button class="mobile-scope-button" id="mobile-scope-button" type="button" aria-expanded="false">
-              Scope <span aria-hidden="true">⌄</span>
+            <button class="mobile-scope-button" id="mobile-scope-button" type="button" aria-expanded="false" aria-controls="story-scope" aria-haspopup="dialog">
+              Scope
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
+              </svg>
             </button>
           </header>
 
@@ -156,7 +203,9 @@
               <label class="visually-hidden" for="question-input">Ask a question about the story</label>
               <textarea id="question-input" rows="1" maxlength="2000" placeholder="Ask about a scene, character, or connection…" required></textarea>
               <button class="send-button" id="send-button" type="submit" aria-label="Send question">
-                <span aria-hidden="true">↑</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="M12 19V5m0 0L6 11m6-6 6 6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
               </button>
             </form>
             <p class="composer-note">Answers are generated from retrieved transcript evidence. Check the cited scenes.</p>
@@ -166,7 +215,11 @@
     </main>
 
     <dialog class="auth-dialog" id="auth-dialog" aria-labelledby="auth-title">
-      <button class="dialog-close" id="dialog-close-button" type="button" aria-label="Close">×</button>
+      <button class="dialog-close" id="dialog-close-button" type="button" aria-label="Close dialog">
+        <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"></path>
+        </svg>
+      </button>
       <div class="dialog-brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span></div>
       <p class="panel-kicker">Welcome to Cinegraph</p>
       <h2 id="auth-title">Continue your story</h2>
@@ -196,6 +249,8 @@
       </form>
       <p class="form-error" id="auth-error" role="alert" hidden></p>
     </dialog>
+
+    <button class="scope-backdrop" id="scope-backdrop" type="button" tabindex="-1" aria-hidden="true" aria-label="Close story scope" hidden></button>
 
     <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
   </body>
