@@ -1,5 +1,12 @@
 from dataclasses import dataclass
 
+from cinegraph.config.series_metadata import (
+    SERIES_METADATA_APPROVED_DIRECTORY,
+    SERIES_METADATA_ARTWORK_DIRECTORY,
+    SERIES_METADATA_POSTER_MAX_BYTES,
+    SERIES_METADATA_REVIEWER_ID,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ApiConfiguration:
@@ -7,6 +14,11 @@ class ApiConfiguration:
     version: str
     api_prefix: str
     catalogue_manifest_filename: str
+    series_metadata_approved_directory: str
+    series_artwork_directory: str
+    maximum_series_poster_bytes: int
+    series_poster_cache_control: str
+    automated_metadata_reviewer: str
     minimum_question_length: int
     maximum_question_length: int
     default_retrieval_limit: int
@@ -26,6 +38,7 @@ class ApiConfiguration:
     def __post_init__(self) -> None:
         positive_integers = (
             self.maximum_request_body_bytes,
+            self.maximum_series_poster_bytes,
             self.rate_limit_capacity,
             self.rate_limit_bucket_idle_ttl_seconds,
             self.maximum_rate_limit_buckets,
@@ -45,6 +58,14 @@ class ApiConfiguration:
             raise ValueError("Request costs must fit within rate-limit capacity.")
         if not self.request_id_header or self.request_id_header.strip() != self.request_id_header:
             raise ValueError("Request ID header must be non-empty and trimmed.")
+        for value in (
+            self.series_metadata_approved_directory,
+            self.series_artwork_directory,
+            self.series_poster_cache_control,
+            self.automated_metadata_reviewer,
+        ):
+            if not value or value.strip() != value:
+                raise ValueError("Metadata publication configuration must be trimmed.")
 
 
 DEFAULT_API_CONFIGURATION = ApiConfiguration(
@@ -52,6 +73,11 @@ DEFAULT_API_CONFIGURATION = ApiConfiguration(
     version="1.0.0",
     api_prefix="/api/v1",
     catalogue_manifest_filename="catalogue.json",
+    series_metadata_approved_directory=SERIES_METADATA_APPROVED_DIRECTORY,
+    series_artwork_directory=SERIES_METADATA_ARTWORK_DIRECTORY,
+    maximum_series_poster_bytes=SERIES_METADATA_POSTER_MAX_BYTES,
+    series_poster_cache_control="private, max-age=86400",
+    automated_metadata_reviewer=SERIES_METADATA_REVIEWER_ID,
     minimum_question_length=2,
     maximum_question_length=2_000,
     default_retrieval_limit=8,

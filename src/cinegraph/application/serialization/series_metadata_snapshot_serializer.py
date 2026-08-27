@@ -83,6 +83,7 @@ def export_ingestion_result(
     snapshot = result.snapshot
     if snapshot is None:
         raise ValueError("An already-ingested result has no snapshot to export.")
+    reviewed_at = getattr(result.source_version, "reviewed_at", None)
     return {
         "source_version": {
             "source_document_id": str(source_document.source_document_id),
@@ -93,6 +94,12 @@ def export_ingestion_result(
             "review_status": result.source_version.review_status.value,
             "status": result.source_version.status.value,
             "acquired_at": result.source_version.acquired_at.isoformat(),
+            "reviewed_by": getattr(result.source_version, "reviewed_by", None),
+            "reviewed_at": (
+                reviewed_at.isoformat()
+                if reviewed_at is not None
+                else None
+            ),
             "parent_source_version_id": (
                 str(result.source_version.parent_source_version_id)
                 if result.source_version.parent_source_version_id

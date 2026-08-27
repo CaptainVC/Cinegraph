@@ -1,7 +1,9 @@
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
+from types import MappingProxyType
 from typing import Protocol, TypeVar
+from uuid import UUID
 
 import sqlalchemy as sa
 from langchain_openai import ChatOpenAI
@@ -9,6 +11,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 
 from cinegraph.adapters.catalogue.json_catalogue_manifest_loader import (
     JsonCatalogueManifestLoader,
+)
+from cinegraph.adapters.catalogue.series_metadata_snapshot_loader import (
+    JsonSeriesMetadataSnapshotLoader,
 )
 from cinegraph.adapters.llm.langchain_chat_model_gateway import (
     LangChainChatModelGateway,
@@ -68,6 +73,7 @@ from cinegraph.config import (
     OpenAISettings,
 )
 from cinegraph.domain.models.catalogue.catalogue_manifest import CatalogueManifest
+from cinegraph.domain.models.series_metadata import SeriesMetadataSnapshot
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
 from cinegraph.domain.retrieval import RetrievalScopeCompiler
 from cinegraph.ports.agent_jobs.dispatcher import BoundedThreadPoolAgentJobDispatcher
@@ -104,7 +110,17 @@ class ApiContext:
     recommendation_workflow: RecommendationWorkflow | None = None
     agent_job_service: AgentJobServiceProtocol | None = None
     close_callback: Callable[[], None] = lambda: None
+    series_metadata: Mapping[UUID, SeriesMetadataSnapshot] = field(
+        default_factory=lambda: MappingProxyType({})
+    )
+    series_artwork_root: Path | None = None
     _closed: bool = field(default=False, init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        # Keep metadata immutable after composition.  This prevents a request
+        # handler (or a plugin) from changing entitlement-sensitive metadata
+        # while the application is serving traffic.
+        self.series_metadata = MappingProxyType(dict(self.series_metadata))
 
     @property
     def agent_jobs(self) -> AgentJobServiceProtocol | None:
@@ -125,6 +141,19 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
     loaded_catalogue = JsonCatalogueManifestLoader().load(
         settings.knowledge_root / DEFAULT_API_CONFIGURATION.catalogue_manifest_filename
     )
+    series_metadata: Mapping[UUID, SeriesMetadataSnapshot] = MappingProxyType({})
+    metadata_directory = (
+        settings.knowledge_root
+        / DEFAULT_API_CONFIGURATION.series_metadata_approved_directory
+    )
+    if metadata_directory.is_dir():
+        series_metadata = MappingProxyType(
+            dict(
+                JsonSeriesMetadataSnapshotLoader().load_directory(
+                    metadata_directory, loaded_catalogue.manifest
+                )
+            )
+        )
     root = CinegraphCompositionRoot(settings)
     chat_model = ChatOpenAI(
         model=openai.rag_answer_model,
@@ -218,4 +247,8 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         recommendation_workflow=recommendation_workflow,
         agent_job_service=agent_job_service,
         close_callback=root.close,
+        series_metadata=series_metadata,
+        series_artwork_root=(
+            settings.knowledge_root / DEFAULT_API_CONFIGURATION.series_artwork_directory
+        ),
     )

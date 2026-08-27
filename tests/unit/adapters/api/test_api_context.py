@@ -46,7 +46,11 @@ class FakeSeriesResearchAgent:
 
 def test_default_context_wires_bounded_private_agent_models(monkeypatch, tmp_path: Path) -> None:
     env_file = tmp_path / ".env"
-    env_file.write_text("OPENAI_API_KEY=local-composition-smoke-test\n", encoding="utf-8")
+    env_file.write_text(
+        "OPENAI_API_KEY=local-composition-smoke-test\n"
+        f"CINEGRAPH_KNOWLEDGE_ROOT={(tmp_path / 'knowledge').as_posix()}\n",
+        encoding="utf-8",
+    )
     model_calls = []
 
     def fake_chat_openai(**kwargs):

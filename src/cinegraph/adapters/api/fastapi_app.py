@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import secrets
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -10,6 +11,7 @@ from uuid import UUID
 from fastapi import Depends, FastAPI, HTTPException, Request, Response, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
+from fastapi.responses import Response as FastApiResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 
@@ -22,7 +24,9 @@ from cinegraph.adapters.api.guardrails import (
 )
 from cinegraph.adapters.api.schemas import (
     AccountResponse,
+    CatalogueCreditResponse,
     CatalogueEpisodeResponse,
+    CataloguePosterResponse,
     CatalogueResponse,
     CatalogueSeasonResponse,
     CatalogueSeriesResponse,
@@ -33,6 +37,7 @@ from cinegraph.adapters.api.schemas import (
     HealthResponse,
     LoginRequest,
     MessageResponse,
+    MetadataSourceResponse,
     PasswordChangeRequest,
     ProfileUpdateRequest,
     RecommendationRequest,
@@ -72,6 +77,7 @@ from cinegraph.config import (
 )
 from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.identity import SessionPrincipal
+from cinegraph.domain.models.series_metadata import CreditedPerson, SeriesMetadataSnapshot
 from cinegraph.domain.models.watch_state import ProfileWatchState, SeriesWatchState
 
 LOGGER = logging.getLogger("cinegraph.api")
@@ -239,6 +245,10 @@ def _catalogue_response(
                                 episode_id=episode.episode_id,
                                 episode_number=episode.episode_number,
                                 episode_title=episode.episode_title,
+                                guest_cast=_episode_guest_cast(
+                                    context.series_metadata.get(series.series_id),
+                                    episode.episode_id,
+                                ),
                             )
                             for episode in visible_episodes
                         ),
@@ -250,6 +260,13 @@ def _catalogue_response(
                     series_id=series.series_id,
                     series_name=series.series_name,
                     seasons=tuple(season_items),
+                    poster=_poster_descriptor(context, series.series_id, series.series_name),
+                    regular_cast=_regular_cast(
+                        context.series_metadata.get(series.series_id)
+                    ),
+                    metadata_source=_metadata_source(
+                        context.series_metadata.get(series.series_id)
+                    ),
                 )
             )
     return CatalogueResponse(
@@ -257,6 +274,103 @@ def _catalogue_response(
         corpus_scope_revision=principal.corpus_access_scope.revision,
         series=tuple(series_items),
     )
+
+
+def _credit_response(credit: CreditedPerson) -> CatalogueCreditResponse:
+    return CatalogueCreditResponse(
+        name=credit.name,
+        character_name=credit.character_name,
+        credit_kind=credit.credit_kind.value,
+        canonical_url=credit.canonical_url,
+        character_canonical_url=credit.character_canonical_url,
+    )
+
+
+def _regular_cast(snapshot: SeriesMetadataSnapshot | None) -> tuple[CatalogueCreditResponse, ...]:
+    if snapshot is None:
+        return ()
+    return tuple(_credit_response(item) for item in snapshot.regular_cast)
+
+
+def _episode_guest_cast(
+    snapshot: SeriesMetadataSnapshot | None,
+    episode_id: UUID,
+) -> tuple[CatalogueCreditResponse, ...]:
+    if snapshot is None:
+        return ()
+    for episode in snapshot.episodes:
+        if episode.episode.episode_id == episode_id:
+            return tuple(_credit_response(item) for item in episode.guest_cast)
+    return ()
+
+
+def _metadata_source(snapshot: SeriesMetadataSnapshot | None) -> MetadataSourceResponse | None:
+    if snapshot is None:
+        return None
+    return MetadataSourceResponse(
+        provider_name=snapshot.provider_name,
+        canonical_url=snapshot.canonical_url,
+        attribution=snapshot.attribution,
+        license_name=snapshot.license_name,
+        license_url=snapshot.license_url,
+    )
+
+
+def _poster_descriptor(
+    context: ApiContext,
+    series_id: UUID,
+    series_name: str,
+) -> CataloguePosterResponse | None:
+    snapshot = context.series_metadata.get(series_id)
+    if snapshot is None or snapshot.poster is None:
+        return None
+    poster = snapshot.poster
+    return CataloguePosterResponse(
+        url=f"{DEFAULT_API_CONFIGURATION.api_prefix}/series/{series_id}/poster",
+        alt=f"Poster for {series_name}",
+        width=poster.width,
+        height=poster.height,
+        attribution=poster.attribution,
+        license_name=poster.license_name,
+        license_url=poster.license_url,
+    )
+
+
+def _visible_series(
+    context: ApiContext,
+    principal: SessionPrincipal,
+    series_id: UUID,
+) -> bool:
+    episode_refs = {
+        episode.episode_id: episode for episode in context.catalogue.episode_refs()
+    }
+    return any(
+        episode.series_id == series_id
+        and principal.corpus_access_scope.allows_episode(episode)
+        for episode in episode_refs.values()
+    )
+
+
+def _poster_file_type(path: Path, maximum_bytes: int) -> tuple[str, bytes] | None:
+    try:
+        size = path.stat().st_size
+    except (FileNotFoundError, OSError):
+        return None
+    if size < 12 or size > maximum_bytes:
+        return None
+    try:
+        content = path.read_bytes()
+    except (FileNotFoundError, OSError):
+        return None
+    if len(content) != size or len(content) > maximum_bytes:
+        return None
+    if content.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg", content
+    if content.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png", content
+    if content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        return "image/webp", content
+    return None
 
 
 def _build_watch_state(
@@ -666,6 +780,50 @@ def create_app(
         principal: SessionPrincipal = Depends(_principal),
     ) -> CatalogueResponse:
         return _catalogue_response(_context(request), principal)
+
+    @app.get(f"{prefix}/series/{{series_id}}/poster")
+    def series_poster(
+        series_id: UUID,
+        request: Request,
+        principal: SessionPrincipal = Depends(_principal),
+    ) -> FastApiResponse:
+        app_context = _context(request)
+        # The scope check intentionally precedes metadata lookup and path
+        # resolution.  Hidden series therefore have the same response as a
+        # missing or invalid poster and cannot be enumerated.
+        if not _visible_series(app_context, principal, series_id):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poster not found.")
+        snapshot = app_context.series_metadata.get(series_id)
+        if snapshot is None or snapshot.poster is None or app_context.series_artwork_root is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poster not found.")
+        artwork_root = app_context.series_artwork_root
+        try:
+            root_resolved = artwork_root.resolve(strict=True)
+            poster_path = (root_resolved / f"{series_id}.poster").resolve(strict=True)
+            poster_path.relative_to(root_resolved)
+        except (FileNotFoundError, OSError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Poster not found."
+            ) from None
+        poster = _poster_file_type(
+            poster_path, api_configuration.maximum_series_poster_bytes
+        )
+        if poster is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Poster not found.")
+        media_type, content = poster
+        etag = f'"{hashlib.sha256(content).hexdigest()}"'
+        if request.headers.get("if-none-match") == etag:
+            response = FastApiResponse(status_code=status.HTTP_304_NOT_MODIFIED)
+            response.headers["Cache-Control"] = (
+                api_configuration.series_poster_cache_control
+            )
+            response.headers["ETag"] = etag
+            return response
+        response = FastApiResponse(content=content, media_type=media_type)
+        response.headers["Cache-Control"] = api_configuration.series_poster_cache_control
+        response.headers["ETag"] = etag
+        response.headers["Content-Disposition"] = "inline"
+        return response
 
     @app.post(f"{prefix}/chat", response_model=ChatResponse)
     def chat(

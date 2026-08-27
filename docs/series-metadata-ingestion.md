@@ -30,9 +30,48 @@ poster exists.
 
 `scripts/ingest_tvmaze_series_metadata.py` loads the gitignored catalogue manifest,
 fetches only that series' catalogue episodes, and writes a deterministic raw-payload-free
-JSON snapshot. Existing differing output is protected unless `--force` is supplied.
-The export includes acquisition and poster retrieval timestamps for provenance. A
-subsequent fetch with the same semantic content compares the stored content hash and
-is a no-op even though those timestamps would differ. The CLI repository is intentionally in-memory for this phase; the domain service and
-repository contract are complete, while durable cross-invocation storage remains a
-later infrastructure concern.
+JSON snapshot to `knowledge/series-metadata/pending/`. Existing differing output is
+protected unless `--force` is supplied. The export includes acquisition and poster
+retrieval timestamps for provenance. A subsequent fetch with the same semantic content
+compares the stored content hash and is a no-op even though those timestamps differ.
+
+The publication workflow is deliberately explicit and zero-token:
+
+```powershell
+uv run python scripts/ingest_tvmaze_series_metadata.py `
+  --manifest knowledge/catalogue.json `
+  --series-id <catalogue-series-uuid> `
+  --tvmaze-show-id 80 `
+  --output knowledge/series-metadata/pending/modern-family.json
+
+uv run python scripts/review_series_metadata_snapshot.py `
+  --manifest knowledge/catalogue.json `
+  --input knowledge/series-metadata/pending/modern-family.json
+```
+
+The reviewer validates the canonical SHA-256 content hash, source-version identity,
+active/allowed TVmaze provenance, exact catalogue episode reconciliation, and trusted
+HTTPS hosts. Episode identity is exact by catalogue IDs and season/episode position;
+provider title comparison is case-insensitive but never fuzzy, so harmless title-case
+differences do not block publication. It then downloads an original poster with a bounded timeout and size limit,
+falls back to TVmaze's medium image when needed, validates both MIME and magic bytes,
+atomically writes `knowledge/series-metadata/artwork/<series-id>.poster`, and atomically
+publishes the reviewed JSON to `knowledge/series-metadata/approved/`. Existing artifacts
+are idempotent when their content hash matches and are protected from replacement unless
+`--force` is supplied. The runtime loader reads only the approved directory; a missing
+approved directory means there is no metadata enrichment, while malformed files fail
+closed.
+
+Artwork is served by the application from the entitlement-checked, same-origin artwork
+directory. Its default cache policy is `private, max-age=86400`; it is never a public
+shared-cache artifact because the same path policy will also protect future
+authenticated-only series.
+
+Structured metadata is reviewed deterministically instead of with an LLM because its
+acceptance criteria are machine-checkable identity, provenance, rights, hashes, and
+schema invariants. This is cheaper, reproducible, and avoids allowing a model to invent
+or silently alter cast, episode, or licensing facts. LLM/LangGraph review remains
+appropriate for genuinely interpretive material such as subtitle speaker attribution,
+but does not replace these publication gates. The CLI repository is intentionally
+in-memory for this phase; the domain service and repository contract are complete, while
+durable cross-invocation storage remains a later infrastructure concern.

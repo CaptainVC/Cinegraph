@@ -4,7 +4,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 from tests.factories import DEFAULT_SERIES_ID
-from tests.unit.adapters.api.test_fastapi_app import make_context
+from tests.unit.adapters.api.test_fastapi_app import make_context, make_series_metadata
 
 from cinegraph.adapters.api.fastapi_app import create_app
 from cinegraph.adapters.api.guardrails import (
@@ -91,6 +91,29 @@ def test_request_id_security_headers_and_audit_metadata(tmp_path: Path) -> None:
     assert event.path == "/api/v1/catalogue"
     assert event.principal_kind == "guest"
     assert not hasattr(event, "request_body")
+
+
+def test_guardrails_preserve_explicit_poster_cache_policy(tmp_path: Path) -> None:
+    snapshot = make_series_metadata(tmp_path)
+    context, _ = make_context(
+        tmp_path,
+        series_metadata={DEFAULT_SERIES_ID: snapshot},
+    )
+    configuration = replace(
+        DEFAULT_API_CONFIGURATION,
+        series_poster_cache_control="private, max-age=300",
+    )
+    services, _, _ = make_guardrails(configuration)
+    with TestClient(
+        create_app(context, services, api_configuration=configuration)
+    ) as client:
+        client.post("/api/v1/auth/guest")
+        response = client.get(f"/api/v1/series/{DEFAULT_SERIES_ID}/poster")
+        catalogue = client.get("/api/v1/catalogue")
+
+    assert response.status_code == 200
+    assert response.headers["Cache-Control"] == "private, max-age=300"
+    assert catalogue.headers["Cache-Control"] == "no-store"
 
 
 def test_early_production_csrf_rejection_keeps_guardrail_request_id_headers_and_audit(

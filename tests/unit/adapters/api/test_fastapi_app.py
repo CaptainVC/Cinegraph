@@ -1,3 +1,5 @@
+from dataclasses import replace
+from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
 
@@ -23,7 +25,11 @@ from cinegraph.application.models.hybrid_grounded_answer import (
 from cinegraph.application.service.identity_session_service import (
     IdentitySessionService,
 )
-from cinegraph.config import CinegraphRuntimeSettings, RuntimeEnvironment
+from cinegraph.config import (
+    DEFAULT_API_CONFIGURATION,
+    CinegraphRuntimeSettings,
+    RuntimeEnvironment,
+)
 from cinegraph.config.transcript_chunking import TRANSCRIPT_INDEX_REVISION
 from cinegraph.domain.enums.enum import (
     Language,
@@ -35,6 +41,13 @@ from cinegraph.domain.models.catalogue.catalogue_manifest import CatalogueManife
 from cinegraph.domain.models.catalogue.episode import Episode
 from cinegraph.domain.models.catalogue.season import Season
 from cinegraph.domain.models.catalogue.series import Series
+from cinegraph.domain.models.series_metadata import (
+    ArtworkAsset,
+    CreditedPerson,
+    CreditKind,
+    EpisodeCastMetadata,
+    SeriesMetadataSnapshot,
+)
 from cinegraph.ports.retrieval import RetrievedSegment
 
 
@@ -142,7 +155,12 @@ def make_catalogue() -> CatalogueManifest:
     )
 
 
-def make_context(tmp_path: Path, *, ready: bool = True):
+def make_context(
+    tmp_path: Path,
+    *,
+    ready: bool = True,
+    series_metadata: dict[UUID, SeriesMetadataSnapshot] | None = None,
+):
     identity = IdentitySessionService(
         InMemoryIdentityUnitOfWorkFactory(),
         ScryptPasswordHasher(),
@@ -164,8 +182,85 @@ def make_context(tmp_path: Path, *, ready: bool = True):
         answer_workflow=workflow,
         readiness_probe=lambda: ready,
         recommendation_workflow=recommendation_workflow,
+        series_metadata=series_metadata or {},
+        series_artwork_root=tmp_path / "artwork",
     )
     return context, workflow
+
+
+def make_series_metadata(
+    tmp_path: Path,
+    *,
+    include_poster: bool = True,
+    poster_bytes: bytes | None = None,
+) -> SeriesMetadataSnapshot:
+    catalogue = make_catalogue()
+    episodes = catalogue.episode_refs()
+    regular = CreditedPerson(
+        provider_person_id=1,
+        name="Ed O'Neill",
+        canonical_url="https://www.tvmaze.com/people/1/ed-o-neill",
+        character_name="Jay Pritchett",
+        character_provider_id=11,
+        character_canonical_url="https://www.tvmaze.com/characters/11/jay-pritchett",
+        credit_kind=CreditKind.REGULAR,
+    )
+    guest_credits = tuple(
+        CreditedPerson(
+            provider_person_id=100 + item.position.season_number,
+            name=f"Guest Season {item.position.season_number}",
+            canonical_url=f"https://www.tvmaze.com/people/{100 + item.position.season_number}",
+            character_name=f"Guest Character {item.position.season_number}",
+            character_provider_id=200 + item.position.season_number,
+            character_canonical_url=None,
+            credit_kind=CreditKind.GUEST,
+        )
+        for item in episodes
+    )
+    poster = None
+    if include_poster:
+        poster = ArtworkAsset(
+            source_url="https://static.tvmaze.com/uploads/images/original_untouched/1/1.jpg",
+            canonical_url="https://www.tvmaze.com/shows/80/modern-family",
+            medium_url=None,
+            original_url=None,
+            provider_asset_id="/uploads/images/original_untouched/1/1.jpg",
+            width=680,
+            height=1_000,
+            attribution="Data provided by TVmaze",
+            license_name="CC BY-SA 4.0",
+            license_url="https://creativecommons.org/licenses/by-sa/4.0/",
+            retrieved_at=datetime.now(UTC),
+        )
+        artwork_root = tmp_path / "artwork"
+        artwork_root.mkdir(parents=True, exist_ok=True)
+        (artwork_root / f"{DEFAULT_SERIES_ID}.poster").write_bytes(
+            poster_bytes or b"\x89PNG\r\n\x1a\nvalid-poster"
+        )
+    return SeriesMetadataSnapshot(
+        series_id=DEFAULT_SERIES_ID,
+        source_version_id=UUID(int=5000),
+        provider_name="TVmaze",
+        provider_show_id=80,
+        title="Modern Family",
+        canonical_url="https://www.tvmaze.com/shows/80/modern-family",
+        poster=poster,
+        regular_cast=(regular,),
+        episodes=tuple(
+            EpisodeCastMetadata(
+                episode=item,
+                provider_episode_id=10_000 + item.position.season_number,
+                title=item.position.__str__(),
+                canonical_url="https://www.tvmaze.com/episodes/10000/example",
+                guest_cast=(guest_credits[item.position.season_number - 1],),
+            )
+            for item in episodes
+        ),
+        rights_status=RightsStatus.ALLOWED,
+        attribution="Data provided by TVmaze",
+        license_name="CC BY-SA 4.0",
+        license_url="https://creativecommons.org/licenses/by-sa/4.0/",
+    )
 
 
 def test_health_endpoints_distinguish_liveness_and_readiness(tmp_path: Path) -> None:
@@ -195,6 +290,169 @@ def test_guest_cookie_and_catalogue_are_limited_to_seasons_one_and_two(
         1,
         2,
     ]
+
+
+def test_catalogue_enrichment_is_filtered_to_visible_guest_seasons(tmp_path: Path) -> None:
+    snapshot = make_series_metadata(tmp_path)
+    context, _ = make_context(
+        tmp_path,
+        series_metadata={DEFAULT_SERIES_ID: snapshot},
+    )
+    with TestClient(create_app(context)) as client:
+        client.post("/api/v1/auth/guest")
+        body = client.get("/api/v1/catalogue").json()
+
+    series = body["series"][0]
+    assert series["poster"]["url"] == (
+        f"/api/v1/series/{DEFAULT_SERIES_ID}/poster"
+    )
+    assert "tvmaze.com" not in series["poster"]["url"]
+    assert [item["name"] for item in series["regular_cast"]] == ["Ed O'Neill"]
+    assert [season["season_number"] for season in series["seasons"]] == [1, 2]
+    assert all(
+        episode["guest_cast"][0]["name"]
+        == f"Guest Season {season['season_number']}"
+        for season in series["seasons"]
+        for episode in season["episodes"]
+    )
+    assert "Guest Season 3" not in str(body)
+
+
+def test_authenticated_catalogue_can_receive_metadata_for_all_visible_seasons(
+    tmp_path: Path,
+) -> None:
+    snapshot = make_series_metadata(tmp_path)
+    context, _ = make_context(
+        tmp_path,
+        series_metadata={DEFAULT_SERIES_ID: snapshot},
+    )
+    with TestClient(create_app(context)) as client:
+        client.post(
+            "/api/v1/auth/register",
+            json={
+                "email": "metadata@example.com",
+                "password": "correct horse battery staple",
+                "display_name": "Metadata viewer",
+            },
+        )
+        body = client.get("/api/v1/catalogue").json()
+
+    seasons = body["series"][0]["seasons"]
+    assert [season["season_number"] for season in seasons] == [1, 2, 3]
+    assert seasons[2]["episodes"][0]["guest_cast"][0]["name"] == "Guest Season 3"
+
+
+def test_empty_metadata_is_backward_compatible_and_has_no_remote_poster_url(
+    tmp_path: Path,
+) -> None:
+    context, _ = make_context(tmp_path)
+    with TestClient(create_app(context)) as client:
+        client.post("/api/v1/auth/guest")
+        body = client.get("/api/v1/catalogue").json()
+
+    series = body["series"][0]
+    assert series["poster"] is None
+    assert series["regular_cast"] == []
+    assert series["metadata_source"] is None
+    assert all(episode["guest_cast"] == [] for season in series["seasons"] for episode in season["episodes"])
+
+
+def test_poster_requires_a_session_and_returns_validated_same_origin_asset(
+    tmp_path: Path,
+) -> None:
+    snapshot = make_series_metadata(tmp_path)
+    context, _ = make_context(
+        tmp_path,
+        series_metadata={DEFAULT_SERIES_ID: snapshot},
+    )
+    configuration = replace(
+        DEFAULT_API_CONFIGURATION,
+        series_poster_cache_control="private, max-age=300",
+    )
+    with TestClient(create_app(context, api_configuration=configuration)) as client:
+        assert client.get(f"/api/v1/series/{DEFAULT_SERIES_ID}/poster").status_code == 401
+        client.post("/api/v1/auth/guest")
+        response = client.get(f"/api/v1/series/{DEFAULT_SERIES_ID}/poster")
+        repeated = client.get(
+            f"/api/v1/series/{DEFAULT_SERIES_ID}/poster",
+            headers={"If-None-Match": response.headers["ETag"]},
+        )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert response.headers["cache-control"] == "private, max-age=300"
+    assert response.headers["etag"]
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert repeated.status_code == 304
+    assert repeated.headers["etag"] == response.headers["etag"]
+
+
+def test_poster_returns_indistinguishable_not_found_for_hidden_or_unavailable_assets(
+    tmp_path: Path,
+) -> None:
+    snapshot = make_series_metadata(tmp_path)
+    context, _ = make_context(
+        tmp_path,
+        series_metadata={DEFAULT_SERIES_ID: snapshot},
+    )
+    unknown_series = UUID(int=9_999)
+    with TestClient(create_app(context)) as client:
+        client.post("/api/v1/auth/guest")
+        hidden = client.get(f"/api/v1/series/{unknown_series}/poster")
+        (tmp_path / "artwork" / f"{DEFAULT_SERIES_ID}.poster").unlink()
+        missing = client.get(f"/api/v1/series/{DEFAULT_SERIES_ID}/poster")
+
+    assert hidden.status_code == 404
+    assert missing.status_code == 404
+    assert hidden.json()["error"]["code"] == missing.json()["error"]["code"] == "not_found"
+
+
+@pytest.mark.parametrize(
+    ("poster_bytes", "configuration"),
+    [
+        (b"not-an-image", DEFAULT_API_CONFIGURATION),
+        (
+            b"\x89PNG\r\n\x1a\n" + b"x" * 32,
+            replace(DEFAULT_API_CONFIGURATION, maximum_series_poster_bytes=16),
+        ),
+    ],
+)
+def test_poster_rejects_invalid_or_oversize_asset(
+    tmp_path: Path,
+    poster_bytes: bytes,
+    configuration,
+) -> None:
+    snapshot = make_series_metadata(tmp_path, poster_bytes=poster_bytes)
+    context, _ = make_context(
+        tmp_path,
+        series_metadata={DEFAULT_SERIES_ID: snapshot},
+    )
+    with TestClient(create_app(context, api_configuration=configuration)) as client:
+        client.post("/api/v1/auth/guest")
+        response = client.get(f"/api/v1/series/{DEFAULT_SERIES_ID}/poster")
+
+    assert response.status_code == 404
+
+
+def test_poster_rejects_symlink_escape_when_supported(tmp_path: Path) -> None:
+    snapshot = make_series_metadata(tmp_path)
+    poster_path = tmp_path / "artwork" / f"{DEFAULT_SERIES_ID}.poster"
+    outside = tmp_path / "outside.poster"
+    outside.write_bytes(b"\x89PNG\r\n\x1a\nvalid-poster")
+    poster_path.unlink()
+    try:
+        poster_path.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlinks are unavailable in this environment.")
+    context, _ = make_context(
+        tmp_path,
+        series_metadata={DEFAULT_SERIES_ID: snapshot},
+    )
+    with TestClient(create_app(context)) as client:
+        client.post("/api/v1/auth/guest")
+        response = client.get(f"/api/v1/series/{DEFAULT_SERIES_ID}/poster")
+
+    assert response.status_code == 404
 
 
 def test_chat_uses_server_catalogue_and_session_scope_and_returns_provenance(

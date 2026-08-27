@@ -175,12 +175,17 @@
               <p class="panel-kicker">Dialogue intelligence</p>
               <h1 id="conversation-title">Ask the story</h1>
             </div>
-            <button class="mobile-scope-button" id="mobile-scope-button" type="button" aria-expanded="false" aria-controls="story-scope" aria-haspopup="dialog">
-              Scope
-              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
-              </svg>
-            </button>
+            <div class="conversation-actions">
+              <button class="button button-secondary library-open-button" id="library-open-button" type="button" aria-haspopup="dialog">
+                Browse episodes
+              </button>
+              <button class="mobile-scope-button" id="mobile-scope-button" type="button" aria-expanded="false" aria-controls="story-scope" aria-haspopup="dialog">
+                Scope
+                <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                  <path d="m6 9 6 6 6-6" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"></path>
+                </svg>
+              </button>
+            </div>
           </header>
 
           <div class="messages" id="messages" role="log" aria-live="polite" aria-label="Conversation">
@@ -213,6 +218,66 @@
         </section>
       </section>
     </main>
+
+    <dialog class="library-dialog" id="library-dialog" aria-labelledby="library-title" aria-describedby="library-description">
+      <div class="library-dialog-header">
+        <div>
+          <p class="panel-kicker">Story library</p>
+          <h2 id="library-title">Browse episodes</h2>
+          <p class="dialog-copy" id="library-description">Inspect episode credits without changing your chat scope or spoiler boundary.</p>
+        </div>
+        <button class="dialog-close" id="library-close-button" type="button" aria-label="Close episode library">
+          <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"></path>
+          </svg>
+        </button>
+      </div>
+
+      <div class="library-grid">
+        <section class="library-series-panel" aria-labelledby="library-series-title">
+          <div class="poster-frame" id="library-poster-frame">
+            <img id="library-poster" alt="" loading="lazy" decoding="async" hidden>
+            <p class="poster-fallback" id="library-poster-fallback">Poster unavailable</p>
+          </div>
+          <h3 id="library-series-title">Series unavailable</h3>
+          <p class="library-scope" id="library-scope">No seasons are available to this session.</p>
+          <div class="library-attribution" id="library-attribution" hidden></div>
+          <div class="library-season-controls" aria-labelledby="library-seasons-label">
+            <h4 id="library-seasons-label">Seasons</h4>
+            <div class="library-season-list" id="library-season-list" role="group" aria-label="Available seasons"></div>
+          </div>
+        </section>
+
+        <section class="library-episode-panel" aria-labelledby="library-episodes-title">
+          <div class="library-section-heading">
+            <div>
+              <p class="panel-kicker">Available in this session</p>
+              <h3 id="library-episodes-title">Episodes</h3>
+            </div>
+            <span class="library-count" id="library-episode-count"></span>
+          </div>
+          <div class="library-episode-list" id="library-episode-list" role="list" aria-live="polite"></div>
+        </section>
+
+        <section class="library-detail-panel" aria-labelledby="library-detail-title" aria-live="polite">
+          <p class="panel-kicker">Selected episode</p>
+          <p class="library-episode-position" id="library-detail-position">No episode selected</p>
+          <h3 id="library-detail-title">Choose an episode</h3>
+          <p class="library-detail-empty" id="library-detail-empty">Episode details will appear here when you choose an episode.</p>
+          <div class="library-cast-section" id="library-regular-cast-section" hidden>
+            <h4>Series regulars</h4>
+            <p class="library-cast-disclaimer">Show-level credits; appearance in this episode is not confirmed.</p>
+            <ul class="library-cast-list" id="library-regular-cast"></ul>
+          </div>
+          <div class="library-cast-section" id="library-guest-cast-section" hidden>
+            <h4>Episode guest credits</h4>
+            <ul class="library-cast-list" id="library-guest-cast"></ul>
+            <p class="library-cast-empty" id="library-guest-cast-empty" hidden>No episode guest credits are available.</p>
+          </div>
+          <p class="library-cast-empty" id="library-cast-empty" hidden>No cast credits are available for this episode.</p>
+        </section>
+      </div>
+    </dialog>
 
     <dialog class="auth-dialog" id="auth-dialog" aria-labelledby="auth-title">
       <button class="dialog-close" id="dialog-close-button" type="button" aria-label="Close dialog">
