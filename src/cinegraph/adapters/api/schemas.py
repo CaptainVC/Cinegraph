@@ -110,10 +110,37 @@ class SessionListResponse(ApiSchema):
     sessions: tuple[SessionSummaryResponse, ...]
 
 
+class MetadataSourceResponse(ApiSchema):
+    provider_name: str
+    canonical_url: str
+    attribution: str
+    license_name: str
+    license_url: str
+
+
+class CatalogueCreditResponse(ApiSchema):
+    name: str
+    character_name: str
+    credit_kind: str
+    canonical_url: str
+    character_canonical_url: str | None = None
+
+
+class CataloguePosterResponse(ApiSchema):
+    url: str
+    alt: str
+    width: int | None = None
+    height: int | None = None
+    attribution: str
+    license_name: str
+    license_url: str
+
+
 class CatalogueEpisodeResponse(ApiSchema):
     episode_id: UUID
     episode_number: int
     episode_title: str | None
+    guest_cast: tuple[CatalogueCreditResponse, ...] = ()
 
 
 class CatalogueSeasonResponse(ApiSchema):
@@ -126,6 +153,9 @@ class CatalogueSeriesResponse(ApiSchema):
     series_id: UUID
     series_name: str
     seasons: tuple[CatalogueSeasonResponse, ...]
+    poster: CataloguePosterResponse | None = None
+    regular_cast: tuple[CatalogueCreditResponse, ...] = ()
+    metadata_source: MetadataSourceResponse | None = None
 
 
 class CatalogueResponse(ApiSchema):

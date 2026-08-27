@@ -270,7 +270,7 @@ class ApiGuardrailMiddleware(BaseHTTPMiddleware):
             DEFAULT_AGENT_JOB_CONFIGURATION.sse_media_type
         ):
             response.headers["Cache-Control"] = DEFAULT_AGENT_JOB_CONFIGURATION.sse_cache_control
-        else:
+        elif "Cache-Control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Cross-Origin-Opener-Policy"] = "same-origin"

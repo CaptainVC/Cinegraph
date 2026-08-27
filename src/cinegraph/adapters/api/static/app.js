@@ -40,6 +40,20 @@ const UI_COPY = Object.freeze({
     guestTitle: "Guest access",
     authenticatedTitle: "Authenticated library",
   }),
+  library: Object.freeze({
+    noSeries: "Series unavailable",
+    noSeasons: "No seasons are available to this session.",
+    noEpisodes: "No episodes are available in this season.",
+    noEpisode: "Choose an episode",
+    noEpisodeDescription: "Episode details will appear here when you choose an episode.",
+    noPoster: "Poster unavailable",
+    noMetadata: "Reviewed cast metadata is not available for this series yet.",
+    unknownEpisode: "Untitled episode",
+    unknownCharacter: "Character not listed",
+    sourceLabel: "Source",
+    sourceLinkLabel: "View provider details",
+    episodeCount: (count) => `${count} ${count === 1 ? "episode" : "episodes"}`,
+  }),
   errors: Object.freeze({
     requestFailed: "The request could not be completed.",
     unreachable: "Cinegraph could not be reached. Please try again.",
@@ -63,6 +77,8 @@ const state = {
   session: null,
   catalogue: null,
   selectedSeriesId: null,
+  selectedLibrarySeason: null,
+  selectedLibraryEpisodeId: null,
   sending: false,
 };
 
@@ -85,6 +101,26 @@ const elements = {
   boundarySelect: document.querySelector("#boundary-select"),
   logoutButton: document.querySelector("#logout-button"),
   mobileScopeButton: document.querySelector("#mobile-scope-button"),
+  libraryOpenButton: document.querySelector("#library-open-button"),
+  libraryDialog: document.querySelector("#library-dialog"),
+  libraryCloseButton: document.querySelector("#library-close-button"),
+  libraryPoster: document.querySelector("#library-poster"),
+  libraryPosterFallback: document.querySelector("#library-poster-fallback"),
+  librarySeriesTitle: document.querySelector("#library-series-title"),
+  libraryScope: document.querySelector("#library-scope"),
+  libraryAttribution: document.querySelector("#library-attribution"),
+  librarySeasonList: document.querySelector("#library-season-list"),
+  libraryEpisodeList: document.querySelector("#library-episode-list"),
+  libraryEpisodeCount: document.querySelector("#library-episode-count"),
+  libraryDetailPosition: document.querySelector("#library-detail-position"),
+  libraryDetailTitle: document.querySelector("#library-detail-title"),
+  libraryDetailEmpty: document.querySelector("#library-detail-empty"),
+  libraryRegularCastSection: document.querySelector("#library-regular-cast-section"),
+  libraryRegularCast: document.querySelector("#library-regular-cast"),
+  libraryGuestCastSection: document.querySelector("#library-guest-cast-section"),
+  libraryGuestCast: document.querySelector("#library-guest-cast"),
+  libraryGuestCastEmpty: document.querySelector("#library-guest-cast-empty"),
+  libraryCastEmpty: document.querySelector("#library-cast-empty"),
   messages: document.querySelector("#messages"),
   suggestionGrid: document.querySelector("#suggestion-grid"),
   chatForm: document.querySelector("#chat-form"),
@@ -109,6 +145,7 @@ const elements = {
 
 let authReturnFocus = null;
 let scopeReturnFocus = null;
+let libraryReturnFocus = null;
 
 class ApiError extends Error {
   constructor(response, payload) {
@@ -329,6 +366,9 @@ function showWelcome() {
   state.session = null;
   state.catalogue = null;
   state.selectedSeriesId = null;
+  state.selectedLibrarySeason = null;
+  state.selectedLibraryEpisodeId = null;
+  closeLibrary();
   elements.workspaceView.hidden = true;
   setScopeOpen(false, { restoreFocus: false });
   elements.welcomeView.hidden = false;
@@ -404,6 +444,272 @@ function renderSeriesScope() {
   elements.scopeDetail.textContent = `${series.series_name} · ${formatSeasonScope(series.seasons)}`;
 }
 
+function safeSameOriginMediaUrl(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value, window.location.origin);
+    return url.origin === window.location.origin ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function safeCanonicalUrl(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
+
+function appendExternalLink(parent, label, value) {
+  const href = safeCanonicalUrl(value);
+  if (!href) return false;
+  const link = document.createElement("a");
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.textContent = label;
+  parent.append(link);
+  return true;
+}
+
+function renderLibraryPoster(series) {
+  const poster = series?.poster;
+  const mediaUrl = safeSameOriginMediaUrl(poster?.url);
+  elements.libraryPoster.hidden = true;
+  elements.libraryPoster.removeAttribute("src");
+  elements.libraryPoster.removeAttribute("width");
+  elements.libraryPoster.removeAttribute("height");
+  elements.libraryPoster.alt = poster?.alt || (series ? `${series.series_name} poster` : "");
+  elements.libraryPosterFallback.textContent = mediaUrl ? "Loading poster…" : UI_COPY.library.noPoster;
+  elements.libraryPosterFallback.hidden = false;
+  elements.libraryPoster.onerror = () => {
+    elements.libraryPoster.hidden = true;
+    elements.libraryPosterFallback.textContent = UI_COPY.library.noPoster;
+    elements.libraryPosterFallback.hidden = false;
+  };
+  if (!mediaUrl) return;
+  const width = Number.isInteger(poster?.width) && poster.width > 0 ? poster.width : null;
+  const height = Number.isInteger(poster?.height) && poster.height > 0 ? poster.height : null;
+  if (width) elements.libraryPoster.width = width;
+  if (height) elements.libraryPoster.height = height;
+  elements.libraryPoster.src = mediaUrl;
+  elements.libraryPoster.hidden = false;
+  elements.libraryPosterFallback.hidden = true;
+}
+
+function renderLibraryAttribution(series) {
+  elements.libraryAttribution.replaceChildren();
+  const source = series?.metadata_source;
+  if (!source?.provider_name && !source?.canonical_url && !source?.attribution) {
+    elements.libraryAttribution.hidden = true;
+    return;
+  }
+  elements.libraryAttribution.hidden = false;
+  const label = document.createElement("span");
+  label.textContent = `${UI_COPY.library.sourceLabel}: ${source.provider_name || "Metadata provider"}`;
+  elements.libraryAttribution.append(label);
+  if (source.attribution) {
+    const attribution = document.createElement("span");
+    attribution.textContent = ` · ${source.attribution}`;
+    elements.libraryAttribution.append(attribution);
+  }
+  if (source.license_name) {
+    const license = document.createElement("span");
+    license.textContent = ` · ${source.license_name}`;
+    elements.libraryAttribution.append(license);
+  }
+  if (source.canonical_url) {
+    elements.libraryAttribution.append(document.createTextNode(" · "));
+    appendExternalLink(elements.libraryAttribution, UI_COPY.library.sourceLinkLabel, source.canonical_url);
+  }
+}
+
+function creditItem(credit) {
+  if (!credit || typeof credit.name !== "string" || !credit.name.trim()) return null;
+  const item = document.createElement("li");
+  const name = document.createElement("span");
+  if (!appendExternalLink(name, credit.name, credit.canonical_url)) name.textContent = credit.name;
+  item.append(name);
+  const character = document.createElement("span");
+  character.className = "cast-character";
+  if (typeof credit.character_name === "string" && credit.character_name.trim()) {
+    if (!appendExternalLink(character, credit.character_name, credit.character_canonical_url)) {
+      character.textContent = credit.character_name;
+    }
+  } else {
+    character.textContent = UI_COPY.library.unknownCharacter;
+  }
+  item.append(character);
+  return item;
+}
+
+function renderCreditList(list, credits) {
+  list.replaceChildren();
+  for (const credit of Array.isArray(credits) ? credits : []) {
+    const item = creditItem(credit);
+    if (item) list.append(item);
+  }
+  return list.childElementCount > 0;
+}
+
+function librarySeasons(series) {
+  return Array.isArray(series?.seasons) ? series.seasons : [];
+}
+
+function selectedLibrarySeason(series) {
+  const seasons = librarySeasons(series);
+  return seasons.find((season) => season.season_number === state.selectedLibrarySeason) || seasons[0] || null;
+}
+
+function libraryFocusableElements() {
+  if (!elements.libraryDialog) return [];
+  return [...elements.libraryDialog.querySelectorAll(FOCUSABLE_SELECTOR)].filter(
+    (element) => !element.closest("[hidden]") && element.getClientRects().length > 0,
+  );
+}
+
+function selectLibraryEpisode(episodeId) {
+  state.selectedLibraryEpisodeId = episodeId || null;
+  renderLibraryEpisodeList(selectedLibrarySeason(currentSeries()));
+  renderLibraryDetail();
+  elements.libraryEpisodeList
+    .querySelector('.library-episode-button[aria-pressed="true"]')
+    ?.focus({ preventScroll: true });
+}
+
+function renderLibrarySeasonList(series) {
+  elements.librarySeasonList.replaceChildren();
+  for (const season of librarySeasons(series)) {
+    const button = document.createElement("button");
+    button.className = "library-season-button";
+    button.type = "button";
+    const label = document.createElement("span");
+    label.textContent = `Season ${season.season_number}`;
+    button.append(label);
+    button.setAttribute("aria-pressed", String(season.season_number === state.selectedLibrarySeason));
+    button.addEventListener("click", () => {
+      state.selectedLibrarySeason = season.season_number;
+      const firstEpisode = season.episodes?.[0];
+      state.selectedLibraryEpisodeId = firstEpisode?.episode_id || null;
+      renderLibrarySeasonList(series);
+      renderLibraryEpisodeList(season);
+      renderLibraryDetail();
+      elements.librarySeasonList
+        .querySelector('.library-season-button[aria-pressed="true"]')
+        ?.focus({ preventScroll: true });
+    });
+    elements.librarySeasonList.append(button);
+  }
+}
+
+function renderLibraryEpisodeList(season) {
+  elements.libraryEpisodeList.replaceChildren();
+  const episodes = Array.isArray(season?.episodes) ? season.episodes : [];
+  elements.libraryEpisodeCount.textContent = episodes.length ? UI_COPY.library.episodeCount(episodes.length) : "";
+  if (!episodes.length) {
+    const empty = document.createElement("p");
+    empty.className = "library-episode-empty";
+    empty.textContent = UI_COPY.library.noEpisodes;
+    elements.libraryEpisodeList.append(empty);
+    return;
+  }
+  for (const episode of episodes) {
+    const button = document.createElement("button");
+    button.className = "library-episode-button";
+    button.type = "button";
+    button.setAttribute("aria-pressed", String(episode.episode_id === state.selectedLibraryEpisodeId));
+    const position = document.createElement("span");
+    position.className = "episode-position";
+    position.textContent = `S${season.season_number} · E${episode.episode_number}`;
+    const title = document.createElement("span");
+    title.className = "episode-title";
+    title.textContent = episode.episode_title || UI_COPY.library.unknownEpisode;
+    button.append(position, title);
+    button.addEventListener("click", () => selectLibraryEpisode(episode.episode_id));
+    const item = document.createElement("div");
+    item.setAttribute("role", "listitem");
+    item.append(button);
+    elements.libraryEpisodeList.append(item);
+  }
+}
+
+function renderLibraryDetail() {
+  const series = currentSeries();
+  const season = selectedLibrarySeason(series);
+  const episode = season?.episodes?.find((item) => item.episode_id === state.selectedLibraryEpisodeId) || null;
+  elements.libraryRegularCastSection.hidden = true;
+  elements.libraryGuestCastSection.hidden = true;
+  elements.libraryGuestCastEmpty.hidden = true;
+  elements.libraryCastEmpty.hidden = true;
+  elements.libraryRegularCast.replaceChildren();
+  elements.libraryGuestCast.replaceChildren();
+  if (!episode) {
+    elements.libraryDetailPosition.textContent = "No episode selected";
+    elements.libraryDetailTitle.textContent = UI_COPY.library.noEpisode;
+    elements.libraryDetailEmpty.textContent = UI_COPY.library.noEpisodeDescription;
+    elements.libraryDetailEmpty.hidden = false;
+    elements.libraryCastEmpty.hidden = true;
+    return;
+  }
+  elements.libraryDetailEmpty.hidden = true;
+  elements.libraryDetailPosition.textContent = `Season ${season.season_number} · Episode ${episode.episode_number}`;
+  elements.libraryDetailTitle.textContent = episode.episode_title || UI_COPY.library.unknownEpisode;
+  const regulars = renderCreditList(elements.libraryRegularCast, series?.regular_cast);
+  const guests = renderCreditList(elements.libraryGuestCast, episode.guest_cast);
+  const metadataAvailable = Boolean(series?.metadata_source);
+  elements.libraryRegularCastSection.hidden = !regulars;
+  elements.libraryGuestCastSection.hidden = !metadataAvailable && !guests;
+  elements.libraryGuestCastEmpty.hidden = guests;
+  elements.libraryCastEmpty.textContent = UI_COPY.library.noMetadata;
+  elements.libraryCastEmpty.hidden = metadataAvailable || regulars || guests;
+}
+
+function renderLibrary() {
+  const series = currentSeries();
+  const seasons = librarySeasons(series);
+  if (!series) {
+    elements.librarySeriesTitle.textContent = UI_COPY.library.noSeries;
+    elements.libraryScope.textContent = UI_COPY.library.noSeasons;
+    elements.librarySeasonList.replaceChildren();
+    elements.libraryEpisodeList.replaceChildren();
+    elements.libraryEpisodeCount.textContent = "";
+    renderLibraryPoster(null);
+    renderLibraryAttribution(null);
+    state.selectedLibrarySeason = null;
+    state.selectedLibraryEpisodeId = null;
+    renderLibraryDetail();
+    return;
+  }
+  const season = selectedLibrarySeason(series);
+  state.selectedLibrarySeason = season?.season_number ?? null;
+  const episode = season?.episodes?.find((item) => item.episode_id === state.selectedLibraryEpisodeId) || season?.episodes?.[0] || null;
+  state.selectedLibraryEpisodeId = episode?.episode_id || null;
+  elements.librarySeriesTitle.textContent = series.series_name;
+  elements.libraryScope.textContent = `${formatSeasonScope(seasons)} available to this session.`;
+  renderLibraryPoster(series);
+  renderLibraryAttribution(series);
+  renderLibrarySeasonList(series);
+  renderLibraryEpisodeList(season);
+  renderLibraryDetail();
+}
+
+function openLibrary() {
+  if (!elements.libraryDialog || elements.libraryDialog.open) return;
+  libraryReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  renderLibrary();
+  elements.libraryDialog.showModal();
+  const [firstControl] = libraryFocusableElements();
+  if (firstControl) firstControl.focus({ preventScroll: true });
+}
+
+function closeLibrary() {
+  if (elements.libraryDialog?.open) elements.libraryDialog.close();
+}
+
 function updateSessionChrome() {
   const authenticated = state.session?.principal_kind === "authenticated";
   elements.scopeTitle.textContent = authenticated
@@ -419,6 +725,8 @@ async function enterWorkspace(session) {
   state.session = session;
   state.catalogue = await apiRequest(API.catalogue);
   state.selectedSeriesId = state.catalogue.series[0]?.series_id || null;
+  state.selectedLibrarySeason = null;
+  state.selectedLibraryEpisodeId = null;
   updateSessionChrome();
   renderSeriesControls();
   elements.welcomeView.hidden = true;
@@ -673,8 +981,24 @@ elements.authDialog.addEventListener("close", () => {
 });
 elements.seriesSelect.addEventListener("change", () => {
   state.selectedSeriesId = elements.seriesSelect.value;
+  state.selectedLibrarySeason = null;
+  state.selectedLibraryEpisodeId = null;
   renderSeriesScope();
+  if (elements.libraryDialog?.open) renderLibrary();
   if (elements.workspaceView.classList.contains("scope-open")) setScopeOpen(false);
+});
+elements.libraryOpenButton.addEventListener("click", openLibrary);
+elements.libraryCloseButton.addEventListener("click", closeLibrary);
+elements.libraryDialog.addEventListener("cancel", (event) => {
+  event.preventDefault();
+  closeLibrary();
+});
+elements.libraryDialog.addEventListener("click", (event) => {
+  if (event.target === elements.libraryDialog) closeLibrary();
+});
+elements.libraryDialog.addEventListener("close", () => {
+  if (libraryReturnFocus instanceof HTMLElement) libraryReturnFocus.focus({ preventScroll: true });
+  libraryReturnFocus = null;
 });
 document.querySelectorAll('input[name="spoiler-mode"]').forEach((input) => {
   input.addEventListener("change", updateSpoilerControls);
@@ -729,6 +1053,19 @@ document.addEventListener("keydown", (event) => {
   }
   if (event.key === "Tab" && elements.workspaceView.classList.contains("scope-open")) {
     const focusable = scopeFocusableElements();
+    if (!focusable.length) return;
+    const firstControl = focusable[0];
+    const lastControl = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === firstControl) {
+      event.preventDefault();
+      lastControl.focus();
+    } else if (!event.shiftKey && document.activeElement === lastControl) {
+      event.preventDefault();
+      firstControl.focus();
+    }
+  }
+  if (event.key === "Tab" && elements.libraryDialog?.open) {
+    const focusable = libraryFocusableElements();
     if (!focusable.length) return;
     const firstControl = focusable[0];
     const lastControl = focusable[focusable.length - 1];

@@ -39,6 +39,7 @@ def test_product_shell_exposes_keyboard_and_drawer_contracts(tmp_path: Path) -> 
     context, _ = make_context(tmp_path)
     with TestClient(create_app(context)) as client:
         page = client.get("/").text
+        stylesheet = client.get("/assets/app.css").text
         script = client.get("/assets/app.js").text
 
     # Keep these checks semantic rather than formatting-sensitive: the source
@@ -50,6 +51,20 @@ def test_product_shell_exposes_keyboard_and_drawer_contracts(tmp_path: Path) -> 
     assert 'id="scope-close-button"' in page
     assert 'id="scope-backdrop"' in page and 'tabindex="-1"' in page
     assert 'id="messages"' in page and 'aria-live="polite"' in page
+    assert 'id="library-open-button"' in page
+    assert "Browse episodes" in page
+    assert 'id="library-dialog"' in page
+    assert 'aria-labelledby="library-title"' in page
+    assert 'id="library-close-button"' in page
+    assert 'id="library-poster"' in page
+    assert 'loading="lazy"' in page
+    assert 'decoding="async"' in page
+    assert 'id="library-season-list"' in page
+    assert 'id="library-episode-list"' in page
+    assert 'Series regulars' in page
+    assert 'Episode guest credits' in page
+    assert 'Show-level credits; appearance in this episode is not confirmed.' in page
+    assert 'No episode guest credits are available.' in page
 
     assert "const UI_COPY = Object.freeze" in script
     assert "const AUTH_MODES = Object.freeze" in script
@@ -75,6 +90,23 @@ def test_product_shell_exposes_keyboard_and_drawer_contracts(tmp_path: Path) -> 
     assert "const SCOPE_DRAWER_MEDIA = window.matchMedia(SCOPE_DRAWER_QUERY)" in script
     assert "SCOPE_DRAWER_MEDIA.matches" in script
     assert "instanceof HTMLElement" in script
+    assert "function openLibrary" in script
+    assert "function closeLibrary" in script
+    assert "function libraryFocusableElements" in script
+    assert "safeSameOriginMediaUrl" in script
+    assert 'url.protocol === "https:"' in script
+    assert "Reviewed cast metadata is not available for this series yet." in script
+    assert 'target = "_blank"' in script
+    assert 'rel = "noopener noreferrer"' in script
+    assert 'textContent = credit.character_name' in script
+    assert "selectedLibrarySeason" in script
+    assert "selectedLibraryEpisodeId" in script
+    assert '.library-season-button[aria-pressed="true"]' in script
+    assert '.library-episode-button[aria-pressed="true"]' in script
+    assert "overscroll-behavior: contain" in stylesheet
+    assert "elements.libraryDialog.addEventListener(\"cancel\"" in script
+    assert "elements.libraryDialog.addEventListener(\"close\"" in script
+    assert "innerHTML" not in script
 
     assert 'setAttribute("aria-busy", String(busy))' in script
     assert "button.disabled = busy" in script
