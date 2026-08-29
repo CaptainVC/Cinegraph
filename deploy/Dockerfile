@@ -3,9 +3,11 @@
 ARG PYTHON_VERSION=3.14.2
 ARG UV_VERSION=0.11.23
 
+FROM ghcr.io/astral-sh/uv:${UV_VERSION}@sha256:d0a0a753ab981624b49c97abc98821c1c09f4ca69d1ef5cee69c501be3d88479 AS uv
+
 FROM python:${PYTHON_VERSION}-slim-bookworm@sha256:e87711ef5c86aaeaa7031718a69db79d334d94c545c709583f651b8185870941 AS dependencies
 
-COPY --from=ghcr.io/astral-sh/uv:${UV_VERSION}@sha256:d0a0a753ab981624b49c97abc98821c1c09f4ca69d1ef5cee69c501be3d88479 /uv /uvx /usr/local/bin/
+COPY --from=uv /uv /uvx /usr/local/bin/
 
 ENV UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
