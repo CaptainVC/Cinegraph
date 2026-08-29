@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from math import isfinite
+from math import ceil, isfinite
 
 from cinegraph.common.error_messages import AgentJobErrorMessages
+from cinegraph.config.agent_runtime_controls import DEFAULT_AGENT_RUNTIME_CONTROLS
 from cinegraph.config.series_agent import DEFAULT_SERIES_AGENT_CONFIGURATION
 
 
@@ -16,6 +17,11 @@ class AgentJobConfiguration:
     sse_poll_interval_seconds: float = 0.05
     sse_heartbeat_interval_seconds: float = 15.0
     sse_max_duration_seconds: float = 120.0
+    # Browser fallback polling is deliberately slower than the worker's SSE
+    # replay loop.  Keep it here so the browser cannot drift from server
+    # behavior by carrying an independent timeout constant.
+    client_poll_interval_seconds: float = 1.2
+    transport_grace_seconds: int = 15
     sse_max_events: int = 128
     sse_replay_batch: int = 64
     provider_timeout_seconds: float = 60.0
@@ -41,6 +47,7 @@ class AgentJobConfiguration:
                 self.sse_replay_batch,
                 self.evidence_citation_limit,
                 self.evidence_text_max_chars,
+                self.transport_grace_seconds,
             )
         ):
             raise ValueError(AgentJobErrorMessages.CONFIG_INTEGER_LIMITS)
@@ -57,6 +64,7 @@ class AgentJobConfiguration:
                 self.sse_poll_interval_seconds,
                 self.sse_heartbeat_interval_seconds,
                 self.sse_max_duration_seconds,
+                self.client_poll_interval_seconds,
                 self.provider_timeout_seconds,
             )
         ):
@@ -69,6 +77,8 @@ class AgentJobConfiguration:
             <= self.sse_max_duration_seconds
         ):
             raise ValueError(AgentJobErrorMessages.CONFIG_TIMING_RELATION)
+        if self.client_poll_interval_seconds * 1_000 < 1:
+            raise ValueError(AgentJobErrorMessages.CONFIG_TIMING_LIMITS)
         if any(
             not value or value.strip() != value
             for value in (
@@ -83,3 +93,33 @@ class AgentJobConfiguration:
 
 
 DEFAULT_AGENT_JOB_CONFIGURATION = AgentJobConfiguration()
+
+
+def agent_client_poll_interval_ms(
+    configuration: AgentJobConfiguration = DEFAULT_AGENT_JOB_CONFIGURATION,
+) -> int:
+    """Return the validated browser fallback polling interval in milliseconds."""
+
+    return ceil(configuration.client_poll_interval_seconds * 1_000)
+
+
+def agent_client_job_deadline_ms(
+    configuration: AgentJobConfiguration = DEFAULT_AGENT_JOB_CONFIGURATION,
+    *,
+    max_execution_duration_seconds: int = (
+        DEFAULT_AGENT_RUNTIME_CONTROLS.max_execution_duration_seconds
+    ),
+) -> int:
+    """Return a browser deadline covering execution, SSE, and transport grace."""
+
+    if (
+        isinstance(max_execution_duration_seconds, bool)
+        or not isinstance(max_execution_duration_seconds, int)
+        or max_execution_duration_seconds <= 0
+    ):
+        raise ValueError(AgentJobErrorMessages.CONFIG_EXECUTION_DURATION)
+    duration_seconds = max(
+        configuration.sse_max_duration_seconds,
+        max_execution_duration_seconds,
+    ) + configuration.transport_grace_seconds
+    return ceil(duration_seconds * 1_000)

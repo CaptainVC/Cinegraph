@@ -1,14 +1,20 @@
 "use strict";
 
-const API = Object.freeze({
+const SHELL_CONFIG_PATH = "/client-config";
+const API_PREFIX_PATTERN = /^\/(?:[A-Za-z0-9._~-]+\/)*[A-Za-z0-9._~-]+$/;
+const RESERVED_API_PREFIX_ROOTS = Object.freeze(["/assets", "/health", SHELL_CONFIG_PATH]);
+const API_PATHS = Object.freeze({
+  guest: "/auth/guest",
+  register: "/auth/register",
+  login: "/auth/login",
+  session: "/auth/session",
+  logout: "/auth/logout",
+  catalogue: "/catalogue",
+  agentJobs: "/agent/jobs",
+});
+let API = Object.freeze({
   health: "/health/ready",
-  guest: "/api/v1/auth/guest",
-  register: "/api/v1/auth/register",
-  login: "/api/v1/auth/login",
-  session: "/api/v1/auth/session",
-  logout: "/api/v1/auth/logout",
-  catalogue: "/api/v1/catalogue",
-  agentJobs: "/api/v1/agent/jobs",
+  clientConfig: SHELL_CONFIG_PATH,
 });
 
 const SPOILER_COPY = Object.freeze({
@@ -103,14 +109,15 @@ const UI_COPY = Object.freeze({
   errors: Object.freeze({
     requestFailed: "The request could not be completed.",
     unreachable: "Cinegraph could not be reached. Please try again.",
+    bootstrapFailed: "Cinegraph could not load its runtime configuration. Please try again.",
   }),
   service: Object.freeze({ ready: "Ready", unavailable: "Unavailable" }),
 });
 
-const AGENT_RUNTIME = Object.freeze({
-  pollIntervalMs: 1200,
-  maximumPollAttempts: 75,
-  maximumJobDurationMs: 90_000,
+let AGENT_RUNTIME = Object.freeze({
+  pollIntervalMs: null,
+  maximumPollAttempts: null,
+  maximumJobDurationMs: null,
   maximumExcerptLength: 4_000,
   maximumRenderedCitations: 32,
 });
@@ -139,6 +146,7 @@ const state = {
   activeJob: null,
   authEpoch: 0,
   authController: null,
+  bootstrapReady: false,
 };
 
 const elements = {
@@ -279,6 +287,69 @@ async function apiRequest(path, options = {}) {
   return payload;
 }
 
+function configureAgentRuntime(payload) {
+  if (
+    !payload
+    || typeof payload !== "object"
+    || Array.isArray(payload)
+    || Object.keys(payload).length !== 3
+    || typeof payload.api_prefix !== "string"
+    || !API_PREFIX_PATTERN.test(payload.api_prefix)
+    || payload.api_prefix.split("/").some((segment) => segment === "." || segment === "..")
+    || RESERVED_API_PREFIX_ROOTS.some(
+      (root) => payload.api_prefix === root || payload.api_prefix.startsWith(`${root}/`),
+    )
+    || !Number.isSafeInteger(payload.agent_poll_interval_ms)
+    || payload.agent_poll_interval_ms <= 0
+    || !Number.isSafeInteger(payload.agent_job_deadline_ms)
+    || payload.agent_job_deadline_ms <= 0
+    || payload.agent_job_deadline_ms < payload.agent_poll_interval_ms
+  ) {
+    throw new Error(UI_COPY.errors.bootstrapFailed);
+  }
+  const maximumPollAttempts = Math.max(
+    1,
+    Math.ceil(payload.agent_job_deadline_ms / payload.agent_poll_interval_ms),
+  );
+  API = Object.freeze({
+    health: "/health/ready",
+    clientConfig: SHELL_CONFIG_PATH,
+    ...Object.fromEntries(
+      Object.entries(API_PATHS).map(([name, path]) => [name, `${payload.api_prefix}${path}`]),
+    ),
+  });
+  AGENT_RUNTIME = Object.freeze({
+    ...AGENT_RUNTIME,
+    pollIntervalMs: payload.agent_poll_interval_ms,
+    maximumPollAttempts,
+    maximumJobDurationMs: payload.agent_job_deadline_ms,
+  });
+}
+
+async function loadClientConfiguration() {
+  configureAgentRuntime(await apiRequest(API.clientConfig));
+}
+
+function failClosedBootstrap() {
+  state.bootstrapReady = false;
+  document.documentElement.dataset.cinegraphBootstrap = "failed";
+  elements.serviceStatus.classList.remove("ready");
+  elements.serviceStatus.classList.add("unavailable");
+  elements.serviceStatusText.textContent = UI_COPY.service.unavailable;
+  setBootstrapControlsDisabled(true);
+  showToast(UI_COPY.errors.bootstrapFailed);
+}
+
+function setBootstrapControlsDisabled(disabled) {
+  [
+    elements.guestStartButton,
+    elements.signInButton,
+    elements.createAccountButton,
+  ].forEach((button) => {
+    if (button) button.disabled = disabled;
+  });
+}
+
 function setBusy(button, busy, busyText) {
   if (!button) return;
   if (!button.dataset.originalAriaCaptured) {
@@ -337,6 +408,7 @@ async function updateServiceStatus() {
 }
 
 function openAuth(mode = "login") {
+  if (!state.bootstrapReady) return;
   authReturnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   setAuthMode(mode);
   elements.authError.hidden = true;
@@ -832,6 +904,7 @@ async function enterWorkspace(session, intent = null) {
 }
 
 async function beginGuestSession() {
+  if (!state.bootstrapReady) return;
   const intent = beginAuthIntent();
   setBusy(elements.guestStartButton, true, UI_COPY.busy.guest);
   try {
@@ -1230,7 +1303,7 @@ function strictAgentUrl(value, jobId, suffix) {
   if (typeof value !== "string" || !value.trim() || !canonicalId) return null;
   try {
     const url = new URL(value, window.location.origin);
-    const expectedPath = `/api/v1/agent/jobs/${canonicalId}${suffix}`;
+    const expectedPath = `${API.agentJobs}/${canonicalId}${suffix}`;
     if (
       url.origin !== window.location.origin
       || url.username
@@ -1486,7 +1559,7 @@ function startAgentEvents(job) {
 }
 
 async function submitQuestion(question) {
-  if (state.sending || !state.selectedSeriesId || !state.session) return;
+  if (!state.bootstrapReady || state.sending || !state.selectedSeriesId || !state.session) return;
   const trimmed = question.trim();
   if (trimmed.length < 2) return;
   state.sending = true;
@@ -1736,5 +1809,17 @@ SCOPE_DRAWER_MEDIA.addEventListener("change", (event) => {
 
 updateSpoilerControls();
 resizeQuestionInput();
-updateServiceStatus();
-restoreSession();
+
+async function bootstrap() {
+  try {
+    await loadClientConfiguration();
+    await Promise.all([updateServiceStatus(), restoreSession()]);
+    state.bootstrapReady = true;
+    setBootstrapControlsDisabled(false);
+    document.documentElement.dataset.cinegraphBootstrap = "ready";
+  } catch {
+    failClosedBootstrap();
+  }
+}
+
+bootstrap();

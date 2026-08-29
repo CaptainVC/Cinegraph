@@ -23,6 +23,8 @@ class AgentJobErrorMessages:
     CONFIG_TIMING_LIMITS = "Agent job timing limits must be finite and positive."
     CONFIG_REPLAY_LIMIT = "SSE replay batch must not exceed maximum events."
     CONFIG_TIMING_RELATION = "SSE poll, heartbeat, and duration limits are incoherent."
+    CONFIG_EXECUTION_DURATION = "Maximum agent execution duration must be positive."
+    CLIENT_RUNTIME_VALUES = "Client runtime values must be positive integers."
     CONFIG_SSE_HEADERS = "SSE response configuration must be non-empty and trimmed."
     DISPATCHER_LIMITS = "Agent job dispatcher limits must be positive."
     WATCH_STATE_READ_ONLY = "The baseline watch-state adapter is read-only."

@@ -10,6 +10,15 @@ login responses set the existing HTTP-only cookie, and frontend requests use
 same-origin credentials. Text from users, models, errors, catalogue records, and
 citations is inserted with `textContent`, not interpreted as HTML.
 
+Before enabling authentication or guest actions, the shell loads the public,
+same-origin `/client-config` bootstrap contract. It returns the configured API prefix
+plus strict positive-integer timing values derived from the server's centralized
+agent-job limits, including transport grace. Every browser API and agent-evidence URL
+is built and validated against that prefix, so a non-default deployment cannot drift
+from the server routes. Missing, extra, malformed, or unreachable runtime
+configuration fails closed and leaves entry controls disabled. The same response is
+also exposed below the configured API prefix for non-browser clients.
+
 ## User flow
 
 1. The landing screen probes readiness and offers one-click guest entry.
@@ -24,7 +33,7 @@ citations is inserted with `textContent`, not interpreted as HTML.
 
 ## Agent research and evidence trail
 
-Composer submissions use the durable `/api/v1/agent/jobs` flow. Each request gets
+Composer submissions use the durable `<api-prefix>/agent/jobs` flow. Each request gets
 an in-memory thread UUID and idempotency UUID; neither is persisted in browser
 storage. The browser follows same-origin lifecycle events over `EventSource`,
 then uses bounded status polling when events are unavailable or reconnecting. A
@@ -76,3 +85,18 @@ scrolling, and responsive one-column behavior below the desktop layout.
 The layout includes semantic landmarks, visible focus states, a skip link,
 screen-reader status regions, native dialog/form controls, keyboard submission,
 responsive navigation, and a reduced-motion mode.
+
+## Browser release contract
+
+The `e2e` test suite launches the packaged FastAPI shell on an ephemeral localhost
+origin and drives real headless Chromium. API boundaries are intercepted with
+deterministic synthetic responses, so the gate requires no model key, database,
+Qdrant instance, account, or private corpus. It verifies guest S1/S2 entitlement,
+agent success and safe refusal, transcript and graph evidence hydration, fail-closed
+evidence validation, SSE-to-poll fallback, text-only rendering of hostile content,
+keyboard drawer behavior, and mobile horizontal-overflow protection.
+
+Ordinary coverage runs exclude the `e2e` marker. The dedicated CI gate installs
+Chromium and runs the browser suite without coverage instrumentation. On failure it
+retains a screenshot and Playwright trace under `test-results/e2e`; the harness uses
+synthetic fixtures exclusively and disables source capture in those traces.

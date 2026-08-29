@@ -34,6 +34,7 @@ from cinegraph.adapters.api.schemas import (
     ChatRequest,
     ChatResponse,
     CitationResponse,
+    ClientConfigurationResponse,
     EpisodeRecommendationResponse,
     HealthResponse,
     LoginRequest,
@@ -73,8 +74,11 @@ from cinegraph.common.error_messages import AgentJobErrorMessages, Authenticatio
 from cinegraph.config import (
     DEFAULT_API_CONFIGURATION,
     DEFAULT_AUTHENTICATION_CONFIGURATION,
+    PRODUCT_UI_CLIENT_CONFIGURATION_PATH,
     ApiConfiguration,
     RuntimeEnvironment,
+    agent_client_job_deadline_ms,
+    agent_client_poll_interval_ms,
 )
 from cinegraph.domain.models.identity import SessionPrincipal
 from cinegraph.domain.models.series_metadata import CreditedPerson, SeriesMetadataSnapshot
@@ -221,6 +225,7 @@ def _csrf_valid(request: Request) -> bool:
 def _catalogue_response(
     context: ApiContext,
     principal: SessionPrincipal,
+    api_prefix: str = DEFAULT_API_CONFIGURATION.api_prefix,
 ) -> CatalogueResponse:
     series_items = []
     episode_refs_by_id = {
@@ -261,7 +266,12 @@ def _catalogue_response(
                     series_id=series.series_id,
                     series_name=series.series_name,
                     seasons=tuple(season_items),
-                    poster=_poster_descriptor(context, series.series_id, series.series_name),
+                    poster=_poster_descriptor(
+                        context,
+                        series.series_id,
+                        series.series_name,
+                        api_prefix,
+                    ),
                     regular_cast=_regular_cast(
                         context.series_metadata.get(series.series_id)
                     ),
@@ -321,13 +331,14 @@ def _poster_descriptor(
     context: ApiContext,
     series_id: UUID,
     series_name: str,
+    api_prefix: str = DEFAULT_API_CONFIGURATION.api_prefix,
 ) -> CataloguePosterResponse | None:
     snapshot = context.series_metadata.get(series_id)
     if snapshot is None or snapshot.poster is None:
         return None
     poster = snapshot.poster
     return CataloguePosterResponse(
-        url=f"{DEFAULT_API_CONFIGURATION.api_prefix}/series/{series_id}/poster",
+        url=f"{api_prefix}/series/{series_id}/poster",
         alt=f"Poster for {series_name}",
         width=poster.width,
         height=poster.height,
@@ -416,8 +427,8 @@ def create_app(
                 owned_context.close()
 
     app = FastAPI(
-        title=DEFAULT_API_CONFIGURATION.title,
-        version=DEFAULT_API_CONFIGURATION.version,
+        title=api_configuration.title,
+        version=api_configuration.version,
         lifespan=lifespan,
     )
     @app.middleware("http")
@@ -425,7 +436,7 @@ def create_app(
         request: Request, call_next: Callable[[Request], Awaitable[Response]]
     ) -> Response:
         unsafe = request.method.upper() in DEFAULT_AUTHENTICATION_CONFIGURATION.unsafe_methods
-        is_api = request.url.path.startswith(DEFAULT_API_CONFIGURATION.api_prefix)
+        is_api = request.url.path.startswith(api_configuration.api_prefix)
         if unsafe and is_api and _is_production(request):
             if not _same_origin_request(request):
                 return error_response(
@@ -454,7 +465,7 @@ def create_app(
     )
 
     app.mount("/assets", StaticFiles(directory=STATIC_ROOT), name="assets")
-    prefix = DEFAULT_API_CONFIGURATION.api_prefix
+    prefix = api_configuration.api_prefix
 
     def current_request_id(request: Request) -> str:
         return getattr(request.state, "request_id", "unavailable")
@@ -515,6 +526,19 @@ def create_app(
     @app.get("/health/live", response_model=HealthResponse)
     def live() -> HealthResponse:
         return HealthResponse(status="ok")
+
+    @app.get(
+        PRODUCT_UI_CLIENT_CONFIGURATION_PATH,
+        response_model=ClientConfigurationResponse,
+        include_in_schema=False,
+    )
+    @app.get(f"{prefix}/client-config", response_model=ClientConfigurationResponse)
+    def client_config() -> ClientConfigurationResponse:
+        return ClientConfigurationResponse(
+            api_prefix=prefix,
+            agent_poll_interval_ms=agent_client_poll_interval_ms(),
+            agent_job_deadline_ms=agent_client_job_deadline_ms(),
+        )
 
     @app.get("/", include_in_schema=False, response_class=FileResponse)
     def product_ui(request: Request) -> FileResponse:
@@ -753,7 +777,7 @@ def create_app(
         request: Request,
         principal: SessionPrincipal = Depends(_principal),
     ) -> CatalogueResponse:
-        return _catalogue_response(_context(request), principal)
+        return _catalogue_response(_context(request), principal, api_configuration.api_prefix)
 
     @app.get(f"{prefix}/series/{{series_id}}/poster")
     def series_poster(

@@ -233,12 +233,27 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The current branch baseline is 87.29% total branch coverage (804 passed and 4 skipped,
-measured with `pytest-cov` on 2026-08-25); the centralized coverage configuration floors it at 87%
-so coverage cannot silently regress. Coverage XML and JSON reports are generated
-locally and uploaded by CI. Ruff syntax/error classes, Pyflakes, and import sorting are
-gated across the repository. Formatter enforcement remains intentionally staged to
-avoid mixing a repository-wide style rewrite with behavioral phases.
+The verified branch baseline is 87.04% total branch coverage (874 passed and 5
+skipped, measured with `pytest-cov` on 2026-08-29). The centralized coverage
+configuration floors ordinary (non-browser) tests at 87%, so coverage cannot
+silently regress. Coverage XML and JSON reports are generated locally and uploaded
+by CI. Ruff syntax/error classes, Pyflakes, and import sorting are gated across the
+repository. Formatter enforcement remains intentionally staged to avoid mixing a
+repository-wide style rewrite with behavioral phases.
+
+Browser end-to-end tests are marked `e2e` and excluded from ordinary test and coverage
+runs. Install the locked development dependencies and Chromium, then run them with:
+
+```text
+uv sync --locked --dev
+uv run playwright install chromium
+uv run pytest -o addopts='' tests/e2e -m e2e --no-cov
+```
+
+The dedicated CI job installs Chromium with system dependencies before running this
+same marker-scoped command. It uploads synthetic-only screenshots and Playwright
+traces for failed cases; those artifacts never contain private corpus data or
+credentials.
 
 Architecture boundaries and phase workflow are recorded in [AGENTS.md](AGENTS.md),
 with decisions indexed in [docs/adr/README.md](docs/adr/README.md).

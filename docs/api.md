@@ -21,6 +21,9 @@ requests; development uses usable non-Secure names.
 - `GET /health/ready` checks SQL access to the durable agent-job schema and requires
   the configured Qdrant collection to be green with the expected dense, sparse, and
   payload-index schema.
+- `GET /client-config` bootstraps the product shell with the canonical API prefix and
+  centralized browser polling/deadline limits; the same contract is mirrored at
+  `<api-prefix>/client-config` for API clients.
 - `POST /api/v1/auth/guest` issues an eight-hour guest session.
 - `POST /api/v1/auth/register` creates an account and session.
 - `POST /api/v1/auth/login` authenticates an account.

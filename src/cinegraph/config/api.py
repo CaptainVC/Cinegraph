@@ -1,11 +1,22 @@
 from dataclasses import dataclass
+from re import compile as compile_pattern
 
+from cinegraph.common.error_messages import ConfigurationErrorMessages
 from cinegraph.config.series_metadata import (
     SERIES_METADATA_APPROVED_DIRECTORY,
     SERIES_METADATA_ARTWORK_DIRECTORY,
     SERIES_METADATA_POSTER_MAX_BYTES,
     SERIES_METADATA_REVIEWER_ID,
 )
+
+API_PREFIX_PATTERN = compile_pattern(r"/[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)*")
+PRODUCT_UI_CLIENT_CONFIGURATION_PATH = "/client-config"
+RESERVED_API_PREFIX_ROOTS = (
+    "/assets",
+    "/health",
+    PRODUCT_UI_CLIENT_CONFIGURATION_PATH,
+)
+NONCANONICAL_API_PREFIX_SEGMENTS = frozenset({".", ".."})
 
 
 @dataclass(frozen=True, slots=True)
@@ -36,6 +47,21 @@ class ApiConfiguration:
     static_asset_request_cost: int
 
     def __post_init__(self) -> None:
+        if (
+            not isinstance(self.api_prefix, str)
+            or API_PREFIX_PATTERN.fullmatch(self.api_prefix) is None
+        ):
+            raise ValueError(ConfigurationErrorMessages.API_PREFIX_SHAPE)
+        if any(
+            segment in NONCANONICAL_API_PREFIX_SEGMENTS
+            for segment in self.api_prefix.split("/")[1:]
+        ):
+            raise ValueError(ConfigurationErrorMessages.API_PREFIX_DOT_SEGMENTS)
+        if any(
+            self.api_prefix == root or self.api_prefix.startswith(f"{root}/")
+            for root in RESERVED_API_PREFIX_ROOTS
+        ):
+            raise ValueError(ConfigurationErrorMessages.API_PREFIX_RESERVED)
         positive_integers = (
             self.maximum_request_body_bytes,
             self.maximum_series_poster_bytes,
