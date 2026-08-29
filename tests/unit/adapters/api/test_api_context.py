@@ -1,8 +1,10 @@
 from pathlib import Path
 
-from tests.unit.adapters.api.test_fastapi_app import make_catalogue
+from fastapi.testclient import TestClient
+from tests.unit.adapters.api.test_fastapi_app import make_catalogue, make_context
 
 import cinegraph.adapters.api.context as context_module
+from cinegraph.adapters.api.fastapi_app import create_app
 from cinegraph.ports.catalogue import LoadedCatalogueManifest
 
 
@@ -83,10 +85,19 @@ def test_default_context_wires_bounded_private_agent_models(monkeypatch, tmp_pat
         "from_chat_model",
         classmethod(lambda _cls, _model: object()),
     )
+    recovery_starts = []
+    monkeypatch.setattr(
+        context_module.AgentJobService,
+        "start_recovery_supervisor",
+        lambda service: recovery_starts.append(service),
+    )
 
     context = context_module.build_default_api_context(env_file)
 
     assert context.agent_job_service is not None
+    assert recovery_starts == []
+    context.start()
+    assert recovery_starts == [context.agent_job_service]
     assert len(model_calls) == 4
     synthesis, selector = model_calls[-2:]
     assert synthesis["model"] == "gpt-5.6-terra"
@@ -102,3 +113,30 @@ def test_default_context_wires_bounded_private_agent_models(monkeypatch, tmp_pat
     context.close()
     context.close()
     assert root.closed == 1
+
+
+def test_fastapi_lifespan_owns_injected_context_start_and_close(tmp_path: Path) -> None:
+    class LifecycleService:
+        def __init__(self) -> None:
+            self.starts = 0
+            self.closes = 0
+
+        @property
+        def recovery_ready(self) -> bool:
+            return self.starts == 1 and self.closes == 0
+
+        def start_recovery_supervisor(self) -> None:
+            self.starts += 1
+
+        def close(self) -> None:
+            self.closes += 1
+
+    context, _ = make_context(tmp_path)
+    service = LifecycleService()
+    context.agent_job_service = service
+
+    with TestClient(create_app(context)):
+        assert service.starts == 1
+        assert service.closes == 0
+
+    assert service.closes == 1

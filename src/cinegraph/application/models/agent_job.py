@@ -201,6 +201,14 @@ class AgentJob:
             return self
         return replace(self, status=AgentJobStatus.RUNNING, started_at=occurred_at)
 
+    def requeue_after_interruption(self, occurred_at: datetime) -> "AgentJob":
+        """Return an interrupted running job to its exact persisted queued input."""
+
+        _utc(occurred_at, "occurred_at")
+        if self.status is not AgentJobStatus.RUNNING:
+            raise ValueError(AgentJobErrorMessages.REPOSITORY_RECOVER_STATE)
+        return replace(self, status=AgentJobStatus.QUEUED, started_at=None)
+
     def complete(self, result: SeriesAgentResult, occurred_at: datetime) -> "AgentJob":
         _utc(occurred_at, "occurred_at")
         if self.status is not AgentJobStatus.RUNNING:

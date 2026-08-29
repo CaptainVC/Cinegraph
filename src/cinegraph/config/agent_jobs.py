@@ -5,6 +5,8 @@ from cinegraph.common.error_messages import AgentJobErrorMessages
 from cinegraph.config.agent_runtime_controls import DEFAULT_AGENT_RUNTIME_CONTROLS
 from cinegraph.config.series_agent import DEFAULT_SERIES_AGENT_CONFIGURATION
 
+AGENT_JOB_SUPERVISOR_ADVISORY_LOCK_KEY = 0x43494E4547524150
+
 
 @dataclass(frozen=True, slots=True)
 class AgentJobConfiguration:
@@ -22,6 +24,9 @@ class AgentJobConfiguration:
     # behavior by carrying an independent timeout constant.
     client_poll_interval_seconds: float = 1.2
     transport_grace_seconds: int = 15
+    recovery_scan_interval_seconds: float = 5.0
+    recovery_batch_size: int = 32
+    recovery_shutdown_timeout_seconds: float = 5.0
     sse_max_events: int = 128
     sse_replay_batch: int = 64
     provider_timeout_seconds: float = 60.0
@@ -48,6 +53,7 @@ class AgentJobConfiguration:
                 self.evidence_citation_limit,
                 self.evidence_text_max_chars,
                 self.transport_grace_seconds,
+                self.recovery_batch_size,
             )
         ):
             raise ValueError(AgentJobErrorMessages.CONFIG_INTEGER_LIMITS)
@@ -65,12 +71,16 @@ class AgentJobConfiguration:
                 self.sse_heartbeat_interval_seconds,
                 self.sse_max_duration_seconds,
                 self.client_poll_interval_seconds,
+                self.recovery_scan_interval_seconds,
+                self.recovery_shutdown_timeout_seconds,
                 self.provider_timeout_seconds,
             )
         ):
             raise ValueError(AgentJobErrorMessages.CONFIG_TIMING_LIMITS)
         if self.sse_replay_batch > self.sse_max_events:
             raise ValueError(AgentJobErrorMessages.CONFIG_REPLAY_LIMIT)
+        if self.recovery_batch_size > self.pending_limit:
+            raise ValueError(AgentJobErrorMessages.CONFIG_RECOVERY_BATCH)
         if not (
             self.sse_poll_interval_seconds
             <= self.sse_heartbeat_interval_seconds

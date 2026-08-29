@@ -24,9 +24,10 @@ This branch establishes the first production boundaries:
 - fail-closed corpus entitlements that restrict guest access to Modern Family
   seasons 1 and 2 independently of spoiler/watch-progress policy;
 - bounded owner-scoped agent jobs at `/api/v1/agent/jobs` with a durable SQL job/event
-  store, atomic lifecycle transitions, and cursor-correct replayable SSE; the bounded
-  dispatcher and LangGraph checkpoint remain process-local pending worker recovery
-  supervision. See `docs/agent-jobs-api.md` for the request and reconnect contract.
+  store, atomic lifecycle transitions, cursor-correct replayable SSE, and startup
+  recovery under one supervised API process; the bounded dispatcher and LangGraph
+  checkpoint remain process-local. See `docs/agent-jobs-api.md` for the request,
+  recovery, and reconnect contracts.
 - content-free structured runtime telemetry, correlated request/job lifecycle events,
   classified transient retries, cooperative deadlines, and strict cross-model token/
   estimated-cost budgets for the series research agent;

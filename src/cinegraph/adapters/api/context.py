@@ -28,6 +28,9 @@ from cinegraph.adapters.observability import JsonLoggingRuntimeTelemetrySink
 from cinegraph.adapters.persistence.sqlalchemy_agent_job_repository import (
     SqlAlchemyAgentJobRepository,
 )
+from cinegraph.adapters.persistence.sqlalchemy_agent_job_supervisor_lease import (
+    SqlAlchemyAgentJobSupervisorLease,
+)
 from cinegraph.adapters.persistence.sqlalchemy_graph_claim_reader import SqlAlchemyGraphClaimReader
 from cinegraph.adapters.qdrant.qdrant_collection_provisioner import (
     QdrantTranscriptCollectionProvisioner,
@@ -131,6 +134,10 @@ class ApiContext:
     def agent_jobs(self) -> AgentJobServiceProtocol | None:
         return self.agent_job_service
 
+    def start(self) -> None:
+        if self.agent_job_service is not None:
+            self.agent_job_service.start_recovery_supervisor()
+
     def close(self) -> None:
         if self._closed:
             return
@@ -194,6 +201,16 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         RetrievalScopeCompiler(SpoilerPolicy()),
         SqlAlchemyGraphClaimReader(root.identity_engine),
     )
+
+    def qdrant_ready() -> bool:
+        try:
+            return QdrantTranscriptCollectionProvisioner(
+                root.qdrant_client,
+                root.qdrant_schema,
+            ).is_ready()
+        except Exception:
+            return False
+
     synthesis_model = ChatOpenAI(
         model=openai.agent_synthesis_model,
         api_key=openai.openai_api_key,
@@ -230,20 +247,21 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         conversation_service,
         BoundedThreadPoolAgentJobDispatcher(),
         telemetry_sink=JsonLoggingRuntimeTelemetrySink(),
+        dispatch_ready_probe=qdrant_ready,
+        supervisor_lease=SqlAlchemyAgentJobSupervisorLease(root.identity_engine),
     )
 
     def readiness_probe() -> bool:
         try:
+            if not agent_job_service.recovery_ready:
+                return False
             with root.identity_engine.connect() as connection:
                 connection.execute(sa.text("SELECT 1 FROM agent_jobs LIMIT 1"))
-            return QdrantTranscriptCollectionProvisioner(
-                root.qdrant_client,
-                root.qdrant_schema,
-            ).is_ready()
+            return qdrant_ready()
         except Exception:
             return False
 
-    return ApiContext(
+    context = ApiContext(
         settings=settings,
         catalogue=loaded_catalogue.manifest,
         identity_sessions=root.identity_session_service,
@@ -261,3 +279,4 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
             graph_rag_service,
         ),
     )
+    return context

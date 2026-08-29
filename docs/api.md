@@ -15,12 +15,17 @@ The server binds to `127.0.0.1:8000` by default. Configure it with
 session/CSRF cookies and double-submit CSRF plus same-origin checks for unsafe
 requests; development uses usable non-Secure names.
 
+`create_app(context=...)` takes lifecycle ownership of the injected context: lifespan
+startup acquires the singleton job-supervisor lease and performs recovery, and lifespan
+shutdown closes that context after draining agent callbacks. Do not reuse one context
+across application lifespans.
+
 ## Contracts
 
 - `GET /health/live` checks the process.
-- `GET /health/ready` checks SQL access to the durable agent-job schema and requires
-  the configured Qdrant collection to be green with the expected dense, sparse, and
-  payload-index schema.
+- `GET /health/ready` checks SQL access to the durable agent-job schema, requires the
+  single-process recovery supervisor to be live, and requires the configured Qdrant
+  collection to be green with the expected dense, sparse, and payload-index schema.
 - `GET /client-config` bootstraps the product shell with the canonical API prefix and
   centralized browser polling/deadline limits; the same contract is mirrored at
   `<api-prefix>/client-config` for API clients.

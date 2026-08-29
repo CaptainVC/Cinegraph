@@ -4,6 +4,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
+from threading import Event, Lock, Thread, current_thread
 from typing import Protocol
 from uuid import UUID
 
@@ -38,8 +40,13 @@ from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.watch_state import EpisodeRef, ProfileWatchState
 from cinegraph.domain.policy.watch_state_builder import build_bounded_watch_state
-from cinegraph.ports.agent_jobs.agent_job_repository import AgentJobRepository
+from cinegraph.ports.agent_jobs.agent_job_repository import (
+    AgentJobRepository,
+    AgentJobTransitionError,
+    AgentJobUnavailableError,
+)
 from cinegraph.ports.agent_jobs.dispatcher import AgentJobDispatcher
+from cinegraph.ports.agent_jobs.supervisor_lease import AgentJobSupervisorLease
 from cinegraph.ports.date_time.clock import Clock
 from cinegraph.ports.observability import FailureIsolatingTelemetrySink, RuntimeTelemetrySink
 
@@ -87,6 +94,8 @@ class AgentJobService:
         configuration: AgentJobConfiguration = DEFAULT_AGENT_JOB_CONFIGURATION,
         telemetry_sink: RuntimeTelemetrySink | None = None,
         monotonic_clock: Callable[[], float] = time.monotonic,
+        dispatch_ready_probe: Callable[[], bool] | None = None,
+        supervisor_lease: AgentJobSupervisorLease | None = None,
     ) -> None:
         self._repository: AgentJobRepository[AgentJob, AgentJobEvent, SeriesAgentResult] = (
             repository
@@ -97,6 +106,16 @@ class AgentJobService:
         self._configuration = configuration
         self._telemetry = FailureIsolatingTelemetrySink(telemetry_sink or _NoopTelemetrySink())
         self._monotonic = monotonic_clock
+        self._dispatch_ready_probe = dispatch_ready_probe or (lambda: True)
+        self._supervisor_lease = supervisor_lease or _NoopSupervisorLease()
+        self._recovery_stop = Event()
+        self._supervisor_failed = Event()
+        self._recovery_lock = Lock()
+        self._recovery_thread: Thread | None = None
+        self._closed = False
+        self._scheduled_lock = Lock()
+        self._scheduled_job_ids: set[UUID] = set()
+        self._interrupted_job_ids: set[UUID] = set()
 
     def submit(self, command: SubmitAgentJobCommand) -> AgentJob:
         try:
@@ -159,13 +178,20 @@ class AgentJobService:
         stored, created = self._repository.create(job)
         if created:
             self._emit(stored, TelemetryStage.QUEUED, TelemetryOutcome.SUCCESS)
-            if not self._dispatcher.dispatch(lambda: self._execute_dispatched(stored.job_id)):
-                terminal = self._repository.reject_with_event(
-                    stored.job_id, AGENT_JOB_DISPATCH_FAILURE_CODE
-                )
-                self._emit_terminal(
-                    stored, terminal, AGENT_JOB_DISPATCH_FAILURE_CODE, self._monotonic()
-                )
+            if self._schedule(stored.job_id) is False:
+                try:
+                    terminal = self._repository.reject_with_event(
+                        stored.job_id, AGENT_JOB_DISPATCH_FAILURE_CODE
+                    )
+                except AgentJobTransitionError:
+                    terminal = self._repository.get(stored.job_id)
+                if terminal is not None and terminal.status.value == "failed":
+                    self._emit_terminal(
+                        stored,
+                        terminal,
+                        AGENT_JOB_DISPATCH_FAILURE_CODE,
+                        self._monotonic(),
+                    )
         return self._repository.get(stored.job_id) or stored
 
     def execute(self, job_id: UUID) -> AgentJob | None:
@@ -298,11 +324,160 @@ class AgentJobService:
     ) -> tuple[AgentJobEvent, ...]:
         return self._repository.list_events_after(job_id, sequence, owner_profile_id)
 
-    def close(self) -> None:
-        self._dispatcher.close()
+    @property
+    def recovery_ready(self) -> bool:
+        thread = self._recovery_thread
+        if thread is None or self._supervisor_failed.is_set():
+            return False
+        try:
+            lease_held = self._supervisor_lease.held()
+        except Exception:
+            lease_held = False
+        if not lease_held:
+            self._supervisor_failed.set()
+        return bool(
+            lease_held
+            and thread.is_alive()
+            and not self._recovery_stop.is_set()
+        )
 
-    def _execute_dispatched(self, job_id: UUID) -> None:
-        self.execute(job_id)
+    def start_recovery_supervisor(self) -> None:
+        """Recover jobs from the prior dead process, then scan queued work."""
+
+        with self._recovery_lock:
+            if self._closed:
+                raise RuntimeError(AgentJobErrorMessages.SERVICE_CLOSED)
+            if self.recovery_ready:
+                return
+            if self._recovery_thread is not None:
+                raise RuntimeError(AgentJobErrorMessages.SUPERVISOR_RESTART_UNSAFE)
+            if not self._supervisor_lease.acquire():
+                raise RuntimeError(AgentJobErrorMessages.SUPERVISOR_LEASE_UNAVAILABLE)
+            self._recovery_stop.clear()
+            self._supervisor_failed.clear()
+            try:
+                self._recover_interrupted_jobs()
+                self._dispatch_queued_once()
+                thread = Thread(
+                    target=self._recovery_loop,
+                    name="cinegraph-agent-recovery",
+                    daemon=True,
+                )
+                self._recovery_thread = thread
+                thread.start()
+            except Exception:
+                self._recovery_stop.set()
+                self._recovery_thread = None
+                self._closed = True
+                self._dispatcher.close()
+                self._supervisor_lease.release()
+                raise
+
+    def _recover_interrupted_jobs(self) -> int:
+        recovered = 0
+        while True:
+            batch = self._repository.requeue_running_with_event(
+                self._configuration.recovery_batch_size
+            )
+            for job in batch:
+                self._emit(job, TelemetryStage.QUEUED, TelemetryOutcome.SUCCESS)
+            recovered += len(batch)
+            if len(batch) < self._configuration.recovery_batch_size:
+                return recovered
+
+    def _dispatch_queued_once(self) -> int:
+        dispatched = 0
+        for job in self._repository.list_queued(self._configuration.recovery_batch_size):
+            scheduled = self._schedule(job.job_id)
+            if scheduled is False:
+                break
+            if scheduled:
+                dispatched += 1
+        return dispatched
+
+    def _schedule(self, job_id: UUID) -> bool | None:
+        """Admit one callback per queued job until that callback finishes."""
+
+        if self._supervisor_failed.is_set():
+            return None
+        with self._scheduled_lock:
+            if job_id in self._scheduled_job_ids:
+                return None
+        try:
+            if not self._supervisor_lease.held():
+                if self._recovery_thread is not None:
+                    self._supervisor_failed.set()
+                return None
+        except Exception:
+            if self._recovery_thread is not None:
+                self._supervisor_failed.set()
+            return None
+        try:
+            if not self._dispatch_ready_probe():
+                return None
+        except Exception:
+            return None
+        with self._scheduled_lock:
+            if job_id in self._scheduled_job_ids:
+                return None
+            self._scheduled_job_ids.add(job_id)
+        try:
+            accepted = self._dispatcher.dispatch(partial(self._execute_scheduled, job_id))
+        except Exception:
+            accepted = False
+        if not accepted:
+            with self._scheduled_lock:
+                self._scheduled_job_ids.discard(job_id)
+        return accepted
+
+    def _recovery_loop(self) -> None:
+        while not self._recovery_stop.wait(
+            self._configuration.recovery_scan_interval_seconds
+        ):
+            if not self._supervisor_lease.held():
+                self._supervisor_failed.set()
+                self._recovery_stop.set()
+                return
+            try:
+                self._recover_local_interruptions_once()
+                self._dispatch_queued_once()
+            except AgentJobUnavailableError:
+                continue
+
+    def _recover_local_interruptions_once(self) -> int:
+        with self._scheduled_lock:
+            interrupted = tuple(self._interrupted_job_ids)
+        recovered_count = 0
+        for job_id in interrupted:
+            job, recovered = self._repository.requeue_running_job_with_event(job_id)
+            with self._scheduled_lock:
+                self._interrupted_job_ids.discard(job_id)
+            if recovered and job is not None:
+                self._emit(job, TelemetryStage.QUEUED, TelemetryOutcome.SUCCESS)
+                recovered_count += 1
+        return recovered_count
+
+    def close(self) -> None:
+        with self._recovery_lock:
+            if self._closed:
+                return
+            self._closed = True
+            self._recovery_stop.set()
+            thread = self._recovery_thread
+        if thread is not None and thread is not current_thread():
+            thread.join(timeout=self._configuration.recovery_shutdown_timeout_seconds)
+        self._dispatcher.close()
+        self._supervisor_lease.release()
+
+    def _execute_scheduled(self, job_id: UUID) -> None:
+        try:
+            self.execute(job_id)
+        except AgentJobUnavailableError:
+            with self._scheduled_lock:
+                self._interrupted_job_ids.add(job_id)
+        finally:
+            with self._scheduled_lock:
+                self._scheduled_job_ids.discard(job_id)
 
 
 # Explicit aliases make the submit/execute/query boundaries discoverable while
@@ -322,6 +497,17 @@ class _NoopTelemetrySink:
         del event
 
 
+class _NoopSupervisorLease:
+    def acquire(self) -> bool:
+        return True
+
+    def held(self) -> bool:
+        return True
+
+    def release(self) -> None:
+        return None
+
+
 class AgentJobServiceProtocol(Protocol):
     def submit(self, command: SubmitAgentJobCommand) -> AgentJob: ...
     def execute(self, job_id: UUID) -> AgentJob | None: ...
@@ -329,4 +515,7 @@ class AgentJobServiceProtocol(Protocol):
     def events_after(
         self, job_id: UUID, owner_profile_id: UUID, sequence: int = 0
     ) -> tuple[AgentJobEvent, ...]: ...
+    @property
+    def recovery_ready(self) -> bool: ...
+    def start_recovery_supervisor(self) -> None: ...
     def close(self) -> None: ...

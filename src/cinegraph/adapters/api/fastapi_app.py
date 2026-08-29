@@ -421,10 +421,10 @@ def create_app(
         owned_context = context or build_default_api_context()
         app.state.cinegraph_context = owned_context
         try:
+            owned_context.start()
             yield
         finally:
-            if context is None:
-                owned_context.close()
+            owned_context.close()
 
     app = FastAPI(
         title=api_configuration.title,

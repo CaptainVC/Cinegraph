@@ -16,7 +16,8 @@ validation fails closed and sink failures are isolated from request and job outc
 
 The lifecycle stages are `queued`, `running`, zero or one aggregate `model` event per
 agent invocation, and `terminal`. Retrying an idempotent submission does not emit a
-second queued lifecycle. Terminal outcomes use only stable codes:
+second queued lifecycle. Crash recovery emits a new queued lifecycle for the same job
+ID, matching its durable recovered event. Terminal outcomes use only stable codes:
 
 - `execution_timeout`
 - `provider_unavailable`
@@ -57,12 +58,33 @@ Migration `0004_agent_jobs` stores jobs and append-only replay events. Owner-sco
 idempotency is unique, lifecycle status and event writes share one transaction, event
 sequence is contiguous and unique per job, and event IDs are deterministic. The API
 maps repository outages to a sanitized 503. Readiness requires both a successful SQL
-query against `agent_jobs` and the configured Qdrant collection.
+query against `agent_jobs`, the configured Qdrant collection, and a live recovery
+supervisor that completed its startup recovery pass.
 
-The bounded dispatcher and LangGraph checkpoint are still process-local. A process
-failure can leave queued or claimed work without automatic recovery; do not run
-multiple unsupervised API workers as though this were a durable queue. Worker lease,
-requeue, and checkpoint recovery are explicitly deferred to the deployment phase.
+The bounded dispatcher and LangGraph checkpoint are still process-local. When the one
+supported API process starts, it transactionally requeues interrupted `running` jobs,
+adds a contiguous recovery event, and scans persisted `queued` work for bounded local
+dispatch. SQL or Qdrant unavailability detected before admission keeps work queued;
+an outage after execution starts follows the bounded runtime failure policy and may
+produce a terminal failure. If a callback stops after a terminal SQL write fails, its
+job is tracked and atomically requeued when SQL recovers. Recovery reruns the frozen job
+input; it does not resume an interrupted model call or reconstruct a lost multi-turn
+checkpoint.
+
+Run exactly one API process with one Uvicorn worker. Stop the old process completely
+before starting its replacement. The production PostgreSQL adapter holds a session
+advisory lock until graceful shutdown has stopped recovery scans and drained admitted
+callbacks; a second supervisor fails startup. The scanner verifies its dedicated
+PostgreSQL session identity and stops fail-closed if that lock-bearing connection is
+lost; it cannot be restarted inside the same process, so the process supervisor must
+replace the instance. Per-job leases and ownership heartbeats for multi-worker
+operation are not part of this design.
+
+Graceful shutdown intentionally waits without an in-process timeout for already running
+callbacks so shared dependencies and the singleton lease cannot be released underneath
+live work. The host process supervisor supplies the hard stop deadline; if it must kill
+a hung process, the database releases the advisory session and the next process performs
+normal startup recovery.
 
 ## Incident checklist
 
@@ -74,6 +96,7 @@ requeue, and checkpoint recovery are explicitly deferred to the deployment phase
 4. For provider incidents, confirm the classified error rate and retry exhaustion.
 5. For budget incidents, verify configured ceilings, usage metadata availability, and
    operator-maintained rates before changing limits.
-6. For stuck jobs, preserve the SQL job/event rows and defer manual requeue until the
-   recovery procedure is implemented; avoid creating duplicate work outside the
-   idempotent submission API.
+6. For stuck jobs, preserve the SQL job/event rows, confirm only one API process is
+   alive, and restart that supervised process. Verify the next event is the contiguous
+   recovered `queued` event; do not mutate rows or create work outside the idempotent
+   submission API.

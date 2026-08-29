@@ -11,11 +11,13 @@ from cinegraph.ports.agent_jobs.dispatcher import (
     BoundedThreadPoolAgentJobDispatcher,
     InlineAgentJobDispatcher,
 )
+from cinegraph.ports.agent_jobs.supervisor_lease import AgentJobSupervisorLease
 
 __all__ = [
     "AgentJobDispatcher",
     "AgentJobIdempotencyConflictError",
     "AgentJobRepository",
+    "AgentJobSupervisorLease",
     "AgentJobTransitionError",
     "AgentJobUnavailableError",
     "BoundedThreadPoolAgentJobDispatcher",

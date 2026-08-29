@@ -71,4 +71,4 @@ class BoundedThreadPoolAgentJobDispatcher:
                 return
             self._closed = True
         if self._owns_executor:
-            self._executor.shutdown(wait=False, cancel_futures=True)
+            self._executor.shutdown(wait=True, cancel_futures=True)

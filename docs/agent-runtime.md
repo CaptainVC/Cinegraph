@@ -41,5 +41,8 @@ Phase 34 also accounts nested synthesis, selector, and grounded-answer model res
 through a context-local LangChain callback ledger; configured call, token, estimated-
 cost, retry, and cooperative deadline limits fail to stable private terminal codes.
 Structured telemetry contains aggregate usage and lifecycle metadata only. The
-bounded dispatcher and LangGraph checkpoint remain process-local until deployment-
-phase worker recovery.
+single-process recovery supervisor now requeues interrupted SQL jobs and redispatches
+persisted queued work before readiness. It re-executes the frozen job request rather
+than resuming an interrupted model call. The bounded dispatcher and LangGraph
+checkpoint remain process-local, and multi-worker leases plus durable conversation
+checkpoint recovery remain later infrastructure work.

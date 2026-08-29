@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import UTC, datetime
-from threading import Barrier, Event
+from threading import Barrier, Event, Thread
 from uuid import uuid4
 
 import pytest
@@ -35,6 +35,7 @@ from cinegraph.domain.models.watch_state import EpisodePosition, EpisodeRef
 from cinegraph.ports.agent_jobs.agent_job_repository import (
     AgentJobIdempotencyConflictError,
     AgentJobTransitionError,
+    AgentJobUnavailableError,
 )
 from cinegraph.ports.agent_jobs.dispatcher import (
     BoundedThreadPoolAgentJobDispatcher,
@@ -101,6 +102,21 @@ class RejectingDispatcher:
 
     def close(self):
         return None
+
+
+class RecordingDispatcher:
+    def __init__(self) -> None:
+        self.callbacks = []
+        self.closed = False
+
+    def dispatch(self, callback):
+        if self.closed:
+            return False
+        self.callbacks.append(callback)
+        return True
+
+    def close(self):
+        self.closed = True
 
 
 def test_submit_executes_once_and_terminal_retry_is_deterministic() -> None:
@@ -173,6 +189,34 @@ def test_dispatcher_releases_capacity_after_callback_failure_and_close_is_idempo
     assert dispatcher.dispatch(lambda: None) is False
 
 
+def test_dispatcher_close_drains_active_callback_before_returning() -> None:
+    dispatcher = BoundedThreadPoolAgentJobDispatcher(max_workers=1, max_pending=1)
+    callback_started = Event()
+    release_callback = Event()
+    close_started = Event()
+    close_finished = Event()
+
+    def callback() -> None:
+        callback_started.set()
+        release_callback.wait(timeout=2)
+
+    def close() -> None:
+        close_started.set()
+        dispatcher.close()
+        close_finished.set()
+
+    assert dispatcher.dispatch(callback)
+    assert callback_started.wait(timeout=2)
+    closer = Thread(target=close)
+    closer.start()
+    assert close_started.wait(timeout=2)
+    assert not close_finished.wait(timeout=0.05)
+
+    release_callback.set()
+    assert close_finished.wait(timeout=2)
+    closer.join(timeout=2)
+
+
 def test_terminal_transition_rejects_direct_invalid_completion() -> None:
     repository = InMemoryAgentJobRepository()
     command = _command()
@@ -191,6 +235,304 @@ def test_rejected_dispatch_is_a_coherent_failed_terminal_job() -> None:
     assert job.started_at is None
     assert job.finished_at is not None
     assert service.events_after(job.job_id, command.owner_profile_id)[-1].kind.value == "failed"
+
+
+def test_recovery_supervisor_requeues_interrupted_and_dispatches_exact_inputs() -> None:
+    class CollectingSink:
+        def __init__(self) -> None:
+            self.events = []
+
+        def emit(self, event) -> None:
+            self.events.append(event)
+
+    repository = InMemoryAgentJobRepository()
+    running_command = _command()
+    queued_command = _command()
+    running_job = _job(running_command)
+    queued_job = _job(queued_command)
+    repository.create(running_job)
+    repository.create(queued_job)
+    repository.claim_with_event(running_job.job_id)
+    dispatcher = RecordingDispatcher()
+    conversation = RefusalService()
+    sink = CollectingSink()
+    service = AgentJobService(
+        repository,
+        conversation,
+        dispatcher,
+        configuration=AgentJobConfiguration(
+            recovery_scan_interval_seconds=60.0,
+            recovery_batch_size=8,
+            recovery_shutdown_timeout_seconds=1.0,
+        ),
+        telemetry_sink=sink,
+    )
+
+    try:
+        service.start_recovery_supervisor()
+        assert service.recovery_ready
+        assert len(dispatcher.callbacks) == 2
+        service.start_recovery_supervisor()
+        assert len(dispatcher.callbacks) == 2
+        assert service._dispatch_queued_once() == 0
+        assert len(dispatcher.callbacks) == 2
+        recovered_events = repository.events_after(running_job.job_id)
+        assert [event.kind.value for event in recovered_events] == [
+            "queued",
+            "running",
+            "queued",
+        ]
+        assert dict(recovered_events[-1].payload) == {
+            "status": "queued",
+            "recovered": True,
+        }
+        recovery_telemetry = [
+            event for event in sink.events if event.stage is TelemetryStage.QUEUED
+        ]
+        assert len(recovery_telemetry) == 1
+        assert recovery_telemetry[0].job_id == running_job.job_id
+
+        for callback in tuple(dispatcher.callbacks):
+            callback()
+
+        assert conversation.calls == 2
+        assert repository.get(running_job.job_id).status.value == "safe_refusal"
+        assert repository.get(queued_job.job_id).status.value == "safe_refusal"
+        assert [event.sequence for event in repository.events_after(running_job.job_id)] == [
+            1,
+            2,
+            3,
+            4,
+            5,
+        ]
+    finally:
+        service.close()
+
+    assert not service.recovery_ready
+    assert dispatcher.closed
+    service.close()
+    with pytest.raises(RuntimeError, match="service is closed"):
+        service.start_recovery_supervisor()
+
+
+def test_recovery_supervisor_fails_closed_when_exclusive_lease_is_held() -> None:
+    class HeldLease:
+        def __init__(self) -> None:
+            self.releases = 0
+
+        def acquire(self) -> bool:
+            return False
+
+        def release(self) -> None:
+            self.releases += 1
+
+    lease = HeldLease()
+    dispatcher = RecordingDispatcher()
+    service = AgentJobService(
+        InMemoryAgentJobRepository(),
+        RefusalService(),
+        dispatcher,
+        supervisor_lease=lease,
+    )
+
+    with pytest.raises(RuntimeError, match="supervisor is already active"):
+        service.start_recovery_supervisor()
+
+    assert not service.recovery_ready
+    assert dispatcher.callbacks == []
+    service.close()
+    assert lease.releases == 1
+
+
+def test_recovery_supervisor_stops_when_its_database_lease_is_lost() -> None:
+    class MutableLease:
+        def __init__(self) -> None:
+            self.active = False
+
+        def acquire(self) -> bool:
+            self.active = True
+            return True
+
+        def held(self) -> bool:
+            return self.active
+
+        def release(self) -> None:
+            self.active = False
+
+    lease = MutableLease()
+    dispatcher = RecordingDispatcher()
+    service = AgentJobService(
+        InMemoryAgentJobRepository(),
+        RefusalService(),
+        dispatcher,
+        configuration=AgentJobConfiguration(recovery_scan_interval_seconds=0.01),
+        supervisor_lease=lease,
+    )
+    service.start_recovery_supervisor()
+    thread = service._recovery_thread
+    assert thread is not None and service.recovery_ready
+
+    lease.active = False
+    thread.join(timeout=1)
+
+    assert not service.recovery_ready
+    assert not thread.is_alive()
+    queued = service.submit(_command())
+    assert queued.status.value == "queued"
+    assert dispatcher.callbacks == []
+    with pytest.raises(RuntimeError, match="requires a new process"):
+        service.start_recovery_supervisor()
+    service.close()
+
+
+def test_dispatch_exception_is_a_coherent_failed_terminal_job() -> None:
+    class RaisingDispatcher:
+        def dispatch(self, callback):
+            del callback
+            raise RuntimeError("injected dispatcher failure")
+
+        def close(self):
+            return None
+
+    repository = InMemoryAgentJobRepository()
+    command = _command()
+    service = AgentJobService(repository, RefusalService(), RaisingDispatcher())
+
+    job = service.submit(command)
+
+    assert job.status.value == "failed"
+    assert [event.kind.value for event in repository.events_after(job.job_id)] == [
+        "queued",
+        "failed",
+    ]
+
+
+def test_dispatch_rejection_loses_safely_to_a_concurrent_recovery_claim(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = InMemoryAgentJobRepository()
+    original_reject = repository.reject_with_event
+
+    def race_reject(job_id, error_code, owner_profile_id=None):
+        assert repository.claim_with_event(job_id) is not None
+        return original_reject(job_id, error_code, owner_profile_id)
+
+    monkeypatch.setattr(repository, "reject_with_event", race_reject)
+    service = AgentJobService(repository, RefusalService(), RejectingDispatcher())
+
+    job = service.submit(_command())
+
+    assert job.status.value == "running"
+    assert [event.kind.value for event in repository.events_after(job.job_id)] == [
+        "queued",
+        "running",
+    ]
+
+
+def test_recovery_scan_leaves_saturated_work_queued() -> None:
+    repository = InMemoryAgentJobRepository()
+    queued = _job(_command())
+    repository.create(queued)
+    service = AgentJobService(repository, RefusalService(), RejectingDispatcher())
+
+    assert service._dispatch_queued_once() == 0
+    assert repository.get(queued.job_id).status.value == "queued"
+
+
+def test_recovery_keeps_work_queued_until_execution_dependencies_are_ready() -> None:
+    repository = InMemoryAgentJobRepository()
+    queued = _job(_command())
+    repository.create(queued)
+    dispatcher = RecordingDispatcher()
+    dependency = {"ready": False}
+    service = AgentJobService(
+        repository,
+        RefusalService(),
+        dispatcher,
+        dispatch_ready_probe=lambda: dependency["ready"],
+    )
+
+    try:
+        service.start_recovery_supervisor()
+        assert dispatcher.callbacks == []
+        assert repository.get(queued.job_id).status.value == "queued"
+
+        dependency["ready"] = True
+        assert service._dispatch_queued_once() == 1
+        assert len(dispatcher.callbacks) == 1
+    finally:
+        service.close()
+
+
+def test_recovery_loop_tolerates_a_transient_repository_outage(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class SequenceStop:
+        def __init__(self) -> None:
+            self.waits = 0
+
+        def wait(self, timeout: float) -> bool:
+            assert timeout > 0
+            self.waits += 1
+            return self.waits == 3
+
+    service = AgentJobService(
+        InMemoryAgentJobRepository(),
+        RefusalService(),
+        InlineAgentJobDispatcher(),
+    )
+    stop = SequenceStop()
+    attempts = 0
+
+    def scan() -> int:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise AgentJobUnavailableError("injected transient outage")
+        return 0
+
+    service._recovery_stop = stop
+    monkeypatch.setattr(service, "_dispatch_queued_once", scan)
+
+    service._recovery_loop()
+
+    assert attempts == 2
+
+
+def test_terminal_persistence_outage_is_requeued_after_callback_stops(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = InMemoryAgentJobRepository()
+    conversation = RefusalService()
+    service = AgentJobService(repository, conversation, InlineAgentJobDispatcher())
+    original_complete = repository.complete_with_event
+    attempts = 0
+
+    def fail_once(job_id, result, owner_profile_id=None):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise AgentJobUnavailableError("injected terminal persistence outage")
+        return original_complete(job_id, result, owner_profile_id)
+
+    monkeypatch.setattr(repository, "complete_with_event", fail_once)
+
+    job = service.submit(_command())
+
+    assert job.status.value == "running"
+    assert conversation.calls == 1
+    assert service._recover_local_interruptions_once() == 1
+    assert repository.get(job.job_id).status.value == "queued"
+    assert service._dispatch_queued_once() == 1
+    assert repository.get(job.job_id).status.value == "safe_refusal"
+    assert conversation.calls == 2
+    assert [event.kind.value for event in repository.events_after(job.job_id)] == [
+        "queued",
+        "running",
+        "queued",
+        "running",
+        "safe_refusal",
+    ]
 
 
 def test_terminal_transition_rolls_back_when_event_append_fails() -> None:
@@ -231,6 +573,10 @@ def test_terminal_transition_rolls_back_when_event_append_fails() -> None:
         {"candidate_max_episodes": 0},
         {"idempotency_key_max_length": 35},
         {"sse_poll_interval_seconds": 0.0},
+        {"recovery_scan_interval_seconds": 0.0},
+        {"recovery_batch_size": 0},
+        {"pending_limit": 2, "recovery_batch_size": 3},
+        {"recovery_shutdown_timeout_seconds": 0.0},
         {"sse_replay_batch": 129},
         {
             "sse_poll_interval_seconds": 2.0,
