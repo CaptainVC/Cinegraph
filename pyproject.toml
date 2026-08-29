@@ -50,6 +50,9 @@ extend-exclude = ["knowledge"]
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F", "I"]
 
+[tool.bandit]
+exclude_dirs = ["tests", "knowledge", ".venv", "build", "dist"]
+
 [tool.coverage.run]
 branch = true
 source = ["src/cinegraph"]
@@ -85,7 +88,9 @@ no_implicit_optional = true
 
 [dependency-groups]
 dev = [
+    "bandit==1.9.4",
     "mypy>=1.17,<1.19",
+    "pip-audit==2.9.0",
     "playwright>=1.52,<2",
     "pre-commit>=4.3,<5",
     "pytest-cov>=6.2,<7",

@@ -47,6 +47,8 @@ DEFAULT_PUBLISHED_PORT = 18_000
 MIN_FREE_DISK_BYTES = 20 * 1024**3
 MIN_MEMORY_BYTES = 4 * 1024**3
 GIT_IMAGE_VERSION_PATTERN: Final = r"^sha-[0-9a-f]{40}$"
+# Intentional container-wide bind; the host publishes it on loopback only.
+CONTAINER_API_HOST: Final = "0.0.0.0"  # nosec B104
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +147,8 @@ def validate_env_file(path: Path, expected_environment: str | None = None) -> li
             configured_port = -1
         if configured_port != contract.published_port:
             issues.append(ValidationIssue("environment-isolation", f"published port does not match the {environment} contract"))
-    if values.get("CINEGRAPH_API_HOST") != "0.0.0.0":
+    # The API must bind all container interfaces so the published host port can reach it.
+    if values.get("CINEGRAPH_API_HOST") != CONTAINER_API_HOST:
         issues.append(ValidationIssue("api-host", "CINEGRAPH_API_HOST must be 0.0.0.0 inside the container"))
     try:
         api_port = int(values.get("CINEGRAPH_API_PORT", ""))

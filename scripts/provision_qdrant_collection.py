@@ -6,6 +6,7 @@ import time
 from dataclasses import replace
 from pathlib import Path
 from urllib.error import URLError
+from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
 from qdrant_client import QdrantClient
@@ -20,11 +21,14 @@ QDRANT_READY_DELAY_SECONDS = 2
 
 
 def _wait_for_qdrant(url: str, api_key: str | None) -> None:
+    if urlsplit(url).scheme not in {"http", "https"}:
+        raise ValueError("Qdrant URL must use HTTP(S)")
     ready_url = f"{url.rstrip('/')}/readyz"
     headers = {"api-key": api_key} if api_key else {}
     for attempt in range(QDRANT_READY_RETRIES):
         try:
-            with urlopen(Request(ready_url, headers=headers), timeout=5) as response:
+            # URL scheme is checked above; Qdrant is an operator-configured HTTP endpoint.
+            with urlopen(Request(ready_url, headers=headers), timeout=5) as response:  # nosec B310
                 if 200 <= response.status < 300:
                     return
         except (OSError, URLError):

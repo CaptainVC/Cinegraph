@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: en-US
+reviews:
+  profile: chill
+  path_filters:
+    - "!knowledge/**"
+    - "!dist/**"
+    - "!build/**"
+    - "!.venv/**"
+    - "!test-results/**"
+    - "!coverage.*"
+    - "!**/*.srt"
+    - "!**/*.pdf"
+    - "!**/*.csv"
+  auto_review:
+    enabled: true
+    drafts: false

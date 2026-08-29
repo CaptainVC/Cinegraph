@@ -10,6 +10,7 @@ wheels/
 coverage.xml
 coverage.json
 test-results/
+.scannerwork/
 .DS_Store
 
 # Virtual environments
@@ -23,6 +24,9 @@ test-results/
 # Private corpus and all of its derived artifacts
 knowledge/*
 !knowledge/catalogue.json
+*.srt
+*.pdf
+key.txt
 
 # Local learning artifacts and captured provider output
 notebooks/
