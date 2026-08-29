@@ -1,0 +1,144 @@
+name: ${CINEGRAPH_STACK_NAME:-cinegraph}
+
+x-app-environment: &app-environment
+  CINEGRAPH_ENVIRONMENT: ${CINEGRAPH_ENVIRONMENT:?CINEGRAPH_ENVIRONMENT is required}
+  CINEGRAPH_KNOWLEDGE_ROOT: ${CINEGRAPH_KNOWLEDGE_ROOT:?CINEGRAPH_KNOWLEDGE_ROOT is required}
+  CINEGRAPH_IDENTITY_DATABASE_PATH: ${CINEGRAPH_IDENTITY_DATABASE_PATH:?CINEGRAPH_IDENTITY_DATABASE_PATH is required}
+  CINEGRAPH_DATABASE_URL: ${CINEGRAPH_DATABASE_URL:?CINEGRAPH_DATABASE_URL is required}
+  CINEGRAPH_DATABASE_POOL_SIZE: ${CINEGRAPH_DATABASE_POOL_SIZE:?CINEGRAPH_DATABASE_POOL_SIZE is required}
+  CINEGRAPH_DATABASE_MAX_OVERFLOW: ${CINEGRAPH_DATABASE_MAX_OVERFLOW:?CINEGRAPH_DATABASE_MAX_OVERFLOW is required}
+  CINEGRAPH_DATABASE_POOL_TIMEOUT_SECONDS: ${CINEGRAPH_DATABASE_POOL_TIMEOUT_SECONDS:?CINEGRAPH_DATABASE_POOL_TIMEOUT_SECONDS is required}
+  CINEGRAPH_DATABASE_POOL_RECYCLE_SECONDS: ${CINEGRAPH_DATABASE_POOL_RECYCLE_SECONDS:?CINEGRAPH_DATABASE_POOL_RECYCLE_SECONDS is required}
+  CINEGRAPH_QDRANT_MODE: ${CINEGRAPH_QDRANT_MODE:?CINEGRAPH_QDRANT_MODE is required}
+  CINEGRAPH_QDRANT_URL: ${CINEGRAPH_QDRANT_URL:?CINEGRAPH_QDRANT_URL is required}
+  CINEGRAPH_QDRANT_API_KEY: ${CINEGRAPH_QDRANT_API_KEY-}
+  CINEGRAPH_QDRANT_COLLECTION_NAME: ${CINEGRAPH_QDRANT_COLLECTION_NAME:?CINEGRAPH_QDRANT_COLLECTION_NAME is required}
+  CINEGRAPH_API_HOST: ${CINEGRAPH_API_HOST:?CINEGRAPH_API_HOST is required}
+  CINEGRAPH_API_PORT: ${CINEGRAPH_API_PORT:?CINEGRAPH_API_PORT is required}
+  OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+      args:
+        VERSION: ${CINEGRAPH_IMAGE_VERSION:-dev}
+    image: ${CINEGRAPH_IMAGE:-cinegraph}:${CINEGRAPH_IMAGE_VERSION:?CINEGRAPH_IMAGE_VERSION is required}
+    environment: *app-environment
+    ports:
+      - "127.0.0.1:${CINEGRAPH_PUBLISHED_PORT:-18000}:8000"
+    networks:
+      - backend
+      - egress
+    volumes:
+      - knowledge:/app/knowledge
+      - ../knowledge/catalogue.json:/app/knowledge/catalogue.json:ro
+      - app-cache:/home/cinegraph/.cache
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: ${CINEGRAPH_APP_MEMORY_LIMIT:-768m}
+    cpus: ${CINEGRAPH_APP_CPU_LIMIT:-1.0}
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  migrate:
+    profiles: [migration]
+    image: ${CINEGRAPH_IMAGE:-cinegraph}:${CINEGRAPH_IMAGE_VERSION:?CINEGRAPH_IMAGE_VERSION is required}
+    environment:
+      CINEGRAPH_DATABASE_URL: ${CINEGRAPH_DATABASE_URL:?CINEGRAPH_DATABASE_URL is required}
+      CINEGRAPH_ENVIRONMENT: ${CINEGRAPH_ENVIRONMENT:?CINEGRAPH_ENVIRONMENT is required}
+      CINEGRAPH_QDRANT_MODE: ${CINEGRAPH_QDRANT_MODE:?CINEGRAPH_QDRANT_MODE is required}
+      CINEGRAPH_QDRANT_URL: ${CINEGRAPH_QDRANT_URL:?CINEGRAPH_QDRANT_URL is required}
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "scripts/migrate_database.py", "upgrade"]
+
+  provision-qdrant:
+    profiles: [provisioning]
+    image: ${CINEGRAPH_IMAGE:-cinegraph}:${CINEGRAPH_IMAGE_VERSION:?CINEGRAPH_IMAGE_VERSION is required}
+    environment:
+      CINEGRAPH_QDRANT_URL: ${CINEGRAPH_QDRANT_URL:?CINEGRAPH_QDRANT_URL is required}
+      CINEGRAPH_QDRANT_API_KEY: ${CINEGRAPH_QDRANT_API_KEY-}
+      CINEGRAPH_QDRANT_COLLECTION_NAME: ${CINEGRAPH_QDRANT_COLLECTION_NAME:?CINEGRAPH_QDRANT_COLLECTION_NAME is required}
+    networks:
+      - backend
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: "no"
+    depends_on:
+      qdrant:
+        condition: service_started
+    command: ["python", "scripts/provision_qdrant_collection.py"]
+
+  postgres:
+    image: postgres:16.15-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER is required}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB is required}
+    networks:
+      - backend
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${CINEGRAPH_POSTGRES_MEMORY_LIMIT:-512m}
+    cpus: ${CINEGRAPH_POSTGRES_CPU_LIMIT:-1.0}
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.0@sha256:057ee3a8da769fe7310dd3537b4dc7583bf87a95ce8ac43c0af5a46bc580d1fc
+    networks:
+      - backend
+    volumes:
+      - qdrant-data:/qdrant/storage
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: ${CINEGRAPH_QDRANT_MEMORY_LIMIT:-768m}
+    cpus: ${CINEGRAPH_QDRANT_CPU_LIMIT:-1.0}
+    restart: unless-stopped
+
+networks:
+  backend:
+    internal: true
+  # Only the API needs provider/model-artifact egress; data services remain backend-only.
+  egress: {}
+
+volumes:
+  knowledge: {}
+  app-cache: {}
+  postgres-data: {}
+  qdrant-data: {}

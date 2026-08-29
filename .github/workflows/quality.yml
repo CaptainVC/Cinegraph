@@ -168,3 +168,30 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  compose-config:
+    name: Compose runtime contract
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Render development and production Compose configurations
+        shell: bash
+        run: |
+          set -euo pipefail
+          for environment in dev prod; do
+            runtime_env="$RUNNER_TEMP/cinegraph-$environment.env"
+            cp "deploy/env/$environment.env.example" "$runtime_env"
+            sed -i \
+              -e "s#^CINEGRAPH_ENV_FILE=.*#CINEGRAPH_ENV_FILE=$runtime_env#" \
+              -e 's#^CINEGRAPH_IMAGE_VERSION=.*#CINEGRAPH_IMAGE_VERSION=sha-0000000000000000000000000000000000000000#' \
+              -e 's#^OPENAI_API_KEY=.*#OPENAI_API_KEY=ci-placeholder#' \
+              -e 's#^POSTGRES_PASSWORD=.*#POSTGRES_PASSWORD=ci-placeholder-password#' \
+              -e 's#REPLACE_WITH_LONG_RANDOM_PASSWORD#ci-placeholder-password#g' \
+              "$runtime_env"
+            chmod 600 "$runtime_env"
+            CINEGRAPH_ENV_FILE="$runtime_env" docker compose \
+              --env-file "$runtime_env" -f deploy/compose.yaml config --quiet
+          done
+      - name: Build pinned application image
+        run: docker build --file deploy/Dockerfile --tag cinegraph:ci .

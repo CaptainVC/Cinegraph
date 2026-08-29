@@ -88,6 +88,29 @@ Development defaults to a gitignored SQLite URL. Production fails closed unless
 `create_all` or silently migrates at startup; see `docs/database.md` for lifecycle,
 pool, and downgrade guidance.
 
+### VPS container baseline
+
+Phase 40 includes a pinned, non-root Docker image and an isolated Compose stack for
+one Dev and one Prod environment. PostgreSQL and Qdrant stay on an internal Docker
+network; only the API's configurable loopback port is published. Copy
+`deploy/env/dev.env.example` or `deploy/env/prod.env.example` to a mode-0600 file
+outside Git, replace all placeholders, and validate it before starting the stack:
+
+```bash
+python3 scripts/validate_vps_runtime.py --environment production \
+  --env-file /etc/cinegraph/prod.env --compose-file deploy/compose.yaml
+docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml up -d postgres qdrant
+docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml build app
+docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml --profile migration run --rm migrate
+docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml --profile provisioning \
+  run --rm provision-qdrant
+docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml up -d app
+```
+
+The API does not auto-migrate or auto-provision Qdrant. See
+`docs/operations/vps-host-baseline.md` for host layout, backup, rollback, and the
+explicit Hostinger SSH activation boundary.
+
 ## Privacy And Corpus Policy
 
 Private subtitle files, review ledgers, source documents, generated transcript

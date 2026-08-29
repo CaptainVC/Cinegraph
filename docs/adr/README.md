@@ -12,4 +12,5 @@
 - [ADR-0010: Authentication security, session rotation, and tenant isolation](0010-authentication-security-and-tenancy.md)
 - [ADR-0011: Privacy-safe observability, durable jobs, and bounded runtime](0011-observability-resilience-cost-controls.md)
 - [ADR-0012: Single-supervisor agent-job recovery](0012-single-supervisor-agent-job-recovery.md)
+- [ADR-0013: Isolated single-host container runtime baseline](0013-vps-container-runtime-baseline.md)
 - [ADR template](template.md)
