@@ -109,11 +109,12 @@ class CinegraphCompositionRoot:
         return SearchVisibleHybridSegmentsService(
             RetrievalScopeCompiler(SpoilerPolicy()),
             self.vector_encoder,
-            QdrantVectorIndex(
-                self.qdrant_client,
-                self.qdrant_schema,
-            ),
+            self.transcript_vector_index,
         )
+
+    @cached_property
+    def transcript_vector_index(self) -> QdrantVectorIndex:
+        return QdrantVectorIndex(self.qdrant_client, self.qdrant_schema)
 
     @cached_property
     def reviewed_corpus_ingestion_service(self) -> IngestReviewedCorpusService:

@@ -1,3 +1,4 @@
+from dataclasses import replace
 from uuid import UUID
 
 import pytest
@@ -16,7 +17,8 @@ from cinegraph.application.models.series_agent_result import SeriesAgentResult
 from cinegraph.application.service.conversational_series_chat_service import (
     ConversationalSeriesChatService,
 )
-from cinegraph.domain.models.watch_state import ProfileWatchState
+from cinegraph.domain.enums.enum import SpoilerMode
+from cinegraph.domain.models.watch_state import ProfileWatchState, SeriesWatchState
 
 
 class WatchRepository:
@@ -102,3 +104,43 @@ def test_repository_profile_mismatch_fails_before_agent() -> None:
     with pytest.raises(ValueError):
         service.execute(make_query(scope, episode))
     assert agent.calls == 0
+
+
+def test_thread_binding_rejects_changed_candidate_set_or_spoiler_policy() -> None:
+    episode = make_episode_ref()
+    second = replace(episode, episode_id=UUID(int=9_001))
+    scope = make_authenticated_corpus_access_scope()
+    profile_id = UUID(int=42)
+    relaxed = ProfileWatchState(
+        profile_id=profile_id,
+        profile_name="Alex",
+        spoiler_mode=SpoilerMode.RELAXED,
+    )
+    strict = ProfileWatchState(
+        profile_id=profile_id,
+        profile_name="Alex",
+        spoiler_mode=SpoilerMode.STRICT,
+        series_watch_states=(
+            SeriesWatchState(
+                series_id=episode.series_id,
+                manually_allowed_episodes=frozenset({episode}),
+            ),
+        ),
+    )
+
+    for changed in (
+        replace(
+            make_query(scope, episode),
+            candidate_episodes=(episode, second),
+            profile_watch_state=relaxed,
+        ),
+        replace(make_query(scope, episode), profile_watch_state=strict),
+    ):
+        agent = Agent()
+        service = ConversationalSeriesChatService(
+            WatchRepository(None), InMemoryConversationThreadBindingRepository(), agent
+        )
+        service.execute(replace(make_query(scope, episode), profile_watch_state=relaxed))
+        with pytest.raises(ValueError):
+            service.execute(changed)
+        assert agent.calls == 1

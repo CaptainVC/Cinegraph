@@ -9,7 +9,12 @@ import pytest
 from sqlalchemy import create_engine, inspect
 from tests.unit.application.agent_jobs.test_agent_job_control import _command, _job
 
-from cinegraph.adapters.persistence.agent_job_serialization import job_from_json, job_to_json
+from cinegraph.adapters.persistence.agent_job_serialization import (
+    job_from_json,
+    job_to_json,
+    result_from_json,
+    result_to_json,
+)
 from cinegraph.adapters.persistence.base import PersistenceBase
 from cinegraph.adapters.persistence.sqlalchemy_agent_job_repository import (
     AgentJobEventRow,
@@ -20,6 +25,9 @@ from cinegraph.application.models.series_agent_result import (
     SeriesAgentCitation,
     SeriesAgentResult,
 )
+from cinegraph.common.identifiers import IdentifierGenerator
+from cinegraph.config.graph_claims import GRAPH_CLAIM_EXTRACTION_REVISION
+from cinegraph.domain.enums.enum import GraphClaimPolarity, GraphEntityKind
 from cinegraph.ports.agent_jobs.agent_job_repository import (
     AgentJobIdempotencyConflictError,
     AgentJobTransitionError,
@@ -254,6 +262,98 @@ def test_grounded_result_round_trips_with_authorized_sse_locators(tmp_path: Path
     assert isinstance(citations, tuple)
     assert citations[0]["episode_id"] == str(episode.episode_id)
     assert "text" not in citations[0]
+
+
+def test_graph_result_serialization_is_trusted_bounded_and_legacy_compatible() -> None:
+    episode = _job(_command()).candidate_episodes[0]
+    source_id, chunk_id = uuid4(), uuid4()
+    subject_id = IdentifierGenerator.graph_entity_id(
+        episode.series_id, GraphEntityKind.CHARACTER, "claire"
+    )
+    object_id = IdentifierGenerator.graph_entity_id(
+        episode.series_id, GraphEntityKind.CHARACTER, "phil"
+    )
+    claim_id = IdentifierGenerator.graph_claim_id(
+        GRAPH_CLAIM_EXTRACTION_REVISION,
+        episode.series_id,
+        subject_id,
+        "married_to",
+        object_id,
+        GraphClaimPolarity.ASSERTED,
+    )
+    evidence_id = IdentifierGenerator.graph_evidence_id(claim_id, source_id, chunk_id)
+    result = SeriesAgentResult(
+        "A graph-grounded answer.",
+        False,
+        (
+            SeriesAgentCitation(
+                "graph",
+                episode,
+                1_000,
+                2_000,
+                claim_id=claim_id,
+                evidence_id=evidence_id,
+                source_version_id=source_id,
+                transcript_chunk_id=chunk_id,
+                subject_entity_id=subject_id,
+                subject_kind=GraphEntityKind.CHARACTER,
+                subject_display_name="Claire",
+                predicate="married_to",
+                object_entity_id=object_id,
+                object_kind=GraphEntityKind.CHARACTER,
+                object_display_name="Phil",
+                polarity=GraphClaimPolarity.ASSERTED,
+                hop_distance=1,
+                score=0.95,
+            ),
+        ),
+        ("authorized_graph_relationships",),
+    )
+
+    payload = result_to_json(result)
+    assert result_from_json(payload) == result
+    citation_payload = payload["citations"][0]
+    assert isinstance(citation_payload, dict)
+    legacy = dict(payload)
+    legacy["citations"] = [
+        {
+            key: value
+            for key, value in citation_payload.items()
+            if key
+            in {
+                "kind",
+                "episode",
+                "start_ms",
+                "end_ms",
+                "segment_id",
+                "claim_id",
+                "evidence_id",
+            }
+        }
+    ]
+    legacy_result = result_from_json(legacy)
+    assert legacy_result.citations[0].claim_id == claim_id
+    assert legacy_result.citations[0].subject_entity_id is None
+
+    partial = dict(payload)
+    partial_citation = dict(citation_payload)
+    for key in (
+        "transcript_chunk_id",
+        "subject_entity_id",
+        "subject_kind",
+        "subject_display_name",
+        "predicate",
+        "object_entity_id",
+        "object_kind",
+        "object_display_name",
+        "polarity",
+        "hop_distance",
+        "score",
+    ):
+        partial_citation[key] = None
+    partial["citations"] = [partial_citation]
+    with pytest.raises(ValueError):
+        result_from_json(partial)
 
 
 def test_tampered_scope_result_and_event_rows_fail_closed(tmp_path: Path) -> None:

@@ -4,8 +4,16 @@
 canonical `Idempotency-Key` UUID. Its JSON body is exactly:
 
 ```json
-{"thread_id":"00000000-0000-0000-0000-000000000031","series_id":"00000000-0000-0000-0000-000000000011","question":"Who introduces the family?"}
+{"thread_id":"00000000-0000-0000-0000-000000000031","series_id":"00000000-0000-0000-0000-000000000011","question":"Who introduces the family?","spoiler_mode":"relaxed","safe_through_episode_id":null}
 ```
+
+`spoiler_mode` is `relaxed`, `strict`, or `sequential`. Protected modes require
+`safe_through_episode_id`; relaxed mode must leave it null. The episode boundary
+is validated against the server catalogue and current entitlement. The client
+never supplies candidate episodes: the API compiles the current watch policy and
+captures the exact entitled candidate set in the job. A conversation thread is
+also bound to that set, preventing a later request from reusing a checkpoint with
+a broader history.
 
 The server derives and authorizes candidates. Guest Modern Family requests can
 only receive seasons 1 and 2. The response is `202 Accepted`, includes a
@@ -15,6 +23,24 @@ candidate IDs, scope, prompts, or raw transcript evidence.
 `GET /api/v1/agent/jobs/{job_id}` returns the typed lifecycle and, on success,
 grounded answer, stable tool names, and citation locators. Safe refusals contain
 no answer or evidence. Unknown and cross-profile IDs both return `404`.
+
+Successful grounded results include one same-origin `result.evidence_url`. The
+URL is a server-selected batch hydration link; clients do not pass citation IDs.
+`GET /api/v1/agent/jobs/{job_id}/evidence` rechecks ownership, current scope and
+permission revision, entitlement, source rights/review/index/extraction revisions,
+episode/timing and stable IDs before returning a bounded private response:
+
+```json
+{"job_id":"00000000-0000-0000-0000-000000000021","items":[{"citation_id":"00000000-0000-0000-0000-000000000022","excerpt":"..."}]}
+```
+
+The endpoint returns `404` indistinguishably for unknown, cross-owner, stale,
+revoked, malformed, or no-longer-authorized evidence. It is `private, no-store`.
+Raw transcript text is never stored in job rows or lifecycle events; it appears
+only in this authenticated hydration response. Graph citations additionally
+expose bounded, trusted entity IDs/kinds/display names, predicate, polarity,
+hop distance, and score in `citation.graph`; labels are projected from validated
+GraphRAG records rather than accepted from model-supplied graph data.
 
 `GET /api/v1/agent/jobs/{job_id}/events` is `text/event-stream`. Events have
 monotonic numeric IDs and compact JSON data. Send `Last-Event-ID` to replay only

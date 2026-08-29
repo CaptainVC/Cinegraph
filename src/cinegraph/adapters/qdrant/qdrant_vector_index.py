@@ -59,6 +59,15 @@ class QdrantQueryClient(Protocol):
         with_vectors: bool,
     ) -> Any: ...
 
+    def retrieve(
+        self,
+        *,
+        collection_name: str,
+        ids: list[str],
+        with_payload: bool,
+        with_vectors: bool,
+    ) -> Any: ...
+
 
 class QdrantVectorIndex(VectorIndex):
     def __init__(
@@ -125,12 +134,40 @@ class QdrantVectorIndex(VectorIndex):
                 break
         return tuple(selected)
 
+    def retrieve_by_ids(
+        self, segment_ids: tuple[UUID, ...], scope: RetrievalScope
+    ) -> tuple[RetrievedSegment, ...]:
+        if not segment_ids or len(segment_ids) != len(set(segment_ids)):
+            raise ValueError(RetrievalErrorMessages.SEARCH_LIMIT_MUST_BE_POSITIVE)
+        records = self._client.retrieve(
+            collection_name=self._schema.collection_name,
+            ids=[str(item) for item in segment_ids],
+            with_payload=True,
+            with_vectors=False,
+        )
+        by_id = {
+            UUID(str(item.id)): item
+            for item in records
+            if getattr(item, "id", None) is not None
+        }
+        return tuple(
+            self._map_point(by_id[item], scope, missing_score=0.0)
+            for item in segment_ids
+            if item in by_id
+        )
+
     @staticmethod
     def _overlap(left: RetrievedSegment, right: RetrievedSegment) -> float:
         first, second = set(left.member_segment_ids), set(right.member_segment_ids)
         return len(first & second) / len(first | second) if first and second else 0.0
 
-    def _map_point(self, point: Any, scope: RetrievalScope) -> RetrievedSegment:
+    def _map_point(
+        self,
+        point: Any,
+        scope: RetrievalScope,
+        *,
+        missing_score: float | None = None,
+    ) -> RetrievedSegment:
         payload = point.payload
         if not isinstance(
             payload, Mapping
@@ -208,7 +245,7 @@ class QdrantVectorIndex(VectorIndex):
         text = payload[QDRANT_TEXT_FIELD]
         if not isinstance(text, str) or not text or text.strip() != text:
             raise InvalidModelError(RetrievalErrorMessages.QDRANT_RESULT_TEXT_MUST_BE_VALID)
-        score = point.score
+        score = getattr(point, "score", missing_score)
         if isinstance(score, bool) or not isinstance(score, Real) or not math.isfinite(score):
             raise InvalidModelError(RetrievalErrorMessages.QDRANT_RESULT_SCORE_MUST_BE_FINITE)
         episode = EpisodeRef(

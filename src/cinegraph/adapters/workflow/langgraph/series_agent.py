@@ -32,25 +32,30 @@ from cinegraph.application.models.series_agent_result import SeriesAgentCitation
 from cinegraph.application.service.agent_runtime_resilience import RuntimeDeadline
 from cinegraph.application.service.graph_rag_service import GraphRagQueryService
 from cinegraph.common.error_messages import SeriesAgentErrorMessages
+from cinegraph.common.graph_normalization import normalize_graph_identity, normalize_graph_predicate
+from cinegraph.common.identifiers import IdentifierGenerator
 from cinegraph.common.prompts import SERIES_AGENT_SYSTEM_PROMPT
 from cinegraph.config.agent_runtime_controls import (
     DEFAULT_AGENT_RUNTIME_CONTROLS,
     AgentRuntimeControlConfiguration,
 )
+from cinegraph.config.graph_claims import GRAPH_CLAIM_EXTRACTION_REVISION
 from cinegraph.config.series_agent import (
     DEFAULT_SERIES_AGENT_CONFIGURATION,
+    MAX_SERIES_AGENT_ANSWER_LENGTH,
     SERIES_GRAPH_TOOL_NAME,
     SERIES_STRUCTURED_RESPONSE_TOOL_MESSAGE,
     SERIES_STRUCTURED_RESPONSE_TOOL_NAME,
     SERIES_TRANSCRIPT_TOOL_NAME,
     SeriesAgentConfiguration,
 )
+from cinegraph.domain.enums.enum import GraphClaimPolarity, GraphEntityKind
 
 
 class _StructuredSeriesResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    answer: StrictStr | None = None
+    answer: StrictStr | None = Field(default=None, max_length=MAX_SERIES_AGENT_ANSWER_LENGTH)
     citation_ids: list[UUID] = Field(default_factory=list)
 
     @field_validator("answer")
@@ -184,7 +189,7 @@ class SeriesResearchAgent:
             ):
                 used_tools.append(name)
             self._collect_transcript(payload, context, citations, known_ids)
-            self._collect_graph(payload, context, citations, known_ids)
+            self._collect_graph(payload, context, citations, known_ids, self._configuration)
         if not has_current_structured_response:
             return SeriesAgentResult(
                 answer=None, is_safe_refusal=True, used_tools=tuple(used_tools)
@@ -206,6 +211,8 @@ class SeriesResearchAgent:
             )
         if (
             not response.answer
+            or len(response.answer)
+            > getattr(self._configuration, "answer_max_length", MAX_SERIES_AGENT_ANSWER_LENGTH)
             or len(selected) == 0
             or len(selected) > self._configuration.structured_response_citation_limit
         ):
@@ -291,6 +298,7 @@ class SeriesResearchAgent:
         context: SeriesAgentRuntimeContext,
         citations: list[SeriesAgentCitation],
         known_ids: set[UUID],
+        configuration: SeriesAgentConfiguration = DEFAULT_SERIES_AGENT_CONFIGURATION,
     ) -> None:
         claims = payload.get("claims")
         if not isinstance(claims, list):
@@ -299,12 +307,13 @@ class SeriesResearchAgent:
             if not isinstance(claim, dict):
                 continue
             try:
-                claim_id = UUID(str(claim["claim_id"]))
                 evidence = claim.get("evidence", [])
                 if not isinstance(evidence, list):
                     continue
                 for item in evidence:
-                    citation = SeriesResearchAgent._project_graph_evidence(item, claim_id, context)
+                    citation = SeriesResearchAgent._project_graph_evidence(
+                        item, claim, context, configuration
+                    )
                     if citation is None or not isinstance(citation.evidence_id, UUID):
                         continue
                     evidence_id = citation.evidence_id
@@ -316,12 +325,88 @@ class SeriesResearchAgent:
 
     @staticmethod
     def _project_graph_evidence(
-        item: object, claim_id: UUID, context: SeriesAgentRuntimeContext
+        item: object,
+        claim: dict[str, object],
+        context: SeriesAgentRuntimeContext,
+        configuration: SeriesAgentConfiguration = DEFAULT_SERIES_AGENT_CONFIGURATION,
     ) -> SeriesAgentCitation | None:
         if not isinstance(item, dict):
             return None
         try:
+            claim_id = UUID(str(claim["claim_id"]))
             evidence_id = UUID(str(item["evidence_id"]))
+            claim_fields = {
+                "series_id",
+                "subject_entity_id", "subject_kind", "subject", "predicate",
+                "object_entity_id", "object_kind", "object", "polarity",
+                "hop_distance", "score",
+            }
+            evidence_fields = {"source_version_id", "transcript_chunk_id"}
+            modern_claim_fields = {
+                "subject_entity_id",
+                "subject_kind",
+                "object_entity_id",
+                "object_kind",
+                "hop_distance",
+            }
+            present_claim_fields = modern_claim_fields.intersection(claim)
+            present_evidence_fields = evidence_fields.intersection(item)
+            if not present_claim_fields and not present_evidence_fields:
+                episode = next(
+                    episode
+                    for episode in context.candidate_episodes
+                    if episode.episode_id == UUID(str(item["episode_id"]))
+                )
+                return SeriesAgentCitation(
+                    "graph", episode, int(item["start_ms"]), int(item["end_ms"]),
+                    claim_id=claim_id, evidence_id=evidence_id,
+                )
+            if not claim_fields.issubset(claim) or not evidence_fields.issubset(item):
+                return None
+            if UUID(str(claim["series_id"])) != context.series_id:
+                return None
+            source_version_id = UUID(str(item["source_version_id"]))
+            transcript_chunk_id = UUID(str(item["transcript_chunk_id"]))
+            subject_entity_id = UUID(str(claim["subject_entity_id"]))
+            object_entity_id = UUID(str(claim["object_entity_id"]))
+            subject_kind = GraphEntityKind(str(claim["subject_kind"]))
+            object_kind = GraphEntityKind(str(claim["object_kind"]))
+            polarity = GraphClaimPolarity(str(claim["polarity"]))
+            subject_display_name = claim["subject"]
+            object_display_name = claim["object"]
+            predicate = claim["predicate"]
+            hop_distance = claim["hop_distance"]
+            score = claim["score"]
+            if (
+                not isinstance(subject_display_name, str)
+                or not isinstance(object_display_name, str)
+                or not isinstance(predicate, str)
+                or not isinstance(hop_distance, int)
+                or isinstance(hop_distance, bool)
+                or not isinstance(score, (int, float))
+                or isinstance(score, bool)
+                or not 1 <= hop_distance <= configuration.graph_hops
+                or not 0 <= score <= 1
+                or normalize_graph_predicate(predicate) != predicate
+                or subject_entity_id != IdentifierGenerator.graph_entity_id(
+                    context.series_id, subject_kind, normalize_graph_identity(subject_display_name)
+                )
+                or object_entity_id != IdentifierGenerator.graph_entity_id(
+                    context.series_id, object_kind, normalize_graph_identity(object_display_name)
+                )
+                or claim_id != IdentifierGenerator.graph_claim_id(
+                    GRAPH_CLAIM_EXTRACTION_REVISION,
+                    context.series_id,
+                    subject_entity_id,
+                    predicate,
+                    object_entity_id,
+                    polarity,
+                )
+                or evidence_id != IdentifierGenerator.graph_evidence_id(
+                    claim_id, source_version_id, transcript_chunk_id
+                )
+            ):
+                return None
             episode = next(
                 episode
                 for episode in context.candidate_episodes
@@ -345,7 +430,13 @@ class SeriesResearchAgent:
             ):
                 raise ValueError(SeriesAgentErrorMessages.CITATION_GRAPH_INVALID)
             return SeriesAgentCitation(
-                "graph", episode, start_ms, end_ms, claim_id=claim_id, evidence_id=evidence_id
+                "graph", episode, start_ms, end_ms, claim_id=claim_id, evidence_id=evidence_id,
+                source_version_id=source_version_id, transcript_chunk_id=transcript_chunk_id,
+                subject_entity_id=subject_entity_id, subject_kind=subject_kind,
+                subject_display_name=subject_display_name, predicate=predicate,
+                object_entity_id=object_entity_id, object_kind=object_kind,
+                object_display_name=object_display_name, polarity=polarity,
+                hop_distance=hop_distance, score=float(score),
             )
         except (ValueError, TypeError, KeyError, StopIteration):
             return None

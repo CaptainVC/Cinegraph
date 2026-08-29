@@ -28,6 +28,7 @@ from cinegraph.application.models.agent_runtime import ALLOWED_AGENT_JOB_FAILURE
 from cinegraph.application.models.series_agent_result import SeriesAgentResult
 from cinegraph.application.serialization.agent_job_payload import result_event_payload
 from cinegraph.common.error_messages import AgentJobErrorMessages
+from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.ports.agent_jobs.agent_job_repository import (
     AgentJobIdempotencyConflictError,
     AgentJobTransitionError,
@@ -122,11 +123,14 @@ def _utc(value: datetime) -> datetime:
 
 
 def _job(row: AgentJobRow) -> AgentJob:
-    if (
-        not isinstance(row.question_json, dict)
-        or set(row.question_json) != {"question"}
-        or not isinstance(row.question_json["question"], str)
+    question_keys = {"question"}
+    modern_question_keys = {"question", "spoiler_mode", "safe_through_episode_id"}
+    if not isinstance(row.question_json, dict) or (
+        set(row.question_json) != question_keys
+        and set(row.question_json) != modern_question_keys
     ):
+        raise ValueError("malformed persisted agent job")
+    if not isinstance(row.question_json["question"], str):
         raise ValueError("malformed persisted agent job")
     if not isinstance(row.candidate_episodes_json, list):
         raise ValueError("malformed persisted agent job")
@@ -152,6 +156,12 @@ def _job(row: AgentJobRow) -> AgentJob:
         finished_at=_utc(row.finished_at) if row.finished_at else None,
         result=result,
         error_code=row.error_code,
+        spoiler_mode=SpoilerMode(row.question_json.get("spoiler_mode", SpoilerMode.RELAXED.value)),
+        safe_through_episode_id=(
+            UUID(row.question_json["safe_through_episode_id"])
+            if row.question_json.get("safe_through_episode_id") is not None
+            else None
+        ),
     )
 
 
@@ -183,7 +193,15 @@ class SqlAlchemyAgentJobRepository:
                     owner_profile_id=job.owner_profile_id,
                     thread_id=job.thread_id,
                     series_id=job.series_id,
-                    question_json={"question": job.question},
+                    question_json={
+                        "question": job.question,
+                        "spoiler_mode": job.spoiler_mode.value,
+                        "safe_through_episode_id": (
+                            str(job.safe_through_episode_id)
+                            if job.safe_through_episode_id is not None
+                            else None
+                        ),
+                    },
                     candidate_episodes_json=[episode_to_json(x) for x in job.candidate_episodes],
                     corpus_access_scope_json=scope_to_json(job.corpus_access_scope),
                     permission_scope_revision=job.permission_scope_revision,

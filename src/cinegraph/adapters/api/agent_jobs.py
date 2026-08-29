@@ -9,16 +9,23 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request, Response, 
 from fastapi.responses import StreamingResponse
 
 from cinegraph.adapters.api.agent_job_schemas import (
+    AgentEvidenceExcerptResponse,
+    AgentEvidenceResponse,
     AgentJobCitationResponse,
+    AgentJobEntityResponse,
+    AgentJobRelationshipResponse,
     AgentJobRequest,
     AgentJobResponse,
     AgentJobResultResponse,
 )
+from cinegraph.adapters.api.context import ApiContext
+from cinegraph.adapters.evidence import build_agent_evidence_request
 from cinegraph.application.models.agent_job import (
     AgentJob,
     AgentJobEvent,
     AgentJobEventKind,
 )
+from cinegraph.application.models.series_agent_result import SeriesAgentCitation
 from cinegraph.application.service.agent_job_service import (
     AgentJobServiceProtocol,
     SubmitAgentJobCommand,
@@ -28,11 +35,39 @@ from cinegraph.config import (
     DEFAULT_AGENT_JOB_CONFIGURATION,
     AgentJobConfiguration,
 )
+from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.identity import SessionPrincipal
+from cinegraph.domain.models.watch_state import EpisodeRef
+from cinegraph.ports.agent_jobs.agent_evidence_reader import AgentEvidenceNotFoundError
 from cinegraph.ports.agent_jobs.agent_job_repository import (
     AgentJobIdempotencyConflictError,
     AgentJobUnavailableError,
 )
+
+
+def _bounded_job_candidates(
+    visible_episodes: tuple[EpisodeRef, ...],
+    safe_through_episode_id: UUID | None,
+    limit: int,
+) -> tuple[EpisodeRef, ...]:
+    """Keep protected windows bounded without dropping their trusted boundary."""
+
+    if len(visible_episodes) <= limit:
+        return visible_episodes
+    if safe_through_episode_id is None:
+        return visible_episodes[:limit]
+    boundary_index = next(
+        (
+            index
+            for index, episode in enumerate(visible_episodes)
+            if episode.episode_id == safe_through_episode_id
+        ),
+        None,
+    )
+    if boundary_index is None:
+        return ()
+    start = max(0, boundary_index - limit + 1)
+    return visible_episodes[start : boundary_index + 1]
 
 
 def _response(job: AgentJob, status_url: str, events_url: str) -> AgentJobResponse:
@@ -44,6 +79,7 @@ def _response(job: AgentJob, status_url: str, events_url: str) -> AgentJobRespon
             used_tools=job.result.used_tools if not job.result.is_safe_refusal else (),
             citations=tuple(
                 AgentJobCitationResponse(
+                    citation_id=citation.citation_id,
                     kind=citation.kind,
                     episode_id=citation.episode.episode_id,
                     season_number=citation.episode.position.season_number,
@@ -53,8 +89,12 @@ def _response(job: AgentJob, status_url: str, events_url: str) -> AgentJobRespon
                     segment_id=citation.segment_id,
                     claim_id=citation.claim_id,
                     evidence_id=citation.evidence_id,
+                    graph=_graph_response(citation),
                 )
                 for citation in job.result.citations
+            ),
+            evidence_url=(
+                f"{status_url}/evidence" if not job.result.is_safe_refusal else None
             ),
         )
     return AgentJobResponse(
@@ -69,6 +109,51 @@ def _response(job: AgentJob, status_url: str, events_url: str) -> AgentJobRespon
         error_code=job.error_code,
         status_url=status_url,
         events_url=events_url,
+    )
+
+
+def _graph_response(citation: SeriesAgentCitation) -> AgentJobRelationshipResponse | None:
+    if not all(
+        value is not None
+        for value in (
+            citation.subject_entity_id,
+            citation.subject_kind,
+            citation.subject_display_name,
+            citation.predicate,
+            citation.object_entity_id,
+            citation.object_kind,
+            citation.object_display_name,
+            citation.polarity,
+            citation.hop_distance,
+            citation.score,
+        )
+    ):
+        return None
+    assert citation.subject_entity_id is not None
+    assert citation.subject_kind is not None
+    assert citation.subject_display_name is not None
+    assert citation.predicate is not None
+    assert citation.object_entity_id is not None
+    assert citation.object_kind is not None
+    assert citation.object_display_name is not None
+    assert citation.polarity is not None
+    assert citation.hop_distance is not None
+    assert citation.score is not None
+    return AgentJobRelationshipResponse(
+        subject=AgentJobEntityResponse(
+            entity_id=citation.subject_entity_id,
+            kind=citation.subject_kind.value,
+            display_name=citation.subject_display_name,
+        ),
+        predicate=citation.predicate,
+        object=AgentJobEntityResponse(
+            entity_id=citation.object_entity_id,
+            kind=citation.object_kind.value,
+            display_name=citation.object_display_name,
+        ),
+        polarity=citation.polarity.value,
+        hop_distance=citation.hop_distance,
+        score=citation.score,
     )
 
 
@@ -179,7 +264,25 @@ async def _never_disconnected() -> bool:
 
 def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
     # Local imports keep the legacy API module importable without this adapter.
-    from cinegraph.adapters.api.fastapi_app import _context, _principal
+    from cinegraph.adapters.api.fastapi_app import _build_watch_state, _context, _principal
+    from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
+    from cinegraph.domain.retrieval import RetrievalScopeCompiler
+
+    def authorized_job(
+        context: ApiContext, job_id: UUID, principal: SessionPrincipal
+    ) -> AgentJob | None:
+        service = context.agent_job_service
+        if service is None:
+            raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE)
+        job = service.get(job_id, principal.profile_id)
+        if job is None:
+            return None
+        if (
+            job.permission_scope_revision != principal.corpus_access_scope.revision
+            or not principal.corpus_access_scope.allows_all(job.candidate_episodes)
+        ):
+            return None
+        return job
 
     @app.post(
         f"{prefix}/agent/jobs",
@@ -207,21 +310,25 @@ def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
         service = context.agent_job_service
         if service is None:
             raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE)
-        candidates = tuple(
-            sorted(
-                {
-                    item
-                    for item in context.catalogue.episode_refs()
-                    if item.series_id == body.series_id
-                    and principal.corpus_access_scope.allows_episode(item)
-                },
-                key=lambda item: (
-                    item.position.season_number,
-                    item.position.episode_number,
-                    item.episode_id.hex,
-                ),
-            )
-        )[: DEFAULT_AGENT_JOB_CONFIGURATION.candidate_max_episodes]
+        all_episodes = tuple(
+            item for item in context.catalogue.episode_refs() if item.series_id == body.series_id
+        )
+        entitled = tuple(
+            item for item in all_episodes if principal.corpus_access_scope.allows_episode(item)
+        )
+        if body.safe_through_episode_id is not None and not any(
+            item.episode_id == body.safe_through_episode_id for item in entitled
+        ):
+            raise HTTPException(status_code=404, detail=AgentJobErrorMessages.SERIES_NOT_FOUND)
+        watch_state = _build_watch_state(context, principal, body)
+        scope = RetrievalScopeCompiler(SpoilerPolicy()).compile(
+            body.series_id, entitled, watch_state, principal.corpus_access_scope
+        )
+        candidates = _bounded_job_candidates(
+            tuple(item.episode for item in scope.episode_scopes),
+            body.safe_through_episode_id,
+            DEFAULT_AGENT_JOB_CONFIGURATION.candidate_max_episodes,
+        )
         if not candidates:
             raise HTTPException(status_code=404, detail=AgentJobErrorMessages.SERIES_NOT_FOUND)
         try:
@@ -236,6 +343,8 @@ def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
                     candidate_episodes=candidates,
                     idempotency_key=str(key),
                     request_id=getattr(request.state, "request_id", None),
+                    spoiler_mode=body.spoiler_mode,
+                    safe_through_episode_id=body.safe_through_episode_id,
                 )
             )
         except AgentJobIdempotencyConflictError as error:
@@ -261,7 +370,7 @@ def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
         if service is None:
             raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE)
         try:
-            job = service.get(job_id, principal.profile_id)
+            job = authorized_job(_context(request), job_id, principal)
         except AgentJobUnavailableError as error:
             raise HTTPException(
                 status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE
@@ -270,6 +379,53 @@ def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
             raise HTTPException(status_code=404, detail=AgentJobErrorMessages.JOB_NOT_FOUND)
         status_url, events_url = _resource_urls(request, job.job_id)
         return _response(job, status_url, events_url)
+
+    @app.get(
+        f"{prefix}/agent/jobs/{{job_id}}/evidence",
+        response_model=AgentEvidenceResponse,
+    )
+    def agent_job_evidence(
+        job_id: UUID,
+        request: Request,
+        response: Response,
+        principal: SessionPrincipal = Depends(_principal),
+    ) -> AgentEvidenceResponse:
+        context = _context(request)
+        try:
+            job = authorized_job(context, job_id, principal)
+        except AgentJobUnavailableError as error:
+            raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE) from error
+        if job is None or job.result is None or job.result.is_safe_refusal:
+            raise HTTPException(status_code=404, detail=AgentJobErrorMessages.EVIDENCE_NOT_FOUND)
+        citation_id = tuple(
+            item.citation_id
+            for item in job.result.citations[: DEFAULT_AGENT_JOB_CONFIGURATION.evidence_citation_limit]
+        )
+        if not citation_id:
+            raise HTTPException(status_code=404, detail=AgentJobErrorMessages.EVIDENCE_NOT_FOUND)
+        response.headers["Cache-Control"] = DEFAULT_AGENT_JOB_CONFIGURATION.evidence_cache_control
+        reader = context.evidence_reader
+        if reader is None:
+            raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE)
+        try:
+            result = reader.read(
+                build_agent_evidence_request(job, citation_id),
+                principal.corpus_access_scope,
+            )
+        except (AgentEvidenceNotFoundError, InvalidModelError, ValueError) as error:
+            raise HTTPException(status_code=404, detail=AgentJobErrorMessages.EVIDENCE_NOT_FOUND) from error
+        except Exception as error:
+            raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE) from error
+        return AgentEvidenceResponse(
+            job_id=job.job_id,
+            items=tuple(
+                AgentEvidenceExcerptResponse(
+                    citation_id=item.citation_id,
+                    excerpt=item.text,
+                )
+                for item in result.excerpts
+            ),
+        )
 
     @app.get(f"{prefix}/agent/jobs/{{job_id}}/events", name="agent_job_events")
     def agent_job_events(
@@ -282,7 +438,7 @@ def register_agent_job_routes(app: FastAPI, prefix: str) -> None:
         if service is None:
             raise HTTPException(status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE)
         try:
-            job = service.get(job_id, principal.profile_id)
+            job = authorized_job(_context(request), job_id, principal)
         except AgentJobUnavailableError as error:
             raise HTTPException(
                 status_code=503, detail=AgentJobErrorMessages.SYSTEM_UNAVAILABLE

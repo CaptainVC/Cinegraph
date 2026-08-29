@@ -5,6 +5,7 @@ import json
 from uuid import UUID, uuid5
 
 from cinegraph.common.identifiers.templates import IdentifierTemplates
+from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.watch_state import EpisodeRef
 
@@ -19,6 +20,8 @@ def canonical_request_fingerprint(
     permission_scope_revision: str,
     corpus_access_scope: CorpusAccessScope,
     candidate_episodes: tuple[EpisodeRef, ...],
+    spoiler_mode: SpoilerMode = SpoilerMode.RELAXED,
+    safe_through_episode_id: UUID | None = None,
 ) -> str:
     if not all(isinstance(value, UUID) for value in (owner_profile_id, thread_id, series_id)):
         raise ValueError("Agent job identity fields must be UUIDs.")
@@ -41,6 +44,10 @@ def canonical_request_fingerprint(
             ),
         },
         "candidates": sorted(str(item.episode_id) for item in candidate_episodes),
+        "spoiler_mode": spoiler_mode.value,
+        "safe_through_episode_id": (
+            str(safe_through_episode_id) if safe_through_episode_id is not None else None
+        ),
     }
     serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
     return hashlib.sha256(serialized.encode("utf-8")).hexdigest()

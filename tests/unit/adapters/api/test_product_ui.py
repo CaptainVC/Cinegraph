@@ -26,7 +26,8 @@ def test_product_shell_and_assets_are_served_same_origin(tmp_path: Path) -> None
     assert script.status_code == 200
     assert 'credentials: "same-origin"' in script.text
     assert "/api/v1/auth/guest" in script.text
-    assert "/api/v1/chat" in script.text
+    assert "/api/v1/agent/jobs" in script.text
+    assert "/api/v1/chat" not in script.text
     assert "function readCookie(name)" in script.text
     assert 'readCookie("__Host-cinegraph_csrf") || readCookie("cinegraph_csrf")' in script.text
     assert "localStorage" not in script.text
@@ -75,6 +76,39 @@ def test_product_shell_exposes_keyboard_and_drawer_contracts(tmp_path: Path) -> 
     assert "tabIndex = loginSelected ? 0 : -1" in script
     assert "focusAuthPanel" in script
 
+    assert "EventSource" in script
+    assert "Idempotency-Key" in script
+    assert "crypto.randomUUID" in script
+    assert "evidence_url" in script
+    assert "function hydrateAgentResult" in script
+    assert "payload.job_id !== jobId" in script
+    assert "payload.items" in script
+    assert "maximumExcerptLength" in script
+    assert "maximumExcerptLength: 4_000" in script
+    assert "function evidenceTrailElement" in script
+    assert "function graphEvidenceElement" in script
+    assert "function createDisclosure" in script
+    assert "function formatGraphTerm" in script
+    assert "function stopActiveAgentJob" in script
+    assert "function beginAuthIntent" in script
+    assert "function isCurrentAuthIntent" in script
+    assert "authEpoch" in script
+    assert "authController" in script
+    assert "intent.controller.signal" in script
+    assert "maximumPollAttempts" in script
+    assert "maximumJobDurationMs" in script
+    assert "status.error_code" in script
+    assert 'closeJobTransport(job, { clearDeadline: false })' in script
+    assert "job.controller?.abort()" in script
+    assert "strictAgentUrl" in script
+    assert "canonicalAgentJobId" in script
+    assert "deterministic UUIDv5" in script
+    assert "!result.is_safe_refusal && !evidenceUrl" in script
+    assert "UI_COPY.evidence.score(graph.score.toFixed(2))" in script
+    assert "url.username" in script
+    assert "url.search" in script
+    assert "url.hash" in script
+
     assert "function setScopeOpen" in script
     assert "function setElementIsolation" in script
     assert "function scopeFocusableElements" in script
@@ -113,6 +147,10 @@ def test_product_shell_exposes_keyboard_and_drawer_contracts(tmp_path: Path) -> 
     assert "button.textContent =" not in script
     assert "(prefers-reduced-motion: reduce)" in script
     assert 'behavior: reducedMotion ? "auto" : "smooth"' in script
+    assert "evidence-trail" in stylesheet
+    assert "evidence-disclosure" in stylesheet
+    assert "relationship-moments" in stylesheet
+    assert "overflow-wrap: anywhere" in stylesheet
 
     # Identity never moves into browser persistence, including new UI state.
     assert "localStorage" not in script

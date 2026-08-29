@@ -2,7 +2,8 @@
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
-from typing import Literal, NoReturn, cast
+from enum import Enum
+from typing import Literal, NoReturn, TypeVar, cast
 from uuid import UUID
 
 from cinegraph.application.models.agent_job import (
@@ -12,9 +13,16 @@ from cinegraph.application.models.agent_job import (
     AgentJobStatus,
 )
 from cinegraph.application.models.series_agent_result import SeriesAgentCitation, SeriesAgentResult
-from cinegraph.domain.enums.enum import CorpusAccessMode
+from cinegraph.domain.enums.enum import (
+    CorpusAccessMode,
+    GraphClaimPolarity,
+    GraphEntityKind,
+    SpoilerMode,
+)
 from cinegraph.domain.models.access import CorpusAccessScope, CorpusSeasonAccess
 from cinegraph.domain.models.watch_state import EpisodePosition, EpisodeRef
+
+EnumT = TypeVar("EnumT", bound=Enum)
 
 
 def episode_to_json(value: EpisodeRef) -> dict[str, object]:
@@ -113,6 +121,18 @@ def result_to_json(value: SeriesAgentResult) -> dict[str, object]:
                 "segment_id": str(item.segment_id) if item.segment_id else None,
                 "claim_id": str(item.claim_id) if item.claim_id else None,
                 "evidence_id": str(item.evidence_id) if item.evidence_id else None,
+                "source_version_id": str(item.source_version_id) if item.source_version_id else None,
+                "transcript_chunk_id": str(item.transcript_chunk_id) if item.transcript_chunk_id else None,
+                "subject_entity_id": str(item.subject_entity_id) if item.subject_entity_id else None,
+                "subject_kind": item.subject_kind.value if item.subject_kind else None,
+                "subject_display_name": item.subject_display_name,
+                "predicate": item.predicate,
+                "object_entity_id": str(item.object_entity_id) if item.object_entity_id else None,
+                "object_kind": item.object_kind.value if item.object_kind else None,
+                "object_display_name": item.object_display_name,
+                "polarity": item.polarity.value if item.polarity else None,
+                "hop_distance": item.hop_distance,
+                "score": item.score,
             }
             for item in value.citations
         ],
@@ -140,7 +160,7 @@ def result_from_json(value: object) -> SeriesAgentResult:
         raise ValueError("malformed agent result tools")
     parsed: list[SeriesAgentCitation] = []
     for item in citations:
-        if not isinstance(item, Mapping) or set(item) != {
+        legacy_keys = {
             "kind",
             "episode",
             "start_ms",
@@ -148,7 +168,15 @@ def result_from_json(value: object) -> SeriesAgentResult:
             "segment_id",
             "claim_id",
             "evidence_id",
-        }:
+        }
+        modern_keys = legacy_keys | {
+            "source_version_id", "transcript_chunk_id", "subject_entity_id", "subject_kind",
+            "subject_display_name", "predicate", "object_entity_id", "object_kind",
+            "object_display_name", "polarity", "hop_distance", "score",
+        }
+        if not isinstance(item, Mapping) or (
+            set(item) != legacy_keys and set(item) != modern_keys
+        ):
             raise ValueError("malformed citation")
         try:
             parsed.append(
@@ -160,6 +188,18 @@ def result_from_json(value: object) -> SeriesAgentResult:
                     segment_id=_nullable_uuid(item, "segment_id"),
                     claim_id=_nullable_uuid(item, "claim_id"),
                     evidence_id=_nullable_uuid(item, "evidence_id"),
+                    source_version_id=_nullable_uuid_optional(item, "source_version_id"),
+                    transcript_chunk_id=_nullable_uuid_optional(item, "transcript_chunk_id"),
+                    subject_entity_id=_nullable_uuid_optional(item, "subject_entity_id"),
+                    subject_kind=_nullable_enum(item, "subject_kind", GraphEntityKind),
+                    subject_display_name=_nullable_string(item, "subject_display_name"),
+                    predicate=_nullable_string(item, "predicate"),
+                    object_entity_id=_nullable_uuid_optional(item, "object_entity_id"),
+                    object_kind=_nullable_enum(item, "object_kind", GraphEntityKind),
+                    object_display_name=_nullable_string(item, "object_display_name"),
+                    polarity=_nullable_enum(item, "polarity", GraphClaimPolarity),
+                    hop_distance=_nullable_integer(item, "hop_distance"),
+                    score=_nullable_float(item, "score"),
                 )
             )
         except (TypeError, ValueError, KeyError) as error:
@@ -245,6 +285,44 @@ def _nullable_uuid(value: Mapping[str, object], key: str) -> UUID | None:
     return _uuid(value, key)
 
 
+def _nullable_uuid_optional(value: Mapping[str, object], key: str) -> UUID | None:
+    return None if key not in value else _nullable_uuid(value, key)
+
+
+def _nullable_string(value: Mapping[str, object], key: str) -> str | None:
+    item = value.get(key)
+    if item is None:
+        return None
+    if not isinstance(item, str):
+        raise ValueError("expected nullable string")
+    return item
+
+
+def _nullable_integer(value: Mapping[str, object], key: str) -> int | None:
+    item = value.get(key)
+    if item is None:
+        return None
+    return _integer(value, key)
+
+
+def _nullable_float(value: Mapping[str, object], key: str) -> float | None:
+    item = value.get(key)
+    if item is None:
+        return None
+    if isinstance(item, bool) or not isinstance(item, (int, float)):
+        raise ValueError("expected nullable float")
+    return float(item)
+
+
+def _nullable_enum(
+    value: Mapping[str, object], key: str, enum_type: type[EnumT]
+) -> EnumT | None:
+    item = value.get(key)
+    if item is None:
+        return None
+    return enum_type(item)
+
+
 def job_to_json(value: AgentJob) -> dict[str, object]:
     return {
         "job_id": str(value.job_id),
@@ -258,6 +336,10 @@ def job_to_json(value: AgentJob) -> dict[str, object]:
         "idempotency_key": value.idempotency_key,
         "request_fingerprint": value.request_fingerprint,
         "request_id": value.request_id,
+        "spoiler_mode": value.spoiler_mode.value,
+        "safe_through_episode_id": (
+            str(value.safe_through_episode_id) if value.safe_through_episode_id else None
+        ),
         "created_at": value.created_at.isoformat(),
         "status": value.status.value,
         "started_at": value.started_at.isoformat() if value.started_at else None,
@@ -287,9 +369,11 @@ def job_from_json(value: object) -> AgentJob:
         "result",
         "error_code",
     }
+    legacy_keys = keys
+    keys = keys | {"spoiler_mode", "safe_through_episode_id"}
     if (
         not isinstance(value, Mapping)
-        or set(value) != keys
+        or (set(value) != legacy_keys and set(value) != keys)
         or not isinstance(value["candidate_episodes"], list)
     ):
         raise ValueError("malformed agent job")
@@ -320,6 +404,12 @@ def job_from_json(value: object) -> AgentJob:
             idempotency_key=_string(value, "idempotency_key"),
             request_fingerprint=_string(value, "request_fingerprint"),
             request_id=None if value["request_id"] is None else _string(value, "request_id"),
+            spoiler_mode=SpoilerMode(value.get("spoiler_mode", SpoilerMode.RELAXED.value)),
+            safe_through_episode_id=(
+                _uuid(value, "safe_through_episode_id")
+                if value.get("safe_through_episode_id") is not None
+                else None
+            ),
             created_at=_datetime(value, "created_at"),
             status=AgentJobStatus(_string(value, "status")),
             started_at=dt("started_at"),

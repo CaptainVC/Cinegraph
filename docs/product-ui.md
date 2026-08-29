@@ -22,6 +22,34 @@ citations is inserted with `textContent`, not interpreted as HTML.
 5. Sign-in, account creation, and session termination share the same application
    shell and sanitized API error contracts.
 
+## Agent research and evidence trail
+
+Composer submissions use the durable `/api/v1/agent/jobs` flow. Each request gets
+an in-memory thread UUID and idempotency UUID; neither is persisted in browser
+storage. The browser follows same-origin lifecycle events over `EventSource`,
+then uses bounded status polling when events are unavailable or reconnecting. A
+terminal status is fetched before the result is rendered, and its optional
+`evidence_url` is fetched once as a same-origin batch. Active request, job,
+thread, series, and scope revisions are correlated so stale responses cannot
+overwrite a newer conversation state. Streams and timers close on logout, scope
+changes, and session reset.
+
+Agent status, events, and evidence URLs are accepted only when they are
+same-origin, credential-free, fragment-free, query-free, and match the
+canonical UUID returned for that job. Evidence hydration is an authorization
+gate: the envelope must contain the matching `job_id`, one unique item for every
+result citation, and a non-empty bounded excerpt for each item. Any mismatch
+withholds the answer and reports that authorized evidence is unavailable.
+
+Assistant answers expose an accessible **Evidence trail**. Transcript items show
+episode position, timestamp, and a hydrated excerpt. Graph items preserve each
+claim's subject, predicate, object, entity kinds, textual polarity, hop distance,
+support count, and nested supporting moments. Conflicting polarities remain
+separate claims. Internal tool names are translated to human labels, and legacy
+or unavailable graph metadata receives an explicit honest state. All dynamic
+content is created with DOM APIs and `textContent`; no graph runtime, unsafe URL,
+browser storage, or raw HTML interpolation is used.
+
 ## Episode library
 
 The workspace header's **Browse episodes** action opens a native modal that keeps

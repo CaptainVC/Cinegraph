@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID
 
@@ -39,13 +40,19 @@ SCHEMA = DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA
 
 
 class FakeQdrantClient:
-    def __init__(self, points: list[models.ScoredPoint]) -> None:
+    def __init__(self, points: list[models.ScoredPoint], retrieved=None) -> None:
         self.calls: list[dict[str, Any]] = []
+        self.retrieve_calls: list[dict[str, Any]] = []
         self._response = models.QueryResponse(points=points)
+        self._retrieved = list(retrieved if retrieved is not None else points)
 
     def query_points(self, **kwargs: Any) -> models.QueryResponse:
         self.calls.append(kwargs)
         return self._response
+
+    def retrieve(self, **kwargs: Any):
+        self.retrieve_calls.append(kwargs)
+        return self._retrieved
 
 
 def make_query() -> QueryVector:
@@ -229,6 +236,45 @@ def test_mapped_point_retains_score_episode_and_transcript_fields() -> None:
     assert mapped.language is Language.ENGLISH
     assert mapped.rights_status is RightsStatus.ALLOWED
     assert mapped.score == 0.75
+
+
+def test_retrieve_by_ids_is_batched_authorized_and_preserves_requested_order() -> None:
+    first_id, second_id = UUID(int=2_101), UUID(int=2_102)
+    first = SimpleNamespace(
+        id=first_id,
+        payload=make_payload(member_segment_ids=[str(first_id)]),
+    )
+    second = SimpleNamespace(
+        id=second_id,
+        payload=make_payload(member_segment_ids=[str(second_id)]),
+    )
+    client = FakeQdrantClient(points=[], retrieved=[second, first])
+
+    result = QdrantVectorIndex(client, SCHEMA).retrieve_by_ids(
+        (first_id, second_id), make_scope()
+    )
+
+    assert [item.segment_id for item in result] == [first_id, second_id]
+    assert [item.score for item in result] == [0.0, 0.0]
+    assert client.retrieve_calls == [
+        {
+            "collection_name": SCHEMA.collection_name,
+            "ids": [str(first_id), str(second_id)],
+            "with_payload": True,
+            "with_vectors": False,
+        }
+    ]
+    assert client.calls == []
+
+
+@pytest.mark.parametrize("segment_ids", [(), (SEGMENT_ID, SEGMENT_ID)])
+def test_retrieve_by_ids_rejects_empty_or_duplicate_locators(segment_ids) -> None:
+    client = FakeQdrantClient(points=[])
+
+    with pytest.raises(ValueError):
+        QdrantVectorIndex(client, SCHEMA).retrieve_by_ids(segment_ids, make_scope())
+
+    assert client.retrieve_calls == []
 
 
 @pytest.mark.parametrize(
