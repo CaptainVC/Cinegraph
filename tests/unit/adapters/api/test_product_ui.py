@@ -11,13 +11,23 @@ def test_product_shell_and_assets_are_served_same_origin(tmp_path: Path) -> None
     context, _ = make_context(tmp_path)
     with TestClient(create_app(context)) as client:
         page = client.get("/")
+        client_config = client.get("/client-config")
         stylesheet = client.get("/assets/app.css")
         script = client.get("/assets/app.js")
         icon = client.get("/assets/favicon.svg")
 
     assert page.status_code == 200
+    assert client_config.status_code == 200
+    assert set(client_config.json()) == {
+        "api_prefix",
+        "agent_poll_interval_ms",
+        "agent_job_deadline_ms",
+    }
     assert page.headers["content-type"].startswith("text/html")
     assert 'id="guest-start-button"' in page.text
+    assert re.search(r'id="guest-start-button"[^>]+disabled', page.text)
+    assert re.search(r'id="sign-in-button"[^>]+disabled', page.text)
+    assert re.search(r'id="create-account-button"[^>]+disabled', page.text)
     assert 'id="workspace-view"' in page.text
     assert 'aria-live="polite"' in page.text
     assert '<script defer src="/assets/app.js"></script>' in page.text
@@ -25,8 +35,9 @@ def test_product_shell_and_assets_are_served_same_origin(tmp_path: Path) -> None
     assert "prefers-reduced-motion" in stylesheet.text
     assert script.status_code == 200
     assert 'credentials: "same-origin"' in script.text
-    assert "/api/v1/auth/guest" in script.text
-    assert "/api/v1/agent/jobs" in script.text
+    assert 'guest: "/auth/guest"' in script.text
+    assert 'agentJobs: "/agent/jobs"' in script.text
+    assert "payload.api_prefix" in script.text
     assert "/api/v1/chat" not in script.text
     assert "function readCookie(name)" in script.text
     assert 'readCookie("__Host-cinegraph_csrf") || readCookie("cinegraph_csrf")' in script.text
@@ -97,6 +108,10 @@ def test_product_shell_exposes_keyboard_and_drawer_contracts(tmp_path: Path) -> 
     assert "intent.controller.signal" in script
     assert "maximumPollAttempts" in script
     assert "maximumJobDurationMs" in script
+    assert "loadClientConfiguration" in script
+    assert "configureAgentRuntime" in script
+    assert "Number.isSafeInteger" in script
+    assert "localStorage" not in script
     assert "status.error_code" in script
     assert 'closeJobTransport(job, { clearDeadline: false })' in script
     assert "job.controller?.abort()" in script

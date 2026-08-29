@@ -5,7 +5,12 @@ from cinegraph.config.access import (
     DEFAULT_GUEST_CORPUS_ACCESS_SCOPE,
     GuestAccessConfiguration,
 )
-from cinegraph.config.agent_jobs import DEFAULT_AGENT_JOB_CONFIGURATION, AgentJobConfiguration
+from cinegraph.config.agent_jobs import (
+    DEFAULT_AGENT_JOB_CONFIGURATION,
+    AgentJobConfiguration,
+    agent_client_job_deadline_ms,
+    agent_client_poll_interval_ms,
+)
 from cinegraph.config.agent_middleware import (
     DEFAULT_AGENT_MIDDLEWARE_CONFIGURATION,
     AgentMiddlewareConfiguration,
@@ -15,7 +20,11 @@ from cinegraph.config.agent_runtime_controls import (
     AgentRuntimeControlConfiguration,
     ModelTokenRate,
 )
-from cinegraph.config.api import DEFAULT_API_CONFIGURATION, ApiConfiguration
+from cinegraph.config.api import (
+    DEFAULT_API_CONFIGURATION,
+    PRODUCT_UI_CLIENT_CONFIGURATION_PATH,
+    ApiConfiguration,
+)
 from cinegraph.config.authentication import (
     AUTHENTICATION_UNSAFE_METHODS,
     DEFAULT_AUTHENTICATION_CONFIGURATION,
@@ -116,6 +125,7 @@ __all__ = [
     "DEFAULT_AGENT_JOB_CONFIGURATION",
     "DEFAULT_AGENT_RUNTIME_CONTROLS",
     "DEFAULT_API_CONFIGURATION",
+    "PRODUCT_UI_CLIENT_CONFIGURATION_PATH",
     "DEFAULT_AUTHENTICATION_CONFIGURATION",
     "AUTHENTICATION_UNSAFE_METHODS",
     "TRUSTED_SAME_ORIGIN_SEC_FETCH_SITES",
@@ -140,6 +150,8 @@ __all__ = [
     "DEFAULT_SPEAKER_REVIEW_CONFIGURATION",
     "AgentMiddlewareConfiguration",
     "AgentJobConfiguration",
+    "agent_client_job_deadline_ms",
+    "agent_client_poll_interval_ms",
     "AgentRuntimeControlConfiguration",
     "DEFAULT_OBSERVABILITY_CONFIGURATION",
     "ObservabilityConfiguration",

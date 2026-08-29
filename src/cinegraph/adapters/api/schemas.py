@@ -1,8 +1,9 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator, model_validator
 
+from cinegraph.common.error_messages import AgentJobErrorMessages
 from cinegraph.config import (
     DEFAULT_API_CONFIGURATION,
     DEFAULT_AUTHENTICATION_CONFIGURATION,
@@ -21,6 +22,21 @@ class MessageResponse(ApiSchema):
 
 class HealthResponse(ApiSchema):
     status: str
+
+
+class ClientConfigurationResponse(ApiSchema):
+    """Validated, non-sensitive runtime values required by the product UI."""
+
+    api_prefix: str
+    agent_poll_interval_ms: StrictInt
+    agent_job_deadline_ms: StrictInt
+
+    @field_validator("agent_poll_interval_ms", "agent_job_deadline_ms")
+    @classmethod
+    def require_positive_integer(cls, value: int) -> int:
+        if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+            raise ValueError(AgentJobErrorMessages.CLIENT_RUNTIME_VALUES)
+        return value
 
 
 class RegisterRequest(ApiSchema):

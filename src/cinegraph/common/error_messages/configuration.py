@@ -1,4 +1,7 @@
 class ConfigurationErrorMessages:
+    API_PREFIX_SHAPE = "API prefix must be a rooted path without a trailing slash."
+    API_PREFIX_DOT_SEGMENTS = "API prefix must not contain dot path segments."
+    API_PREFIX_RESERVED = "API prefix must not overlap a reserved product route."
     QDRANT_LOCAL_PATH_REQUIRED = "Local Qdrant mode requires a configured storage path."
     QDRANT_REMOTE_URL_REQUIRED = "Remote Qdrant mode requires a configured URL."
     PRODUCTION_QDRANT_MUST_BE_REMOTE = "Production runtime must use remote Qdrant mode."

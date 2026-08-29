@@ -24,6 +24,8 @@ def main() -> None:
             python,
             "-m",
             "pytest",
+            "-m",
+            "not e2e",
             "--cov",
             "--cov-report=term-missing",
             "--cov-report=xml",

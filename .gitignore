@@ -9,6 +9,7 @@ wheels/
 .coverage
 coverage.xml
 coverage.json
+test-results/
 .DS_Store
 
 # Virtual environments
