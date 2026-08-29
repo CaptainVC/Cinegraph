@@ -23,3 +23,8 @@ class ConversationErrorMessages:
     THREAD_SCOPE_MISMATCH = (
         "Conversation thread {thread_id} is bound to a different permission scope."
     )
+    THREAD_CANDIDATES_MISMATCH = (
+        "Conversation thread {thread_id} is bound to a different candidate episode set."
+    )
+    BINDING_CANDIDATES_INVALID = "Conversation binding candidate IDs must be unique UUIDs."
+    BINDING_SPOILER_INVALID = "Conversation binding spoiler policy is invalid."

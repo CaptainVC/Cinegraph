@@ -34,8 +34,10 @@ from cinegraph.common.identifiers.agent_jobs import (
     stable_agent_job_id,
 )
 from cinegraph.config import DEFAULT_AGENT_JOB_CONFIGURATION, AgentJobConfiguration
+from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.access import CorpusAccessScope
-from cinegraph.domain.models.watch_state import EpisodeRef
+from cinegraph.domain.models.watch_state import EpisodeRef, ProfileWatchState
+from cinegraph.domain.policy.watch_state_builder import build_bounded_watch_state
 from cinegraph.ports.agent_jobs.agent_job_repository import AgentJobRepository
 from cinegraph.ports.agent_jobs.dispatcher import AgentJobDispatcher
 from cinegraph.ports.date_time.clock import Clock
@@ -55,10 +57,24 @@ class SubmitAgentJobCommand:
     candidate_episodes: tuple[EpisodeRef, ...]
     idempotency_key: str
     request_id: str | None = None
+    spoiler_mode: SpoilerMode = SpoilerMode.RELAXED
+    safe_through_episode_id: UUID | None = None
 
 
 class ConversationalSeriesService(Protocol):
     def execute(self, query: ConversationalSeriesChatQuery) -> SeriesAgentResult: ...
+
+
+def _job_watch_state(job: AgentJob) -> ProfileWatchState:
+    """Rebuild the request's bounded spoiler policy without persisting raw state."""
+    return build_bounded_watch_state(
+        job.owner_profile_id,
+        "API session",
+        job.series_id,
+        job.candidate_episodes,
+        job.spoiler_mode,
+        job.safe_through_episode_id,
+    )
 
 
 class AgentJobService:
@@ -119,6 +135,8 @@ class AgentJobService:
             command.permission_scope_revision,
             command.corpus_access_scope,
             candidates,
+            command.spoiler_mode,
+            command.safe_through_episode_id,
         )
         job = AgentJob(
             job_id=stable_agent_job_id(
@@ -135,6 +153,8 @@ class AgentJobService:
             request_fingerprint=fingerprint,
             created_at=self._clock.now_utc(),
             request_id=command.request_id,
+            spoiler_mode=command.spoiler_mode,
+            safe_through_episode_id=command.safe_through_episode_id,
         )
         stored, created = self._repository.create(job)
         if created:
@@ -165,6 +185,7 @@ class AgentJobService:
             series_id=job.series_id,
             candidate_episodes=job.candidate_episodes,
             corpus_access_scope=job.corpus_access_scope,
+            profile_watch_state=_job_watch_state(job),
         )
         try:
             with runtime_usage_observer_scope(lambda ledger: self._emit_usage(job, ledger)):
@@ -192,6 +213,7 @@ class AgentJobService:
         terminal = self._repository.complete_with_event(job_id, result)
         self._emit_terminal(job, terminal, None, started)
         return terminal
+
 
     def _emit(
         self,

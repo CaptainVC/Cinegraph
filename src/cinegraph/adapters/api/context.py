@@ -15,6 +15,9 @@ from cinegraph.adapters.catalogue.json_catalogue_manifest_loader import (
 from cinegraph.adapters.catalogue.series_metadata_snapshot_loader import (
     JsonSeriesMetadataSnapshotLoader,
 )
+from cinegraph.adapters.evidence.authorized_agent_evidence_reader import (
+    AuthorizedAgentEvidenceReader,
+)
 from cinegraph.adapters.llm.langchain_chat_model_gateway import (
     LangChainChatModelGateway,
 )
@@ -76,6 +79,7 @@ from cinegraph.domain.models.catalogue.catalogue_manifest import CatalogueManife
 from cinegraph.domain.models.series_metadata import SeriesMetadataSnapshot
 from cinegraph.domain.policy.spoiler_policy import SpoilerPolicy
 from cinegraph.domain.retrieval import RetrievalScopeCompiler
+from cinegraph.ports.agent_jobs.agent_evidence_reader import AgentEvidenceReader
 from cinegraph.ports.agent_jobs.dispatcher import BoundedThreadPoolAgentJobDispatcher
 
 
@@ -114,6 +118,7 @@ class ApiContext:
         default_factory=lambda: MappingProxyType({})
     )
     series_artwork_root: Path | None = None
+    evidence_reader: AgentEvidenceReader | None = None
     _closed: bool = field(default=False, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -250,5 +255,9 @@ def build_default_api_context(env_file: Path = Path(".env")) -> ApiContext:
         series_metadata=series_metadata,
         series_artwork_root=(
             settings.knowledge_root / DEFAULT_API_CONFIGURATION.series_artwork_directory
+        ),
+        evidence_reader=AuthorizedAgentEvidenceReader(
+            root.transcript_vector_index,
+            graph_rag_service,
         ),
     )

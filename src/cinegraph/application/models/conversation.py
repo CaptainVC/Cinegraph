@@ -3,9 +3,11 @@ from uuid import UUID
 
 from cinegraph.common.error_messages import ConversationErrorMessages
 from cinegraph.config.series_agent import DEFAULT_SERIES_AGENT_CONFIGURATION
+from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.watch_state.episode_watch_state import EpisodeRef
+from cinegraph.domain.models.watch_state.profile_watch_state import ProfileWatchState
 
 
 @dataclass(frozen=True, slots=True)
@@ -14,6 +16,9 @@ class ConversationThreadBinding:
     watch_state_version: int
     permission_scope_revision: str
     corpus_access_scope: CorpusAccessScope
+    candidate_episode_ids: tuple[UUID, ...] = ()
+    spoiler_mode: SpoilerMode = SpoilerMode.RELAXED
+    safe_through_episode_id: UUID | None = None
 
     # Enforce the immutable thread binding's version and scope invariants.
     def __post_init__(self) -> None:
@@ -32,6 +37,18 @@ class ConversationThreadBinding:
             raise InvalidModelError(
                 ConversationErrorMessages.BINDING_PERMISSION_SCOPE_REVISION_MUST_MATCH_ACCESS_SCOPE
             )
+        if (
+            not isinstance(self.candidate_episode_ids, tuple)
+            or any(not isinstance(item, UUID) for item in self.candidate_episode_ids)
+            or len(set(self.candidate_episode_ids)) != len(self.candidate_episode_ids)
+        ):
+            raise InvalidModelError(ConversationErrorMessages.BINDING_CANDIDATES_INVALID)
+        if not isinstance(self.spoiler_mode, SpoilerMode):
+            raise InvalidModelError(ConversationErrorMessages.BINDING_SPOILER_INVALID)
+        if self.safe_through_episode_id is not None and not isinstance(
+            self.safe_through_episode_id, UUID
+        ):
+            raise InvalidModelError(ConversationErrorMessages.BINDING_SPOILER_INVALID)
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +71,7 @@ class ConversationalSeriesChatQuery:
     series_id: UUID
     candidate_episodes: tuple[EpisodeRef, ...]
     corpus_access_scope: CorpusAccessScope
+    profile_watch_state: ProfileWatchState | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.thread_id, UUID) or not isinstance(self.profile_id, UUID):

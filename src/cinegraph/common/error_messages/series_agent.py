@@ -21,6 +21,7 @@ class SeriesAgentErrorMessages:
     GRAPH_CONTEXT_REQUIRED = "Graph runtime context is required."
     CONTEXT_INVALID = "Agent runtime context must be valid."
     RESPONSE_ANSWER_TRIMMED = "answer must be trimmed"
+    RESPONSE_ANSWER_TOO_LONG = "answer exceeds the configured maximum length"
     CITATION_TRANSCRIPT_INVALID = "invalid transcript citation"
     CITATION_GRAPH_INVALID = "invalid graph evidence"
     RESULT_IMMUTABLE = "Series agent result must use immutable typed fields."

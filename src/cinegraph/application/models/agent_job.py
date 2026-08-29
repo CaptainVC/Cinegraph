@@ -12,6 +12,7 @@ from uuid import UUID
 from cinegraph.application.models.agent_runtime import ALLOWED_AGENT_JOB_FAILURE_CODES
 from cinegraph.application.models.series_agent_result import SeriesAgentResult
 from cinegraph.common.error_messages import AgentJobErrorMessages
+from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.access import CorpusAccessScope
 from cinegraph.domain.models.watch_state import EpisodeRef
 
@@ -67,6 +68,8 @@ class AgentJob:
     # Operational correlation only; deliberately excluded from the canonical
     # idempotency fingerprint and all public serializers.
     request_id: str | None = None
+    spoiler_mode: SpoilerMode = SpoilerMode.RELAXED
+    safe_through_episode_id: UUID | None = None
 
     @property
     def profile_id(self) -> UUID:
@@ -89,6 +92,14 @@ class AgentJob:
             raise ValueError(AgentJobErrorMessages.JOB_IDS)
         if not isinstance(self.status, AgentJobStatus):
             raise ValueError(AgentJobErrorMessages.JOB_STATUS)
+        if not isinstance(self.spoiler_mode, SpoilerMode):
+            raise ValueError(AgentJobErrorMessages.JOB_STATUS)
+        if self.spoiler_mode is SpoilerMode.RELAXED and self.safe_through_episode_id is not None:
+            raise ValueError(AgentJobErrorMessages.SPOILER_BOUNDARY_INVALID)
+        if self.safe_through_episode_id is not None and self.safe_through_episode_id not in {
+            item.episode_id for item in self.candidate_episodes
+        }:
+            raise ValueError(AgentJobErrorMessages.SPOILER_BOUNDARY_INVALID)
         if (
             not isinstance(self.question, str)
             or not self.question

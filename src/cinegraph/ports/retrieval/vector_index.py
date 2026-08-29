@@ -87,3 +87,10 @@ class VectorIndex(Protocol):
         scope: RetrievalScope,
         limit: int,
     ) -> tuple[RetrievedSegment, ...]: ...
+
+    # Resolve bounded, already-authorized transcript chunks by stable IDs.
+    def retrieve_by_ids(
+        self,
+        segment_ids: tuple[UUID, ...],
+        scope: RetrievalScope,
+    ) -> tuple[RetrievedSegment, ...]: ...

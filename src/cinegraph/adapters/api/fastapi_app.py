@@ -15,6 +15,7 @@ from fastapi.responses import Response as FastApiResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import JSONResponse
 
+from cinegraph.adapters.api.agent_job_schemas import AgentJobRequest
 from cinegraph.adapters.api.agent_jobs import register_agent_job_routes
 from cinegraph.adapters.api.context import ApiContext, build_default_api_context
 from cinegraph.adapters.api.guardrails import (
@@ -68,17 +69,17 @@ from cinegraph.application.models.identity_sessions import (
     SessionGrant,
     UpdateDisplayNameCommand,
 )
-from cinegraph.common.error_messages import AuthenticationErrorMessages
+from cinegraph.common.error_messages import AgentJobErrorMessages, AuthenticationErrorMessages
 from cinegraph.config import (
     DEFAULT_API_CONFIGURATION,
     DEFAULT_AUTHENTICATION_CONFIGURATION,
     ApiConfiguration,
     RuntimeEnvironment,
 )
-from cinegraph.domain.enums.enum import SpoilerMode
 from cinegraph.domain.models.identity import SessionPrincipal
 from cinegraph.domain.models.series_metadata import CreditedPerson, SeriesMetadataSnapshot
-from cinegraph.domain.models.watch_state import ProfileWatchState, SeriesWatchState
+from cinegraph.domain.models.watch_state import ProfileWatchState
+from cinegraph.domain.policy.watch_state_builder import build_bounded_watch_state
 
 LOGGER = logging.getLogger("cinegraph.api")
 STATIC_ROOT = Path(__file__).parent / "static"
@@ -376,54 +377,27 @@ def _poster_file_type(path: Path, maximum_bytes: int) -> tuple[str, bytes] | Non
 def _build_watch_state(
     context: ApiContext,
     principal: SessionPrincipal,
-    chat: ChatRequest | RecommendationRequest,
+    chat: ChatRequest | RecommendationRequest | AgentJobRequest,
 ) -> ProfileWatchState:
     episode_refs = tuple(
         episode
         for episode in context.catalogue.episode_refs()
         if episode.series_id == chat.series_id
     )
-    if chat.spoiler_mode is SpoilerMode.RELAXED:
-        return ProfileWatchState(
-            profile_id=principal.profile_id,
-            profile_name="API session",
-            spoiler_mode=SpoilerMode.RELAXED,
+    try:
+        return build_bounded_watch_state(
+            principal.profile_id,
+            "API session",
+            chat.series_id,
+            episode_refs,
+            chat.spoiler_mode,
+            chat.safe_through_episode_id,
         )
-
-    boundary = next(
-        (
-            episode
-            for episode in episode_refs
-            if episode.episode_id == chat.safe_through_episode_id
-        ),
-        None,
-    )
-    if boundary is None:
+    except ValueError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-            detail="Spoiler boundary must identify an episode in the requested series.",
+            detail=AgentJobErrorMessages.SPOILER_BOUNDARY_INVALID,
         )
-    series_state = SeriesWatchState(
-        series_id=chat.series_id,
-        sequential_safe_boundary=(
-            boundary if chat.spoiler_mode is SpoilerMode.SEQUENTIAL else None
-        ),
-        manually_allowed_episodes=(
-            frozenset(
-                episode
-                for episode in episode_refs
-                if episode.position <= boundary.position
-            )
-            if chat.spoiler_mode is SpoilerMode.STRICT
-            else frozenset()
-        ),
-    )
-    return ProfileWatchState(
-        profile_id=principal.profile_id,
-        profile_name="API session",
-        series_watch_states=(series_state,),
-        spoiler_mode=chat.spoiler_mode,
-    )
 
 
 def create_app(

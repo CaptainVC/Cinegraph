@@ -39,6 +39,9 @@ class InMemoryConversationThreadBindingRepository:
                 existing_binding.permission_scope_revision
                 != binding.permission_scope_revision
                 or existing_binding.corpus_access_scope != binding.corpus_access_scope
+                or existing_binding.candidate_episode_ids != binding.candidate_episode_ids
+                or existing_binding.spoiler_mode != binding.spoiler_mode
+                or existing_binding.safe_through_episode_id != binding.safe_through_episode_id
             ):
                 raise ConversationThreadScopeMismatchError(thread_id)
             # Accept the existing binding when every field matches.

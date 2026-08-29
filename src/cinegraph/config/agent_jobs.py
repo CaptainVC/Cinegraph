@@ -19,6 +19,9 @@ class AgentJobConfiguration:
     sse_max_events: int = 128
     sse_replay_batch: int = 64
     provider_timeout_seconds: float = 60.0
+    evidence_citation_limit: int = 32
+    evidence_text_max_chars: int = 4_000
+    evidence_cache_control: str = "private, no-store"
     sse_media_type: str = "text/event-stream"
     sse_cache_control: str = "no-cache, no-transform"
     sse_accel_buffering: str = "no"
@@ -36,6 +39,8 @@ class AgentJobConfiguration:
                 self.pending_limit,
                 self.sse_max_events,
                 self.sse_replay_batch,
+                self.evidence_citation_limit,
+                self.evidence_text_max_chars,
             )
         ):
             raise ValueError(AgentJobErrorMessages.CONFIG_INTEGER_LIMITS)
@@ -71,6 +76,7 @@ class AgentJobConfiguration:
                 self.sse_cache_control,
                 self.sse_accel_buffering,
                 self.sse_connection,
+                self.evidence_cache_control,
             )
         ):
             raise ValueError(AgentJobErrorMessages.CONFIG_SSE_HEADERS)

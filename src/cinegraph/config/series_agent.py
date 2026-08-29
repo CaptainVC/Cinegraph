@@ -23,6 +23,10 @@ SERIES_TRANSCRIPT_TOOL_DESCRIPTION = (
 )
 SERIES_GRAPH_TOOL_DESCRIPTION = "Find authorized relationships among bounded semantic seeds."
 MAX_SERIES_AGENT_CITATIONS = 32
+MAX_SERIES_AGENT_ANSWER_LENGTH = 12_000
+SERIES_AGENT_TOOL_NAMES = frozenset(
+    {SERIES_TRANSCRIPT_TOOL_NAME, SERIES_GRAPH_TOOL_NAME}
+)
 SERIES_STRUCTURED_RESPONSE_TOOL_NAME = "_StructuredSeriesResponse"
 SERIES_STRUCTURED_RESPONSE_TOOL_MESSAGE = "Structured grounded response."
 
@@ -32,6 +36,7 @@ class SeriesAgentConfiguration:
     """Central safety and cost bounds for the series research runtime."""
 
     question_max_length: int = 2_000
+    answer_max_length: int = MAX_SERIES_AGENT_ANSWER_LENGTH
     transcript_question_max_length: int = 1_000
     graph_seed_max_length: int = MAX_GRAPH_NAME_LENGTH
     graph_predicate_max_length: int = MAX_GRAPH_PREDICATE_LENGTH
@@ -55,6 +60,7 @@ class SeriesAgentConfiguration:
     def __post_init__(self) -> None:
         positive_integer_fields = (
             self.question_max_length,
+            self.answer_max_length,
             self.transcript_question_max_length,
             self.graph_seed_max_length,
             self.graph_predicate_max_length,
@@ -94,6 +100,8 @@ class SeriesAgentConfiguration:
             raise ValueError(SeriesAgentErrorMessages.CONFIG_JITTER_BOOLEAN)
         if self.transcript_question_max_length > self.question_max_length:
             raise ValueError(SeriesAgentErrorMessages.CONFIG_QUESTION_RELATION)
+        if self.answer_max_length > MAX_SERIES_AGENT_ANSWER_LENGTH:
+            raise ValueError(SeriesAgentErrorMessages.CONFIG_ARGUMENT_CAP)
         if self.max_candidate_episodes > MAX_GRAPH_RAG_CANDIDATE_EPISODES:
             raise ValueError(SeriesAgentErrorMessages.CONFIG_CANDIDATE_CAP)
         if (

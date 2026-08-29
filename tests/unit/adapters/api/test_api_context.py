@@ -12,6 +12,7 @@ class FakeCompositionRoot:
     def __init__(self, settings) -> None:
         self.settings = settings
         self.hybrid_search_service = object()
+        self.transcript_vector_index = object()
         self.identity_engine = object()
         self.identity_session_service = object()
         self.closed = 0

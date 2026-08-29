@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 from tests.factories import DEFAULT_SERIES_ID
 from tests.unit.adapters.api.test_fastapi_app import make_context
 
-from cinegraph.adapters.api.agent_jobs import AgentJobEventStream
+from cinegraph.adapters.api.agent_jobs import AgentJobEventStream, _bounded_job_candidates
 from cinegraph.adapters.api.fastapi_app import create_app
 from cinegraph.adapters.repository.in_memory.in_memory_agent_job_repository import (
     InMemoryAgentJobRepository,
@@ -17,6 +17,11 @@ from cinegraph.application.models.series_agent_result import (
 )
 from cinegraph.application.service.agent_job_service import AgentJobService
 from cinegraph.config import AgentJobConfiguration
+from cinegraph.domain.models.watch_state import EpisodePosition, EpisodeRef
+from cinegraph.ports.agent_jobs.agent_evidence_reader import (
+    AgentEvidenceExcerpt,
+    AgentEvidenceResult,
+)
 from cinegraph.ports.agent_jobs.agent_job_repository import AgentJobUnavailableError
 from cinegraph.ports.agent_jobs.dispatcher import InlineAgentJobDispatcher
 
@@ -28,6 +33,27 @@ class RefusingConversation:
     def execute(self, query):
         self.calls.append(query)
         return SeriesAgentResult(None, True)
+
+
+def test_bounded_candidates_preserve_a_late_protected_boundary() -> None:
+    episodes = tuple(
+        EpisodeRef(
+            DEFAULT_SERIES_ID,
+            UUID(int=9_000),
+            UUID(int=10_000 + index),
+            EpisodePosition(1, index + 1),
+        )
+        for index in range(300)
+    )
+    boundary = episodes[279]
+
+    protected = _bounded_job_candidates(episodes, boundary.episode_id, 256)
+
+    assert len(protected) == 256
+    assert protected[0] == episodes[24]
+    assert protected[-1] == boundary
+    assert _bounded_job_candidates(episodes, None, 256) == episodes[:256]
+    assert _bounded_job_candidates(episodes, UUID(int=99_999), 256) == ()
 
 
 class GroundedConversation:
@@ -53,13 +79,37 @@ class GroundedConversation:
         )
 
 
-def _client(tmp_path: object, conversation=None) -> TestClient:
+class EchoEvidenceReader:
+    def __init__(self) -> None:
+        self.calls = []
+
+    def read(self, evidence_request, current_scope):
+        self.calls.append((evidence_request, current_scope))
+        return AgentEvidenceResult(
+            tuple(
+                AgentEvidenceExcerpt(
+                    citation_id=citation.citation_id,
+                    kind=citation.kind,
+                    episode=citation.episode,
+                    source_version_id=UUID(int=9_001),
+                    start_ms=citation.start_ms,
+                    end_ms=citation.end_ms,
+                    text="Synthetic authorized evidence.",
+                    score=0.0,
+                )
+                for citation in evidence_request.citations
+            )
+        )
+
+
+def _client(tmp_path: object, conversation=None, evidence_reader=None) -> TestClient:
     context, _ = make_context(tmp_path)
     context.agent_job_service = AgentJobService(
         InMemoryAgentJobRepository(),
         conversation or RefusingConversation(),
         InlineAgentJobDispatcher(),
     )
+    context.evidence_reader = evidence_reader
     return TestClient(create_app(context))
 
 
@@ -249,6 +299,71 @@ def test_server_derives_guest_and_authenticated_candidates(tmp_path) -> None:
         } == {1, 2, 3}
 
 
+def test_server_compiles_protected_spoiler_boundaries_and_rejects_invalid_shapes(
+    tmp_path,
+) -> None:
+    conversation = RefusingConversation()
+    body = {
+        "thread_id": str(uuid4()),
+        "series_id": str(DEFAULT_SERIES_ID),
+        "question": "Who?",
+    }
+    with _client(tmp_path, conversation) as client:
+        client.post("/api/v1/auth/guest")
+        assert client.post(
+            "/api/v1/agent/jobs",
+            json={**body, "spoiler_mode": "strict"},
+            headers={"Idempotency-Key": str(uuid4())},
+        ).status_code == 422
+        assert client.post(
+            "/api/v1/agent/jobs",
+            json={
+                **body,
+                "spoiler_mode": "relaxed",
+                "safe_through_episode_id": str(UUID(int=1_001)),
+            },
+            headers={"Idempotency-Key": str(uuid4())},
+        ).status_code == 422
+        assert client.post(
+            "/api/v1/agent/jobs",
+            json={
+                **body,
+                "spoiler_mode": "strict",
+                "safe_through_episode_id": str(UUID(int=1_003)),
+            },
+            headers={"Idempotency-Key": str(uuid4())},
+        ).status_code == 404
+
+        strict = client.post(
+            "/api/v1/agent/jobs",
+            json={
+                **body,
+                "spoiler_mode": "strict",
+                "safe_through_episode_id": str(UUID(int=1_001)),
+            },
+            headers={"Idempotency-Key": str(uuid4())},
+        )
+        assert strict.status_code == 202
+        assert {
+            item.position.season_number for item in conversation.calls[-1].candidate_episodes
+        } == {1}
+
+        sequential = client.post(
+            "/api/v1/agent/jobs",
+            json={
+                **body,
+                "thread_id": str(uuid4()),
+                "spoiler_mode": "sequential",
+                "safe_through_episode_id": str(UUID(int=1_002)),
+            },
+            headers={"Idempotency-Key": str(uuid4())},
+        )
+        assert sequential.status_code == 202
+        assert {
+            item.position.season_number for item in conversation.calls[-1].candidate_episodes
+        } == {1, 2}
+
+
 def test_unavailable_and_unknown_series_have_stable_errors(tmp_path) -> None:
     body = {
         "thread_id": str(uuid4()),
@@ -344,6 +459,51 @@ def test_grounded_result_and_sse_expose_locators_without_transcript_text(tmp_pat
         replay = client.get(created["events_url"], headers={"Last-Event-ID": "1"})
         assert "id: 1\n" not in replay.text
         assert "id: 2\n" in replay.text and "id: 3\n" in replay.text
+
+
+def test_grounded_evidence_hydration_is_owner_scoped_batched_and_data_minimal(
+    tmp_path,
+) -> None:
+    evidence_reader = EchoEvidenceReader()
+    body = {
+        "thread_id": str(uuid4()),
+        "series_id": str(DEFAULT_SERIES_ID),
+        "question": "Who?",
+    }
+    with _client(tmp_path, GroundedConversation(), evidence_reader) as client:
+        client.post("/api/v1/auth/guest")
+        created = client.post(
+            "/api/v1/agent/jobs",
+            json=body,
+            headers={"Idempotency-Key": str(uuid4())},
+        ).json()
+        status_payload = client.get(created["status_url"]).json()
+        evidence_url = status_payload["result"]["evidence_url"]
+        assert evidence_url == f'{created["status_url"]}/evidence'
+
+        hydrated = client.get(evidence_url)
+        assert hydrated.status_code == 200
+        assert hydrated.headers["cache-control"] == "private, no-store"
+        assert hydrated.json() == {
+            "job_id": created["job_id"],
+            "items": [
+                {
+                    "citation_id": str(UUID(int=8_001)),
+                    "excerpt": "Synthetic authorized evidence.",
+                }
+            ],
+        }
+        assert len(evidence_reader.calls) == 1
+        assert tuple(
+            item.citation_id for item in evidence_reader.calls[0][0].citations
+        ) == (UUID(int=8_001),)
+        assert "source_version_id" not in hydrated.text
+        assert "score" not in hydrated.text
+
+        client.post("/api/v1/auth/logout")
+        assert client.get(evidence_url).status_code == 401
+        client.post("/api/v1/auth/guest")
+        assert client.get(evidence_url).status_code == 404
 
 
 def test_async_sse_iterator_replays_compact_frames_and_closes_at_terminal(tmp_path) -> None:
