@@ -3,8 +3,7 @@ name: Quality
 on:
   pull_request:
   push:
-    branches:
-      - main
+    branches: [main]
 
 concurrency:
   group: quality-${{ github.workflow }}-${{ github.ref }}
@@ -13,19 +12,22 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  UV_NO_PROGRESS: "1"
+
 jobs:
   lint-type:
     name: Lint and type check
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version-file: .python-version}
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Install locked development dependencies
         run: uv sync --locked --dev
       - name: Run Ruff
@@ -36,23 +38,21 @@ jobs:
   tests-coverage-build:
     name: Tests, branch coverage, and build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version-file: .python-version}
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Install locked development dependencies
         run: uv sync --locked --dev
       - name: Run tests with branch coverage
-        run: >-
-          uv run pytest --cov --cov-report=term-missing --cov-report=xml
-          --cov-report=json
+        run: uv run pytest --cov --cov-report=term-missing --cov-report=xml --cov-report=json
       - name: Upload coverage reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-${{ github.run_id }}
           path: |
@@ -62,27 +62,63 @@ jobs:
       - name: Build wheel
         run: uv build --wheel
 
+  bandit:
+    name: Bandit SAST
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version-file: .python-version}
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Install locked development dependencies
+        run: uv sync --locked --dev
+      - name: Run Bandit SAST
+        run: uv run bandit --recursive src scripts --configfile pyproject.toml --severity-level medium --confidence-level medium
+
+  dependency-audit:
+    name: Locked dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version-file: .python-version}
+      - name: Set up uv
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - name: Install locked development dependencies
+        run: uv sync --locked --dev
+      - name: Export locked production requirements
+        run: uv export --locked --no-dev --no-emit-project --format requirements.txt --output-file "$RUNNER_TEMP/requirements.txt"
+      - name: Audit locked production requirements
+        run: uv run pip-audit --strict --requirement "$RUNNER_TEMP/requirements.txt" --progress-spinner off --timeout 15
+
   e2e-chromium:
     name: Chromium end-to-end
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version-file: .python-version}
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Install locked development dependencies
         run: uv sync --locked --dev
       - name: Install Chromium
         run: uv run playwright install --with-deps chromium
       - name: Run browser end-to-end tests
         run: uv run pytest -o addopts='' tests/e2e -m e2e --no-cov
-      - name: Upload browser failure artifacts
-        if: failure()
-        uses: actions/upload-artifact@v4
+      - if: failure()
+        name: Upload browser failure artifacts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: e2e-failure-${{ github.run_id }}
           path: test-results/e2e
@@ -92,90 +128,85 @@ jobs:
   postgres-contract:
     name: PostgreSQL persistence contract
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     services:
       postgres:
-        image: postgres:16
-        env:
-          POSTGRES_USER: cinegraph
-          POSTGRES_PASSWORD: cinegraph-contract-only
-          POSTGRES_DB: cinegraph
-        ports:
-          - 5432:5432
+        image: postgres:16.15-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
+        env: {POSTGRES_USER: cinegraph, POSTGRES_PASSWORD: cinegraph-contract-only, POSTGRES_DB: cinegraph}
+        ports: [5432:5432]
         options: >-
           --health-cmd "pg_isready -U cinegraph -d cinegraph"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version-file: .python-version}
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Install locked development dependencies
         run: uv sync --locked --dev
-      - name: Run PostgreSQL migration and persistence contract
-        env:
-          CINEGRAPH_TEST_DATABASE_URL: postgresql+psycopg://cinegraph:cinegraph-contract-only@localhost:5432/cinegraph
+      - name: Run PostgreSQL persistence contract
         run: uv run pytest tests/integration -q
+        env: {CINEGRAPH_TEST_DATABASE_URL: postgresql+psycopg://cinegraph:cinegraph-contract-only@localhost:5432/cinegraph}
 
   evaluation-smoke:
     name: Deterministic evaluation smoke
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version-file: .python-version}
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Install locked development dependencies
         run: uv sync --locked --dev
-      - name: Run invented-fixture retrieval evaluation
+      - name: Run deterministic evaluation smoke
         run: uv run python scripts/run_synthetic_evaluation.py
 
   pre-commit:
     name: Pre-commit
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version-file: .python-version
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with: {python-version-file: .python-version}
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
       - name: Install locked development dependencies
         run: uv sync --locked --dev
-      - name: Run pre-commit hooks
+      - name: Run pre-commit checks
         run: uv run pre-commit run --all-files
 
   secret-scan:
     name: Secret scan
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions: {contents: read}
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with: {fetch-depth: 0}
       - name: Scan repository for secrets
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   compose-config:
     name: Compose runtime contract
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - name: Check out repository
-        uses: actions/checkout@v4
-      - name: Render development and production Compose configurations
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Render and build Dev/Prod runtime
         shell: bash
         run: |
           set -euo pipefail
@@ -190,8 +221,6 @@ jobs:
               -e 's#REPLACE_WITH_LONG_RANDOM_PASSWORD#ci-placeholder-password#g' \
               "$runtime_env"
             chmod 600 "$runtime_env"
-            CINEGRAPH_ENV_FILE="$runtime_env" docker compose \
-              --env-file "$runtime_env" -f deploy/compose.yaml config --quiet
+            CINEGRAPH_ENV_FILE="$runtime_env" docker compose --env-file "$runtime_env" -f deploy/compose.yaml config --quiet
           done
-      - name: Build pinned application image
-        run: docker build --file deploy/Dockerfile --tag cinegraph:ci .
+          docker build --file deploy/Dockerfile --tag cinegraph:ci .

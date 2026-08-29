@@ -242,14 +242,16 @@ uv sync --locked --dev
 uv run python scripts/quality.py
 ```
 
-The quality runner fails at the first unsuccessful stage and runs Ruff, the staged
-mypy boundary (`domain`, `ports`, `config`, identity and persistence adapters, and
-application models/policy/serialization/services), full tests with branch coverage,
-deterministic synthetic retrieval evaluation, pre-commit, and a wheel build.
+The quality runner fails at the first unsuccessful stage and runs Ruff, Bandit SAST,
+the staged mypy boundary (`domain`, `ports`, `config`, identity and persistence
+adapters, and application models/policy/serialization/services), full tests with
+branch coverage, deterministic synthetic retrieval evaluation, pre-commit, and a
+wheel build.
 Individual checks remain available:
 
 ```text
 uv run ruff check .
+uv run bandit --recursive src scripts --configfile pyproject.toml --severity-level medium --confidence-level medium
 uv run mypy
 uv run pytest --cov --cov-report=term-missing --cov-report=xml --cov-report=json
 uv run python scripts/run_synthetic_evaluation.py
@@ -257,13 +259,18 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The verified branch baseline is 87.04% total branch coverage (874 passed and 5
+The verified branch baseline is 87.02% total branch coverage (911 passed and 7
 skipped, measured with `pytest-cov` on 2026-08-29). The centralized coverage
 configuration floors ordinary (non-browser) tests at 87%, so coverage cannot
 silently regress. Coverage XML and JSON reports are generated locally and uploaded
 by CI. Ruff syntax/error classes, Pyflakes, and import sorting are gated across the
 repository. Formatter enforcement remains intentionally staged to avoid mixing a
 repository-wide style rewrite with behavioral phases.
+
+The network-backed locked-production dependency audit runs as a separate CI gate so
+the ordinary local loop remains usable offline. Its reproducible command, CodeQL
+policy, immutable-action enforcement, and optional SonarQube Cloud/CodeRabbit setup
+are documented in [the security quality-gates runbook](docs/operations/security-quality-gates.md).
 
 Browser end-to-end tests are marked `e2e` and excluded from ordinary test and coverage
 runs. Install the locked development dependencies and Chromium, then run them with:

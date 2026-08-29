@@ -17,6 +17,23 @@ def _run(label: str, command: list[str]) -> None:
 def main() -> None:
     python = sys.executable
     _run("lint", [python, "-m", "ruff", "check", "."])
+    _run(
+        "Bandit SAST",
+        [
+            python,
+            "-m",
+            "bandit",
+            "--recursive",
+            "src",
+            "scripts",
+            "--configfile",
+            "pyproject.toml",
+            "--severity-level",
+            "medium",
+            "--confidence-level",
+            "medium",
+        ],
+    )
     _run("type check", [python, "-m", "mypy"])
     _run(
         "tests and branch coverage",
