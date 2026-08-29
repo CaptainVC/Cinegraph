@@ -20,6 +20,7 @@ provider state, exception text, and secrets never cross this boundary.
 
 Phase 34 replaced the in-memory production job store with a durable SQL adapter
 without changing this HTTP contract. The bounded dispatcher and LangGraph checkpoint
-remain process-local and require deployment-phase worker recovery. Guest access
+remain process-local. ADR 0012 adds single-supervisor startup and in-process recovery;
+durable LangGraph checkpoints and leased multi-worker execution remain future work. Guest access
 derives only the entitled Modern Family S1/S2 catalogue candidates; no browser watch
 state or candidate IDs are trusted.

@@ -1,6 +1,6 @@
 import uvicorn
 
-from cinegraph.config import CinegraphRuntimeSettings
+from cinegraph.config import API_SINGLE_PROCESS_WORKERS, CinegraphRuntimeSettings
 
 
 def main() -> None:
@@ -10,6 +10,7 @@ def main() -> None:
         factory=True,
         host=settings.api_host,
         port=settings.api_port,
+        workers=API_SINGLE_PROCESS_WORKERS,
     )
 
 

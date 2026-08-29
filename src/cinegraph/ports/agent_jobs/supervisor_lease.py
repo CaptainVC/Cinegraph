@@ -1,0 +1,9 @@
+from typing import Protocol
+
+
+class AgentJobSupervisorLease(Protocol):
+    """Exclusive lifetime lease for the one supported job supervisor."""
+
+    def acquire(self) -> bool: ...
+    def held(self) -> bool: ...
+    def release(self) -> None: ...

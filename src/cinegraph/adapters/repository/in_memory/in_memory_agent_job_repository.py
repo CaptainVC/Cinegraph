@@ -55,6 +55,11 @@ class InMemoryAgentJobRepository:
 
     create_or_get = create
 
+    @staticmethod
+    def _require_recovery_limit(limit: int) -> None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError(AgentJobErrorMessages.REPOSITORY_RECOVERY_LIMIT)
+
     def get(self, job_id: UUID, owner_profile_id: UUID | None = None) -> AgentJob | None:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -63,6 +68,54 @@ class InMemoryAgentJobRepository:
             ):
                 return None
             return job
+
+    def list_queued(self, limit: int) -> tuple[AgentJob, ...]:
+        self._require_recovery_limit(limit)
+        with self._lock:
+            queued = sorted(
+                (job for job in self._jobs.values() if job.status is AgentJobStatus.QUEUED),
+                key=lambda job: (job.created_at, job.job_id.hex),
+            )
+            return tuple(queued[:limit])
+
+    def requeue_running_with_event(self, limit: int) -> tuple[AgentJob, ...]:
+        self._require_recovery_limit(limit)
+        with self._lock:
+            running = sorted(
+                (job for job in self._jobs.values() if job.status is AgentJobStatus.RUNNING),
+                key=lambda job: (job.started_at or job.created_at, job.job_id.hex),
+            )[:limit]
+            return self._requeue_locked(tuple(running))
+
+    def requeue_running_job_with_event(self, job_id: UUID) -> tuple[AgentJob | None, bool]:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None or job.status is not AgentJobStatus.RUNNING:
+                return job, False
+            return self._requeue_locked((job,))[0], True
+
+    def _requeue_locked(self, running: tuple[AgentJob, ...]) -> tuple[AgentJob, ...]:
+        prior_jobs = {job.job_id: job for job in running}
+        prior_event_lengths = {
+            job.job_id: len(self._events[job.job_id]) for job in running
+        }
+        recovered: list[AgentJob] = []
+        try:
+            for job in running:
+                updated = job.requeue_after_interruption(self._clock())
+                self._jobs[job.job_id] = updated
+                self._append_locked(
+                    job.job_id,
+                    AgentJobEventKind.QUEUED,
+                    {"status": "queued", "recovered": True},
+                )
+                recovered.append(updated)
+        except Exception:
+            for job_id, prior in prior_jobs.items():
+                self._jobs[job_id] = prior
+                del self._events[job_id][prior_event_lengths[job_id] :]
+            raise
+        return tuple(recovered)
 
     def _claim_locked(self, job_id: UUID, owner_profile_id: UUID | None = None) -> AgentJob | None:
         job = self.get(job_id, owner_profile_id)
@@ -217,7 +270,11 @@ class InMemoryAgentJobRepository:
         expected_kind = AgentJobEventKind(job.status.value)
         if event_kind is not expected_kind:
             raise ValueError(AgentJobErrorMessages.REPOSITORY_EVENT_STATE)
-        if any(item.kind is event_kind for item in self._events[job_id]):
+        if event_kind in {
+            AgentJobEventKind.SUCCEEDED,
+            AgentJobEventKind.SAFE_REFUSAL,
+            AgentJobEventKind.FAILED,
+        } and any(item.kind is event_kind for item in self._events[job_id]):
             raise ValueError(AgentJobErrorMessages.REPOSITORY_EVENT_ONCE)
         event = AgentJobEvent(
             event_id=uuid5(job_id, f"agent-job-event:{len(self._events[job_id]) + 1}"),

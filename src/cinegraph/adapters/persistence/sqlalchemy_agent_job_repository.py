@@ -254,6 +254,11 @@ class SqlAlchemyAgentJobRepository:
 
     create_or_get = create
 
+    @staticmethod
+    def _require_recovery_limit(limit: int) -> None:
+        if isinstance(limit, bool) or not isinstance(limit, int) or limit < 1:
+            raise ValueError(AgentJobErrorMessages.REPOSITORY_RECOVERY_LIMIT)
+
     def get(self, job_id: UUID, owner_profile_id: UUID | None = None) -> AgentJob | None:
         try:
             with self._session_factory() as session:
@@ -270,6 +275,105 @@ class SqlAlchemyAgentJobRepository:
                 return _job(row) if row else None
         except (OperationalError, DBAPIError, ValueError, TypeError, KeyError) as error:
             raise AgentJobUnavailableError(AgentJobErrorMessages.SYSTEM_UNAVAILABLE) from error
+
+    def list_queued(self, limit: int) -> tuple[AgentJob, ...]:
+        self._require_recovery_limit(limit)
+        try:
+            with self._session_factory() as session:
+                rows = tuple(
+                    session.scalars(
+                        sa.select(AgentJobRow)
+                        .where(AgentJobRow.status == AgentJobStatus.QUEUED.value)
+                        .order_by(AgentJobRow.created_at, AgentJobRow.job_id)
+                        .limit(limit)
+                    )
+                )
+                return tuple(_job(row) for row in rows)
+        except (OperationalError, DBAPIError, ValueError, TypeError, KeyError) as error:
+            raise AgentJobUnavailableError(AgentJobErrorMessages.SYSTEM_UNAVAILABLE) from error
+
+    def requeue_running_with_event(self, limit: int) -> tuple[AgentJob, ...]:
+        self._require_recovery_limit(limit)
+        try:
+            with self._session_factory.begin() as session:
+                rows = tuple(
+                    session.scalars(
+                        sa.select(AgentJobRow)
+                        .where(AgentJobRow.status == AgentJobStatus.RUNNING.value)
+                        .order_by(AgentJobRow.started_at, AgentJobRow.job_id)
+                        .limit(limit)
+                        .with_for_update(skip_locked=True)
+                    )
+                )
+                return self._requeue_rows(session, rows)
+        except (
+            OperationalError,
+            DBAPIError,
+            IntegrityError,
+            ValueError,
+            TypeError,
+            KeyError,
+        ) as error:
+            raise AgentJobUnavailableError(AgentJobErrorMessages.SYSTEM_UNAVAILABLE) from error
+
+    def requeue_running_job_with_event(
+        self, job_id: UUID
+    ) -> tuple[AgentJob | None, bool]:
+        try:
+            with self._session_factory.begin() as session:
+                row = session.scalar(
+                    sa.select(AgentJobRow)
+                    .where(AgentJobRow.job_id == job_id)
+                    .with_for_update()
+                )
+                if row is None or row.status != AgentJobStatus.RUNNING.value:
+                    return (_job(row) if row is not None else None), False
+                return self._requeue_rows(session, (row,))[0], True
+        except (
+            OperationalError,
+            DBAPIError,
+            IntegrityError,
+            ValueError,
+            TypeError,
+            KeyError,
+        ) as error:
+            raise AgentJobUnavailableError(AgentJobErrorMessages.SYSTEM_UNAVAILABLE) from error
+
+    def _requeue_rows(
+        self,
+        session: Session,
+        rows: tuple[AgentJobRow, ...],
+    ) -> tuple[AgentJob, ...]:
+        recovered: list[AgentJob] = []
+        for row in rows:
+            prior = _job(row)
+            now = self._clock()
+            if now.tzinfo != UTC or now.utcoffset() is None:
+                raise ValueError("repository clock must return UTC")
+            updated = prior.requeue_after_interruption(now)
+            row.status = updated.status.value
+            row.started_at = None
+            events = list(
+                session.scalars(
+                    sa.select(AgentJobEventRow)
+                    .where(AgentJobEventRow.job_id == row.job_id)
+                    .order_by(AgentJobEventRow.sequence)
+                )
+            )
+            if not events or [event.sequence for event in events] != list(
+                range(1, len(events) + 1)
+            ):
+                raise AgentJobUnavailableError(AgentJobErrorMessages.SYSTEM_UNAVAILABLE)
+            self._append(
+                session,
+                updated,
+                AgentJobEventKind.QUEUED,
+                {"status": "queued", "recovered": True},
+                len(events) + 1,
+                max(_utc(now), _utc(events[-1].occurred_at)),
+            )
+            recovered.append(updated)
+        return tuple(recovered)
 
     def _transition(
         self,

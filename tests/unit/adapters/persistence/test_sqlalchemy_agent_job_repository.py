@@ -60,6 +60,72 @@ def test_sql_repository_round_trip_and_event_cursor(tmp_path: Path) -> None:
     assert repository.events_after(job.job_id, 2)[0].kind.value == "safe_refusal"
 
 
+def test_sql_repository_recovers_running_jobs_with_contiguous_events(tmp_path: Path) -> None:
+    repository = _repo(tmp_path)
+    running = _job(_command())
+    queued = _job(_command())
+    repository.create(running)
+    repository.create(queued)
+    repository.claim_with_event(running.job_id)
+
+    recovered = repository.requeue_running_with_event(limit=8)
+
+    assert [job.job_id for job in recovered] == [running.job_id]
+    assert recovered[0].status.value == "queued"
+    assert recovered[0].started_at is None
+    assert {job.job_id for job in repository.list_queued(limit=8)} == {
+        running.job_id,
+        queued.job_id,
+    }
+    events = repository.events_after(running.job_id)
+    assert [event.kind.value for event in events] == ["queued", "running", "queued"]
+    assert dict(events[-1].payload) == {"status": "queued", "recovered": True}
+    unchanged, was_recovered = repository.requeue_running_job_with_event(running.job_id)
+    assert unchanged is not None and unchanged.status.value == "queued"
+    assert was_recovered is False
+    repository.claim_with_event(running.job_id)
+    repository.complete_with_event(running.job_id, SeriesAgentResult(None, True))
+    assert [event.sequence for event in repository.events_after(running.job_id)] == [
+        1,
+        2,
+        3,
+        4,
+        5,
+    ]
+
+
+def test_sql_recovery_append_failure_rolls_back_running_state(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository = _repo(tmp_path)
+    job = _job(_command())
+    repository.create(job)
+    repository.claim_with_event(job.job_id)
+
+    def fail(*args: object, **kwargs: object) -> None:
+        raise RuntimeError("injected recovery append failure")
+
+    monkeypatch.setattr(repository, "_append", fail)
+    with pytest.raises(RuntimeError, match="injected recovery"):
+        repository.requeue_running_with_event(limit=1)
+
+    restored = repository.get(job.job_id)
+    assert restored is not None and restored.status.value == "running"
+    assert [event.kind.value for event in repository.events_after(job.job_id)] == [
+        "queued",
+        "running",
+    ]
+
+
+@pytest.mark.parametrize("limit", [0, -1, True])
+def test_sql_recovery_rejects_invalid_limits(tmp_path: Path, limit: int) -> None:
+    repository = _repo(tmp_path)
+    with pytest.raises(ValueError, match="recovery limits"):
+        repository.list_queued(limit)
+    with pytest.raises(ValueError, match="recovery limits"):
+        repository.requeue_running_with_event(limit)
+
+
 def test_sql_repository_owner_isolation_and_conflict(tmp_path: Path) -> None:
     repository = _repo(tmp_path)
     command = _command()
