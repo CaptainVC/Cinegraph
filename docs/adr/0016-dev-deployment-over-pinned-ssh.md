@@ -40,8 +40,11 @@ and private corpus/API-key transfer remain outside this phase.
 ## Consequences
 
 The workflow is inert until the operator creates and protects the `dev` Environment,
-adds the exact SSH trust material, verifies Hostinger architecture, and flips the
+adds the exact SSH trust material, completes the forced-command host bootstrap,
+verifies Hostinger architecture, and flips the
 repository activation variable last. Missing activation is an explicit skipped
 deployment and does not fail protected `main` or image publication. A remote failure
 can be retried from the same completed workflow run after remediation; a failed
-migration is not auto-rolled back.
+migration is not auto-rolled back. ADR-0017 replaces the original direct-script SSH
+transport with a root-owned forced-command dispatcher and helper while preserving
+these activation gates.

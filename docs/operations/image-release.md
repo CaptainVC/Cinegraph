@@ -44,12 +44,11 @@ file as `CINEGRAPH_IMAGE_DIGEST=sha256:<64-hex-digest>` together with
 
 ## GHCR activation gap
 
-The package must be visible to the intended VPS pull identity. The first package push
-may require repository/package visibility and organization policy activation in
-GitHub. Use the minimum package permission needed by the deployment account and test
-an authenticated pull on Dev. Do not put a PAT into Actions; if the VPS needs a pull
-credential, provision it separately on the host with read-only package scope and
-mode-0600 storage.
+The package must be public before Dev activation. The first package push may require
+repository/package visibility and organization policy activation in GitHub. Verify an
+anonymous pull of the exact digest from Dev; the host bootstrap and root helper do not
+store GHCR credentials. Do not put a PAT, registry token, or Docker credential into
+the deployment account or workflow.
 
 ## Dev deployment activation
 
@@ -71,15 +70,52 @@ CINEGRAPH_DEV_KNOWN_HOSTS    (secret; exact pinned host-key line)
 
 The host must report `x86_64`, have Docker Compose and Git, and already contain a
 mode-0600 `/etc/cinegraph/dev.env` with its OpenAI key and other operator-managed
-settings. The configured SSH user must be able to acquire the deployment lock, write
-`/opt/cinegraph` and `/etc/cinegraph/dev.env`, and run Docker Compose (usually via a
-dedicated Docker group); do not rely on interactive `sudo`. Verify the exact
-known-hosts entry independently; the workflow never uses
-`ssh-keyscan`. Configure all Environment values first, test the Dev host/preflight,
-and flip the repository activation variable last. This phase does not create the
-Environment, mutate the VPS, or transfer secrets, SRT/PDF files, or corpus data.
+settings. The Dev env, `/etc/cinegraph`, `/opt/cinegraph`, dispatcher, and privileged
+helper remain root-owned. The SSH account is the password-disabled `cinegraph-deploy` account
+with no Docker, sudo, admin, or other supplementary groups. Its only authorization is
+the forced dispatcher; it cannot receive a shell or invoke arbitrary Docker/sudo
+commands. Its home, `.ssh` directory, and public `authorized_keys` file are
+root-managed and not writable by the account. The workflow sends one canonical
+`deploy <sha> <digest>` command.
 
-The remote promotion checks out the public repository at the attested SHA, creates a
+Run the reviewed host bootstrap from the Hostinger console before configuring
+GitHub. Use a fresh root-owned clone exactly at the live `main` tip; bootstrap rejects
+dirty, untracked, non-root-controlled, stale, or differently sourced checkouts:
+
+```bash
+sudo python3 -B -m scripts.bootstrap_dev_host \
+  --public-key-file /root/cinegraph-deploy.pub \
+  --expected-key-fingerprint SHA256:<operator-recorded-public-key-fingerprint> \
+  --host <canonical-vps-host>
+sudo python3 -B -m scripts.bootstrap_dev_host \
+  --public-key-file /root/cinegraph-deploy.pub \
+  --expected-key-fingerprint SHA256:<operator-recorded-public-key-fingerprint> \
+  --host <canonical-vps-host> --check
+```
+
+The input is the public Ed25519 key only; never place the private key on the VPS.
+Bootstrap does not install packages, change sshd/firewall policy, overwrite an
+existing env or authorized-keys file, or activate deployment. Its successful JSON is
+safe evidence containing the bootstrap SHA, account/mode, server Ed25519 public
+fingerprint, and exact port-22 known-hosts line. Compare that fingerprint through an independent
+Hostinger console view before adding the line to GitHub; never use `ssh-keyscan`.
+Apply mode may create the placeholder Dev env; `--check` additionally runs the
+existing fail-closed runtime/Compose validator and will not pass until every private
+placeholder, exact release SHA, and public image digest has been populated.
+
+Populate the root-owned `/etc/cinegraph/dev.env` manually, rerun `--check`, create and
+protect the `dev` Environment, configure its values, and flip the repository
+activation variable last. This PR does not create the Environment, access the VPS,
+transfer secrets, SRT/PDF files, or corpus data.
+
+Before activation, use the deployment private key from the operator machine to send
+an intentionally invalid command. Authentication is proven only when the server
+returns `SSH command is not an authorized deployment request`; a password prompt,
+generic public-key denial, shell, or any other result fails the activation check. Do
+not send a syntactically valid deploy command during this probe.
+
+The root helper reads only the canonical SHA and digest from the forced dispatcher,
+checks out the public repository at the attested SHA, creates a
 candidate env changing only the digest and release SHA, validates it, pulls the
 attested digest, runs migrations and Qdrant provisioning, atomically updates the
 Dev release pointer, and checks readiness. It never rebuilds, deletes volumes, or

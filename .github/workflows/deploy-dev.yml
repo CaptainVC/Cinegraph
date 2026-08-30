@@ -114,7 +114,23 @@ jobs:
           [[ -n "$CINEGRAPH_DEV_SSH_PRIVATE_KEY" ]] || { echo "Dev SSH key secret is missing" >&2; exit 1; }
           [[ -n "$CINEGRAPH_DEV_KNOWN_HOSTS" ]] || { echo "Dev known-hosts secret is missing" >&2; exit 1; }
           [[ "$CINEGRAPH_DEV_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "Dev host variable is invalid" >&2; exit 1; }
-          [[ "$CINEGRAPH_DEV_USER" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Dev user variable is invalid" >&2; exit 1; }
+          [[ "$CINEGRAPH_DEV_USER" == "cinegraph-deploy" ]] || { echo "Dev user must be cinegraph-deploy" >&2; exit 1; }
+          python - <<'PY'
+          import os
+
+          from scripts.dev_host_contract import known_hosts_line, validate_host, validate_public_key_line
+
+          try:
+              host = validate_host(os.environ["CINEGRAPH_DEV_HOST"])
+              configured_line = os.environ["CINEGRAPH_DEV_KNOWN_HOSTS"]
+              configured_host, public_key = configured_line.split(" ", 1)
+              validate_public_key_line(public_key)
+              canonical_line = known_hosts_line(host, public_key)
+          except (KeyError, ValueError):
+              raise SystemExit("Dev known-hosts secret is not one canonical Ed25519 host-key line") from None
+          if configured_host != host or configured_line != canonical_line:
+              raise SystemExit("Dev known-hosts secret does not exactly match the configured host")
+          PY
           umask 077
           ssh_dir="$(mktemp -d "$RUNNER_TEMP/cinegraph-ssh.XXXXXX")"
           key_file="$ssh_dir/id_deploy"
@@ -127,6 +143,7 @@ jobs:
           printf '%s\n' "$CINEGRAPH_DEV_SSH_PRIVATE_KEY" > "$key_file"
           printf '%s\n' "$CINEGRAPH_DEV_KNOWN_HOSTS" > "$known_hosts_file"
           chmod 600 "$key_file" "$known_hosts_file"
+          remote_command="deploy $RELEASE_SHA $IMAGE_DIGEST"
           ssh \
             -i "$key_file" \
             -o IdentitiesOnly=yes \
@@ -137,4 +154,4 @@ jobs:
             -o ServerAliveInterval=15 \
             -o ServerAliveCountMax=2 \
             "$CINEGRAPH_DEV_USER@$CINEGRAPH_DEV_HOST" \
-            bash -s -- "$RELEASE_SHA" "$IMAGE_DIGEST" < deploy/remote/deploy-dev.sh
+            "$remote_command"

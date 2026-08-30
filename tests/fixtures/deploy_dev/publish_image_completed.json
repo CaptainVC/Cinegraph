@@ -1,0 +1,16 @@
+{
+  "action": "completed",
+  "repository": {
+    "full_name": "CaptainVC/Cinegraph"
+  },
+  "workflow_run": {
+    "conclusion": "success",
+    "event": "workflow_run",
+    "head_branch": "main",
+    "head_repository": {
+      "full_name": "CaptainVC/Cinegraph"
+    },
+    "head_sha": "0123456789abcdef0123456789abcdef01234567",
+    "name": "Publish immutable image"
+  }
+}
