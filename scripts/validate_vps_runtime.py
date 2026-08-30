@@ -33,7 +33,8 @@ REQUIRED_VALUES = (
     "CINEGRAPH_PUBLISHED_PORT",
     "CINEGRAPH_IDENTITY_DATABASE_PATH",
     "CINEGRAPH_IMAGE",
-    "CINEGRAPH_IMAGE_VERSION",
+    "CINEGRAPH_IMAGE_DIGEST",
+    "CINEGRAPH_RELEASE_SHA",
     "CINEGRAPH_API_HOST",
     "CINEGRAPH_API_PORT",
 )
@@ -46,7 +47,9 @@ PLACEHOLDER_MARKERS = ("REPLACE_", "CHANGE_ME", "YOUR_", "<", ">")
 DEFAULT_PUBLISHED_PORT = 18_000
 MIN_FREE_DISK_BYTES = 20 * 1024**3
 MIN_MEMORY_BYTES = 4 * 1024**3
-GIT_IMAGE_VERSION_PATTERN: Final = r"^sha-[0-9a-f]{40}$"
+EXPECTED_IMAGE_NAME: Final = "ghcr.io/captainvc/cinegraph"
+IMAGE_DIGEST_PATTERN: Final = r"^sha256:[0-9a-f]{64}$"
+RELEASE_SHA_PATTERN: Final = r"^[0-9a-f]{40}$"
 # Intentional container-wide bind; the host publishes it on loopback only.
 CONTAINER_API_HOST: Final = "0.0.0.0"  # nosec B104
 
@@ -156,8 +159,22 @@ def validate_env_file(path: Path, expected_environment: str | None = None) -> li
         api_port = -1
     if api_port != 8000:
         issues.append(ValidationIssue("api-port", "CINEGRAPH_API_PORT must be 8000 inside the container"))
-    if not re.fullmatch(GIT_IMAGE_VERSION_PATTERN, values.get("CINEGRAPH_IMAGE_VERSION", "")):
-        issues.append(ValidationIssue("image-version", "CINEGRAPH_IMAGE_VERSION must be a 40-character Git SHA tag"))
+    if values.get("CINEGRAPH_IMAGE") != EXPECTED_IMAGE_NAME:
+        issues.append(ValidationIssue("image-name", "CINEGRAPH_IMAGE must be the approved GHCR image name"))
+    if not re.fullmatch(IMAGE_DIGEST_PATTERN, values.get("CINEGRAPH_IMAGE_DIGEST", "")):
+        issues.append(
+            ValidationIssue(
+                "image-digest",
+                "CINEGRAPH_IMAGE_DIGEST must be sha256 followed by 64 lowercase hexadecimal characters",
+            )
+        )
+    if not re.fullmatch(RELEASE_SHA_PATTERN, values.get("CINEGRAPH_RELEASE_SHA", "")):
+        issues.append(
+            ValidationIssue(
+                "release-sha",
+                "CINEGRAPH_RELEASE_SHA must be a 40-character lowercase Git SHA",
+            )
+        )
     if values.get("CINEGRAPH_QDRANT_MODE") != "remote":
         issues.append(ValidationIssue("qdrant-mode", "Compose runtime requires remote Qdrant mode"))
     database_url = values.get("CINEGRAPH_DATABASE_URL", "")

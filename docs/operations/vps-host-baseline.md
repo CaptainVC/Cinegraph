@@ -38,7 +38,9 @@ bounded services, model cache, images, and operational headroom do not begin in 
 overcommitted state. Check that the selected loopback port is available. Clone a
 reviewed commit into `/opt/cinegraph/releases/<sha>` and copy the appropriate env
 example to `/etc/cinegraph/{dev,prod}.env`. Replace every `REPLACE_*` value, including
-setting `CINEGRAPH_IMAGE_VERSION=sha-<the same 40-character Git SHA>`, set mode `0600`,
+setting `CINEGRAPH_IMAGE` to the approved GHCR name, `CINEGRAPH_IMAGE_DIGEST=sha256:<the
+exact 64-character image digest>`, and `CINEGRAPH_RELEASE_SHA=<the corresponding
+40-character Git SHA>`, set mode `0600`,
 and ensure `CINEGRAPH_ENV_FILE` points back to that exact file.
 
 Run the fail-closed preflight before rendering or starting anything:
@@ -76,7 +78,7 @@ the selected release, while private/derived knowledge remains in the named volum
 
 ```bash
 docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml up -d postgres qdrant
-docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml build app
+docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml pull app
 docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml --profile migration run --rm migrate
 docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml --profile provisioning \
   run --rm provision-qdrant
@@ -94,15 +96,15 @@ preflight compares the decoded URL credential without printing either value.
 
 ## Upgrade, rollback, and backups
 
-Build a new image in an immutable release directory, run preflight, start dependencies,
-apply migrations, provision/verify Qdrant, and then replace the app container. Keep the
-previous release and image until health and a smoke query pass. Rollback means selecting
-the previous release/image, not deleting volumes; never downgrade a database migration
-without an explicit backup and compatibility review.
+Pull the exact published digest, run preflight, start dependencies, apply migrations,
+provision/verify Qdrant, and then replace the app container. Keep the previous image
+until health and a smoke query pass. Rollback means selecting the previous digest, not
+deleting volumes; never downgrade a database migration without an explicit backup and
+compatibility review. See [the image release runbook](image-release.md).
 
-For a known-good rollback, first verify that both the prior release directory and its
-`cinegraph:sha-<previous-sha>` image still exist. Set `CINEGRAPH_IMAGE_VERSION` in the
-private environment file to that prior tag, atomically repoint
+For a known-good rollback, first verify that the prior digest is still available. Set
+`CINEGRAPH_IMAGE_DIGEST` and `CINEGRAPH_RELEASE_SHA` in the private environment file,
+atomically repoint
 `/opt/cinegraph/current` to `/opt/cinegraph/releases/<previous-sha>`, change into that
 directory, run preflight with `--allow-active-port`, and replace only the API:
 
@@ -112,8 +114,8 @@ docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml \
 curl --fail http://127.0.0.1:18001/health/ready
 ```
 
-The image tag must be a reviewed immutable Git SHA; floating tags such as `latest`
-are rejected by preflight.
+The image name, digest, and release SHA must match the reviewed release; floating tags
+such as `latest` are rejected by preflight.
 
 Back up PostgreSQL with `pg_dump` (custom format, encrypted, and copied off-host) and
 record the Git SHA, schema revision, collection name, and backup timestamp. Qdrant's

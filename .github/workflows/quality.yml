@@ -215,7 +215,9 @@ jobs:
             cp "deploy/env/$environment.env.example" "$runtime_env"
             sed -i \
               -e "s#^CINEGRAPH_ENV_FILE=.*#CINEGRAPH_ENV_FILE=$runtime_env#" \
-              -e 's#^CINEGRAPH_IMAGE_VERSION=.*#CINEGRAPH_IMAGE_VERSION=sha-0000000000000000000000000000000000000000#' \
+              -e 's#^CINEGRAPH_IMAGE_DIGEST=.*#CINEGRAPH_IMAGE_DIGEST=sha256:0000000000000000000000000000000000000000000000000000000000000000#' \
+              -e 's#^CINEGRAPH_RELEASE_SHA=.*#CINEGRAPH_RELEASE_SHA=0000000000000000000000000000000000000000#' \
+              -e 's#^CINEGRAPH_IMAGE=.*#CINEGRAPH_IMAGE=ghcr.io/captainvc/cinegraph#' \
               -e 's#^OPENAI_API_KEY=.*#OPENAI_API_KEY=ci-placeholder#' \
               -e 's#^POSTGRES_PASSWORD=.*#POSTGRES_PASSWORD=ci-placeholder-password#' \
               -e 's#REPLACE_WITH_LONG_RANDOM_PASSWORD#ci-placeholder-password#g' \
@@ -224,3 +226,13 @@ jobs:
             CINEGRAPH_ENV_FILE="$runtime_env" docker compose --env-file "$runtime_env" -f deploy/compose.yaml config --quiet
           done
           docker build --file deploy/Dockerfile --tag cinegraph:ci .
+      - name: Scan built image for fixable HIGH and CRITICAL vulnerabilities
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: cinegraph:ci
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: HIGH,CRITICAL
+          scanners: vuln
+          timeout: 10m

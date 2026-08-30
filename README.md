@@ -100,7 +100,7 @@ outside Git, replace all placeholders, and validate it before starting the stack
 python3 scripts/validate_vps_runtime.py --environment production \
   --env-file /etc/cinegraph/prod.env --compose-file deploy/compose.yaml
 docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml up -d postgres qdrant
-docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml build app
+docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml pull app
 docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml --profile migration run --rm migrate
 docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml --profile provisioning \
   run --rm provision-qdrant
@@ -110,6 +110,13 @@ docker compose --env-file /etc/cinegraph/prod.env -f deploy/compose.yaml up -d a
 The API does not auto-migrate or auto-provision Qdrant. See
 `docs/operations/vps-host-baseline.md` for host layout, backup, rollback, and the
 explicit Hostinger SSH activation boundary.
+
+Published releases are immutable GHCR images tagged by the reviewed commit and
+deployed by exact digest. The `Publish immutable image` workflow runs only after a
+successful main-branch quality run, emits SBOM/provenance, and attaches a GitHub
+attestation; it does not deploy or receive corpus/API-key data. Verify and promote
+the exact digest through Dev before Prod. See
+[`docs/operations/image-release.md`](docs/operations/image-release.md).
 
 ## Privacy And Corpus Policy
 
