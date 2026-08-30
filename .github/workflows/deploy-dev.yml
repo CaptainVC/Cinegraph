@@ -1,0 +1,140 @@
+name: Deploy Dev
+
+on:
+  workflow_run:
+    workflows: [Publish immutable image]
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: cinegraph-dev-deployment
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CINEGRAPH_IMAGE_NAME: ghcr.io/captainvc/cinegraph
+
+jobs:
+  deploy-dev:
+    name: Promote attested image to Dev
+    if: >-
+      vars.CINEGRAPH_DEV_DEPLOY_ENABLED == 'true' &&
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.name == 'Publish immutable image' &&
+      github.event.workflow_run.event == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: dev
+    permissions:
+      contents: read
+      packages: read
+      attestations: read
+    steps:
+      - name: Resolve release commit
+        id: release
+        shell: bash
+        env:
+          WORKFLOW_RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          release_sha="$WORKFLOW_RUN_SHA"
+          if [[ ! "$release_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Release SHA is not a lowercase 40-character commit SHA" >&2
+            exit 1
+          fi
+          echo "sha=$release_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Check out exact release commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.release.outputs.sha }}
+          fetch-depth: 1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version-file: .python-version
+
+      - name: Resolve exact GHCR manifest digest
+        id: image
+        shell: bash
+        env:
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          digest="$(python -m scripts.resolve_ghcr_digest --release-sha '${{ steps.release.outputs.sha }}')"
+          if [[ ! "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Resolved image digest is invalid" >&2
+            exit 1
+          fi
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Authenticate to GHCR for attestation verification
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify exact image attestation and source policy
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          gh attestation verify \
+            "oci://${CINEGRAPH_IMAGE_NAME}@${IMAGE_DIGEST}" \
+            --repo "$GITHUB_REPOSITORY" \
+            --signer-workflow "$GITHUB_REPOSITORY/.github/workflows/publish-image.yml" \
+            --source-ref refs/heads/main \
+            --source-digest "$RELEASE_SHA" \
+            --deny-self-hosted-runners
+
+      - name: Promote exact digest over pinned SSH
+        shell: bash
+        env:
+          CINEGRAPH_DEV_HOST: ${{ vars.CINEGRAPH_DEV_HOST }}
+          CINEGRAPH_DEV_USER: ${{ vars.CINEGRAPH_DEV_USER }}
+          CINEGRAPH_DEV_SSH_PRIVATE_KEY: ${{ secrets.CINEGRAPH_DEV_SSH_PRIVATE_KEY }}
+          CINEGRAPH_DEV_KNOWN_HOSTS: ${{ secrets.CINEGRAPH_DEV_KNOWN_HOSTS }}
+          RELEASE_SHA: ${{ steps.release.outputs.sha }}
+          IMAGE_DIGEST: ${{ steps.image.outputs.digest }}
+        run: |
+          set -euo pipefail
+          [[ -n "$CINEGRAPH_DEV_HOST" ]] || { echo "Dev host variable is missing" >&2; exit 1; }
+          [[ -n "$CINEGRAPH_DEV_USER" ]] || { echo "Dev user variable is missing" >&2; exit 1; }
+          [[ -n "$CINEGRAPH_DEV_SSH_PRIVATE_KEY" ]] || { echo "Dev SSH key secret is missing" >&2; exit 1; }
+          [[ -n "$CINEGRAPH_DEV_KNOWN_HOSTS" ]] || { echo "Dev known-hosts secret is missing" >&2; exit 1; }
+          [[ "$CINEGRAPH_DEV_HOST" =~ ^[A-Za-z0-9.-]+$ ]] || { echo "Dev host variable is invalid" >&2; exit 1; }
+          [[ "$CINEGRAPH_DEV_USER" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "Dev user variable is invalid" >&2; exit 1; }
+          umask 077
+          ssh_dir="$(mktemp -d "$RUNNER_TEMP/cinegraph-ssh.XXXXXX")"
+          key_file="$ssh_dir/id_deploy"
+          known_hosts_file="$ssh_dir/known_hosts"
+          cleanup_ssh() {
+            rm -f "$key_file" "$known_hosts_file"
+            rmdir "$ssh_dir" 2>/dev/null || true
+          }
+          trap cleanup_ssh EXIT
+          printf '%s\n' "$CINEGRAPH_DEV_SSH_PRIVATE_KEY" > "$key_file"
+          printf '%s\n' "$CINEGRAPH_DEV_KNOWN_HOSTS" > "$known_hosts_file"
+          chmod 600 "$key_file" "$known_hosts_file"
+          ssh \
+            -i "$key_file" \
+            -o IdentitiesOnly=yes \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=yes \
+            -o UserKnownHostsFile="$known_hosts_file" \
+            -o ConnectTimeout=10 \
+            -o ServerAliveInterval=15 \
+            -o ServerAliveCountMax=2 \
+            "$CINEGRAPH_DEV_USER@$CINEGRAPH_DEV_HOST" \
+            bash -s -- "$RELEASE_SHA" "$IMAGE_DIGEST" < deploy/remote/deploy-dev.sh
