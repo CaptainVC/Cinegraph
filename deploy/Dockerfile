@@ -39,6 +39,13 @@ RUN groupadd --system --gid 10001 cinegraph \
     && mkdir -p /app /app/knowledge /home/cinegraph/.cache \
     && chown -R cinegraph:cinegraph /app /home/cinegraph
 
+# The runtime only executes the locked virtual environment; remove the base
+# interpreter's package installers and bundled ensurepip wheels to reduce attack
+# surface and avoid shipping unused packaging tooling.
+RUN ensurepip_bundle="$(python -c 'import ensurepip; print(ensurepip.__path__[0] + "/_bundled")')" \
+    && python -m pip uninstall --yes setuptools pip \
+    && rm -rf "$ensurepip_bundle"
+
 COPY --from=dependencies --chown=cinegraph:cinegraph /opt/venv /opt/venv
 WORKDIR /app
 COPY --chown=cinegraph:cinegraph src ./src

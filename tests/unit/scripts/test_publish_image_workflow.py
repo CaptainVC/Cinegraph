@@ -3,6 +3,7 @@ from pathlib import Path
 WORKFLOW = Path(".github/workflows/publish-image.yml")
 QUALITY_WORKFLOW = Path(".github/workflows/quality.yml")
 COMPOSE = Path("deploy/compose.yaml")
+DOCKERFILE = Path("deploy/Dockerfile")
 
 
 def test_publish_workflow_is_successful_quality_completion_only_on_main() -> None:
@@ -61,3 +62,12 @@ def test_runtime_compose_has_no_build_fallback_and_uses_digest_for_all_app_jobs(
         "image: ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}"
     ) == 3
     assert "CINEGRAPH_IMAGE_VERSION" not in text
+
+
+def test_runtime_image_removes_unused_global_package_installers() -> None:
+    text = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "python -m pip uninstall --yes setuptools pip" in text
+    assert "import ensurepip" in text
+    assert 'ensurepip.__path__[0] + "/_bundled"' in text
+    assert 'rm -rf "$ensurepip_bundle"' in text
