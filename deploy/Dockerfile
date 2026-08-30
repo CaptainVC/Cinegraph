@@ -21,9 +21,11 @@ RUN uv sync --locked --no-dev --no-install-project
 FROM python:${PYTHON_VERSION}-slim-bookworm@sha256:e87711ef5c86aaeaa7031718a69db79d334d94c545c709583f651b8185870941 AS runtime
 
 ARG VERSION=dev
+ARG REVISION=unknown
 LABEL org.opencontainers.image.title="Cinegraph" \
       org.opencontainers.image.description="Spoiler-aware episodic media intelligence" \
       org.opencontainers.image.source="https://github.com/CaptainVC/Cinegraph" \
+      org.opencontainers.image.revision="${REVISION}" \
       org.opencontainers.image.version="${VERSION}"
 
 ENV PATH=/opt/venv/bin:${PATH} \

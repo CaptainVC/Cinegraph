@@ -19,12 +19,7 @@ x-app-environment: &app-environment
 
 services:
   app:
-    build:
-      context: ..
-      dockerfile: deploy/Dockerfile
-      args:
-        VERSION: ${CINEGRAPH_IMAGE_VERSION:-dev}
-    image: ${CINEGRAPH_IMAGE:-cinegraph}:${CINEGRAPH_IMAGE_VERSION:?CINEGRAPH_IMAGE_VERSION is required}
+    image: ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}
     environment: *app-environment
     ports:
       - "127.0.0.1:${CINEGRAPH_PUBLISHED_PORT:-18000}:8000"
@@ -54,7 +49,7 @@ services:
 
   migrate:
     profiles: [migration]
-    image: ${CINEGRAPH_IMAGE:-cinegraph}:${CINEGRAPH_IMAGE_VERSION:?CINEGRAPH_IMAGE_VERSION is required}
+    image: ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}
     environment:
       CINEGRAPH_DATABASE_URL: ${CINEGRAPH_DATABASE_URL:?CINEGRAPH_DATABASE_URL is required}
       CINEGRAPH_ENVIRONMENT: ${CINEGRAPH_ENVIRONMENT:?CINEGRAPH_ENVIRONMENT is required}
@@ -77,7 +72,7 @@ services:
 
   provision-qdrant:
     profiles: [provisioning]
-    image: ${CINEGRAPH_IMAGE:-cinegraph}:${CINEGRAPH_IMAGE_VERSION:?CINEGRAPH_IMAGE_VERSION is required}
+    image: ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}
     environment:
       CINEGRAPH_QDRANT_URL: ${CINEGRAPH_QDRANT_URL:?CINEGRAPH_QDRANT_URL is required}
       CINEGRAPH_QDRANT_API_KEY: ${CINEGRAPH_QDRANT_API_KEY-}

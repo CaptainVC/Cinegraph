@@ -19,8 +19,9 @@ def _write_env(path: Path, *, environment: str = "production") -> None:
                 f"CINEGRAPH_QDRANT_COLLECTION_NAME={'transcript_segments_production' if environment == 'production' else 'transcript_segments_development'}",
                 f"CINEGRAPH_PUBLISHED_PORT={'18001' if environment == 'production' else '18000'}",
                 f"CINEGRAPH_IDENTITY_DATABASE_PATH=/app/knowledge/cinegraph-{'production' if environment == 'production' else 'development'}.sqlite3",
-                "CINEGRAPH_IMAGE=cinegraph",
-                "CINEGRAPH_IMAGE_VERSION=sha-0000000000000000000000000000000000000000",
+                "CINEGRAPH_IMAGE=ghcr.io/captainvc/cinegraph",
+                "CINEGRAPH_IMAGE_DIGEST=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+                "CINEGRAPH_RELEASE_SHA=0000000000000000000000000000000000000000",
                 "CINEGRAPH_API_HOST=0.0.0.0",
                 "CINEGRAPH_API_PORT=8000",
                 "OPENAI_API_KEY=real-key",
@@ -133,14 +134,44 @@ def test_container_and_image_contracts_fail_closed(tmp_path: Path) -> None:
     content = path.read_text(encoding="utf-8").replace(
         "CINEGRAPH_API_HOST=0.0.0.0", "CINEGRAPH_API_HOST=127.0.0.1"
     ).replace(
-        "CINEGRAPH_IMAGE_VERSION=sha-0000000000000000000000000000000000000000",
-        "CINEGRAPH_IMAGE_VERSION=latest",
+        "CINEGRAPH_IMAGE_DIGEST=sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "CINEGRAPH_IMAGE_DIGEST=latest",
     )
     path.write_text(content, encoding="utf-8")
     path.chmod(0o600)
 
     codes = {issue.code for issue in validate_env_file(path, "production")}
-    assert {"api-host", "image-version"}.issubset(codes)
+    assert {"api-host", "image-digest"}.issubset(codes)
+
+
+def test_image_reference_must_match_approved_registry_and_name(tmp_path: Path) -> None:
+    path = tmp_path / "prod.env"
+    _write_env(path)
+    content = path.read_text(encoding="utf-8").replace(
+        "CINEGRAPH_IMAGE=ghcr.io/captainvc/cinegraph",
+        "CINEGRAPH_IMAGE=docker.io/captainvc/cinegraph:sha-0000000000000000000000000000000000000000",
+    )
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o600)
+
+    assert any(issue.code == "image-name" for issue in validate_env_file(path, "production"))
+
+
+def test_digest_and_release_sha_are_strict_lowercase_immutable_values(tmp_path: Path) -> None:
+    path = tmp_path / "prod.env"
+    _write_env(path)
+    content = path.read_text(encoding="utf-8").replace(
+        "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "sha256:ABC",
+    ).replace(
+        "CINEGRAPH_RELEASE_SHA=0000000000000000000000000000000000000000",
+        "CINEGRAPH_RELEASE_SHA=ABC",
+    )
+    path.write_text(content, encoding="utf-8")
+    path.chmod(0o600)
+    codes = {issue.code for issue in validate_env_file(path, "production")}
+
+    assert {"image-digest", "release-sha"}.issubset(codes)
 
 
 def test_environment_contract_prevents_dev_prod_reuse(tmp_path: Path) -> None:
