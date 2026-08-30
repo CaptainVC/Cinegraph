@@ -41,6 +41,12 @@ def test_publish_workflow_contains_only_immutable_release_tag_and_attestation() 
     assert "attestations: write" in text
     assert "umask 077" in text
     assert "trap 'rm -f \"$token_file\"' EXIT" in text
+    assert "--request GET" in text
+    assert "--request HEAD" not in text
+    assert text.count("--connect-timeout 10 --max-time 30") == 2
+    assert "curl_status=$?" in text
+    assert "if [[ \"$curl_status\" -ne 0 ]]" in text
+    assert "http_status" in text
 
 
 def test_quality_compose_contract_scans_the_built_image() -> None:

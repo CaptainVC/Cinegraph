@@ -37,3 +37,5 @@ digest, never a floating tag. A failed preexistence check, partial push, or fail
 attestation stops the release for investigation; rerunning cannot mutate an existing
 tag. GHCR package visibility and first-time package permissions remain activation
 work, and no deployment or private corpus transfer is performed by this workflow.
+Registry transport failures are distinct from the valid 404 absence response and
+always fail closed.
