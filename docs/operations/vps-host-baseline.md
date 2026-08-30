@@ -59,6 +59,12 @@ exact 64-character image digest>`, and `CINEGRAPH_RELEASE_SHA=<the corresponding
 and ensure `CINEGRAPH_ENV_FILE` points back to that exact file. Prod host preparation
 remains manual and outside the Dev bootstrap.
 
+For the first Dev host, follow the stop/go [Dev activation checklist](dev-activation.md).
+It requires explicit confirmation at each external-action boundary, an independent
+host-key comparison, a forced-command authentication probe, activation last, and only
+sanitized evidence. Never commit the bootstrap output, known-hosts line, host address,
+key material, environment contents, or corpus locations.
+
 Run the fail-closed preflight before rendering or starting anything:
 
 ```bash

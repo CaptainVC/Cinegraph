@@ -67,6 +67,10 @@ class ExpectedPath:
     uid: int
     gid: int
     mode: int
+    accepted_modes: frozenset[int] = frozenset()
+
+
+SUDOERS_DIRECTORY_ACCEPTED_MODES: Final = frozenset({0o750, 0o755})
 
 
 DIRECTORY_CONTRACT: Final = (
@@ -79,7 +83,14 @@ DIRECTORY_CONTRACT: Final = (
     ExpectedPath(Path("/usr/local"), "directory", 0, 0, 0o755),
     ExpectedPath(Path("/usr/local/libexec"), "directory", 0, 0, 0o755),
     ExpectedPath(Path("/usr/local/sbin"), "directory", 0, 0, 0o755),
-    ExpectedPath(Path("/etc/sudoers.d"), "directory", 0, 0, 0o755),
+    ExpectedPath(
+        Path("/etc/sudoers.d"),
+        "directory",
+        0,
+        0,
+        0o750,
+        accepted_modes=SUDOERS_DIRECTORY_ACCEPTED_MODES,
+    ),
     ExpectedPath(Path("/run"), "directory", 0, 0, 0o755),
     ExpectedPath(DEPLOY_ROOT, "directory", 0, 0, 0o750),
     ExpectedPath(RELEASES_ROOT, "directory", 0, 0, 0o750),
@@ -305,7 +316,9 @@ def _verify_path(expected: ExpectedPath) -> None:
         raise BootstrapError(f"required path has an unexpected type: {expected.path}")
     if metadata.st_uid != expected.uid or metadata.st_gid != expected.gid:
         raise BootstrapError(f"required path has unexpected ownership: {expected.path}")
-    if stat.S_IMODE(metadata.st_mode) != expected.mode:
+    actual_mode = stat.S_IMODE(metadata.st_mode)
+    allowed_modes = expected.accepted_modes | frozenset((expected.mode,))
+    if actual_mode not in allowed_modes:
         raise BootstrapError(f"required path has unexpected mode: {expected.path}")
 
 

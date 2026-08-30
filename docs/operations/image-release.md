@@ -56,6 +56,9 @@ Phase 44 adds an activation-gated `Deploy Dev` workflow. It is intentionally ski
 unless the repository-level Actions variable `CINEGRAPH_DEV_DEPLOY_ENABLED` is
 exactly `true`; an absent or different value cannot open an SSH connection and does
 not fail `main` or image publication. The workflow is Dev-only and has no Prod job.
+Use the minute, stop/go [Dev activation checklist](dev-activation.md) for the first
+real deployment. Its action-time confirmations and sanitized-evidence boundary are
+mandatory; repository documentation is not authorization to mutate external systems.
 
 Before enabling it, create and protect the GitHub Environment named `dev` with a
 `main` deployment branch rule and required reviewer. Add these environment-scoped
@@ -107,6 +110,11 @@ Populate the root-owned `/etc/cinegraph/dev.env` manually, rerun `--check`, crea
 protect the `dev` Environment, configure its values, and flip the repository
 activation variable last. This PR does not create the Environment, access the VPS,
 transfer secrets, SRT/PDF files, or corpus data.
+
+Enabling the repository variable does not replay an earlier publisher completion.
+For first activation, enable it only after every host and Environment gate passes,
+then merge a reviewed change so a new Quality-to-publish-to-Dev workflow chain carries
+one exact release SHA and digest.
 
 Before activation, use the deployment private key from the operator machine to send
 an intentionally invalid command. Authentication is proven only when the server
