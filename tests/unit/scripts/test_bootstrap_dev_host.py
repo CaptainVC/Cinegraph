@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import stat
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -173,8 +174,38 @@ def test_ssh_authorization_contract_is_root_managed() -> None:
 
     assert directories[bootstrap_dev_host.DEPLOY_HOME].uid == 0
     assert directories[bootstrap_dev_host.DEPLOY_HOME / ".ssh"].uid == 0
+    sudoers_directory = directories[Path("/etc/sudoers.d")]
+    assert (sudoers_directory.uid, sudoers_directory.gid, sudoers_directory.mode) == (0, 0, 0o750)
+    assert sudoers_directory.accepted_modes == frozenset({0o750, 0o755})
     authorized_keys = files[bootstrap_dev_host.AUTHORIZED_KEYS]
     assert (authorized_keys.uid, authorized_keys.gid, authorized_keys.mode) == (0, 0, 0o644)
+
+
+@pytest.mark.parametrize("mode", [0o750, 0o755])
+def test_sudoers_directory_accepts_supported_root_owned_modes(
+    monkeypatch: pytest.MonkeyPatch, mode: int
+) -> None:
+    expected = next(
+        item for item in bootstrap_dev_host.DIRECTORY_CONTRACT if item.path == Path("/etc/sudoers.d")
+    )
+    metadata = SimpleNamespace(st_mode=stat.S_IFDIR | mode, st_uid=0, st_gid=0)
+    monkeypatch.setattr(bootstrap_dev_host, "_path_metadata", lambda _: metadata)
+
+    bootstrap_dev_host._verify_path(expected)
+
+
+@pytest.mark.parametrize("mode", [0o770, 0o777])
+def test_sudoers_directory_rejects_writable_modes(
+    monkeypatch: pytest.MonkeyPatch, mode: int
+) -> None:
+    expected = next(
+        item for item in bootstrap_dev_host.DIRECTORY_CONTRACT if item.path == Path("/etc/sudoers.d")
+    )
+    metadata = SimpleNamespace(st_mode=stat.S_IFDIR | mode, st_uid=0, st_gid=0)
+    monkeypatch.setattr(bootstrap_dev_host, "_path_metadata", lambda _: metadata)
+
+    with pytest.raises(BootstrapError, match="mode"):
+        bootstrap_dev_host._verify_path(expected)
 
 
 def test_check_mode_does_not_create_missing_account(monkeypatch: pytest.MonkeyPatch) -> None:
