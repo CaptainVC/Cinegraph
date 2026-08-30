@@ -16,4 +16,5 @@
 - [ADR-0014: Layered security and quality gates](0014-security-quality-gates.md)
 - [ADR-0015: Immutable GHCR image publishing and digest promotion](0015-immutable-image-publishing.md)
 - [ADR-0016: Activation-gated Dev promotion over pinned SSH](0016-dev-deployment-over-pinned-ssh.md)
+- [ADR-0017: Forced-command Dev host bootstrap and evidence](0017-forced-command-dev-host-bootstrap.md)
 - [ADR template](template.md)

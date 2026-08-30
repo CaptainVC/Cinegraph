@@ -124,6 +124,14 @@ variable `CINEGRAPH_DEV_DEPLOY_ENABLED` is exactly `true`, then requires the pro
 currently an activation-ready contract only; it does not configure GitHub, mutate
 the VPS, transfer private data, or automate Prod.
 
+Phase 45 adds the operator-run Hostinger console bootstrap. It installs a root-owned
+forced-command dispatcher and no-argument privileged helper while keeping the
+password-disabled SSH account outside Docker/admin groups and keeping `/etc/cinegraph/dev.env`
+root:root mode `0600`. Run bootstrap apply/check from a reviewed checkout, compare
+its public server-key fingerprint independently, configure the protected GitHub
+Environment, and enable the repository activation variable last. See the
+[image release runbook](docs/operations/image-release.md).
+
 ## Privacy And Corpus Policy
 
 Private subtitle files, review ledgers, source documents, generated transcript

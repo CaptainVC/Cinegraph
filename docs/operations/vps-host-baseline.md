@@ -21,6 +21,13 @@ Use a dedicated deployment account and keep the application outside a user's hom
 /var/backups/cinegraph/     # encrypted/off-host database backups
 ```
 
+`/opt/cinegraph`, `releases`, and `shared` are root:root mode `0750`.
+`/etc/cinegraph` is root:root mode `0700`; `dev.env` is root:root mode `0600`.
+The root-owned dispatcher and helper are installed at
+`/usr/local/libexec/cinegraph-deploy-dispatch` and
+`/usr/local/sbin/cinegraph-deploy-dev`. The dedicated SSH account cannot read the env
+or mutate these paths directly.
+
 Each environment has its own Compose project name, named volumes, database, Qdrant
 collection, loopback port, and env file. Do not reuse a production volume in Dev.
 PostgreSQL and Qdrant are on an internal-only Docker network and have no host ports.
@@ -34,18 +41,23 @@ single process (`scripts/run_api.py`); do not scale the app service horizontally
 ## First install (operator-run)
 
 Install Docker Engine and the Compose v2 plugin from the vendor-supported packages.
-The dedicated deployment user must be able to write `/opt/cinegraph`, update the
-mode-0600 environment file under `/etc/cinegraph`, acquire the deployment lock, and
-run Docker Compose without interactive `sudo` (a dedicated Docker group is preferred).
+The dedicated `cinegraph-deploy` user is password-disabled and must have no Docker, sudo, admin,
+or other supplementary groups. A root-owned forced-command dispatcher may invoke only
+the no-argument root helper through the validated sudoers rule. This narrow helper
+owns the bounded `/opt` and `/etc` mutation and Docker operations. The account's home,
+`.ssh` directory, and public authorization file are root-managed and not writable by
+the deployment identity.
 The baseline requires at least 4 GiB of memory and 20 GiB of free disk so the three
 bounded services, model cache, images, and operational headroom do not begin in an
 overcommitted state. Check that the selected loopback port is available. Clone a
-reviewed commit into `/opt/cinegraph/releases/<sha>` and copy the appropriate env
-example to `/etc/cinegraph/{dev,prod}.env`. Replace every `REPLACE_*` value, including
+reviewed commit, run `scripts/bootstrap_dev_host.py` from the Hostinger console, and
+populate the created root-owned `/etc/cinegraph/dev.env`. Replace every `REPLACE_*`
+value, including
 setting `CINEGRAPH_IMAGE` to the approved GHCR name, `CINEGRAPH_IMAGE_DIGEST=sha256:<the
 exact 64-character image digest>`, and `CINEGRAPH_RELEASE_SHA=<the corresponding
 40-character Git SHA>`, set mode `0600`,
-and ensure `CINEGRAPH_ENV_FILE` points back to that exact file.
+and ensure `CINEGRAPH_ENV_FILE` points back to that exact file. Prod host preparation
+remains manual and outside the Dev bootstrap.
 
 Run the fail-closed preflight before rendering or starting anything:
 
@@ -147,8 +159,11 @@ proxy, TLS, DNS, or Prod deployment. Hostinger access, firewall policy, domain
 ownership, and an operator-approved SSH key must be activated and verified before any
 remote mutation. The Phase 44 Dev workflow remains skipped until the repository
 activation variable is exactly `true` and the protected `dev` Environment contains
-the pinned SSH material. Phase 44 does not configure that Environment, mutate the VPS,
-or transfer private corpus/API-key data. It requires `x86_64`/`linux/amd64`.
+the pinned SSH material. Phase 45 supplies an operator-run console bootstrap/check;
+the PR itself does not access the VPS, configure that Environment, install packages,
+change sshd/firewall policy, or transfer private corpus/API-key data. The private key
+remains off-host and is stored only in the protected GitHub Environment. The runtime
+requires `x86_64`/`linux/amd64`.
 
 ## Image update cadence
 

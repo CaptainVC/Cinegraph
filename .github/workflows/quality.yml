@@ -206,6 +206,9 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Validate deployment shell boundaries
+        shell: bash
+        run: bash -n deploy/remote/deploy-dispatch.sh deploy/remote/deploy-dev.sh
       - name: Render and build Dev/Prod runtime
         shell: bash
         run: |
