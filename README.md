@@ -118,6 +118,12 @@ attestation; it does not deploy or receive corpus/API-key data. Verify and promo
 the exact digest through Dev before Prod. See
 [`docs/operations/image-release.md`](docs/operations/image-release.md).
 
+The Dev promotion workflow is activation-gated: it skips unless the repository
+variable `CINEGRAPH_DEV_DEPLOY_ENABLED` is exactly `true`, then requires the protected
+`dev` Environment, pinned SSH host key, and operator-approved credentials. It is
+currently an activation-ready contract only; it does not configure GitHub, mutate
+the VPS, transfer private data, or automate Prod.
+
 ## Privacy And Corpus Policy
 
 Private subtitle files, review ledgers, source documents, generated transcript

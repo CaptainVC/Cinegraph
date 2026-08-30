@@ -51,6 +51,50 @@ an authenticated pull on Dev. Do not put a PAT into Actions; if the VPS needs a 
 credential, provision it separately on the host with read-only package scope and
 mode-0600 storage.
 
+## Dev deployment activation
+
+Phase 44 adds an activation-gated `Deploy Dev` workflow. It is intentionally skipped
+unless the repository-level Actions variable `CINEGRAPH_DEV_DEPLOY_ENABLED` is
+exactly `true`; an absent or different value cannot open an SSH connection and does
+not fail `main` or image publication. The workflow is Dev-only and has no Prod job.
+
+Before enabling it, create and protect the GitHub Environment named `dev` with a
+`main` deployment branch rule and required reviewer. Add these environment-scoped
+values:
+
+```text
+CINEGRAPH_DEV_HOST       (variable)
+CINEGRAPH_DEV_USER       (variable)
+CINEGRAPH_DEV_SSH_PRIVATE_KEY (secret)
+CINEGRAPH_DEV_KNOWN_HOSTS    (secret; exact pinned host-key line)
+```
+
+The host must report `x86_64`, have Docker Compose and Git, and already contain a
+mode-0600 `/etc/cinegraph/dev.env` with its OpenAI key and other operator-managed
+settings. The configured SSH user must be able to acquire the deployment lock, write
+`/opt/cinegraph` and `/etc/cinegraph/dev.env`, and run Docker Compose (usually via a
+dedicated Docker group); do not rely on interactive `sudo`. Verify the exact
+known-hosts entry independently; the workflow never uses
+`ssh-keyscan`. Configure all Environment values first, test the Dev host/preflight,
+and flip the repository activation variable last. This phase does not create the
+Environment, mutate the VPS, or transfer secrets, SRT/PDF files, or corpus data.
+
+The remote promotion checks out the public repository at the attested SHA, creates a
+candidate env changing only the digest and release SHA, validates it, pulls the
+attested digest, runs migrations and Qdrant provisioning, atomically updates the
+Dev release pointer, and checks readiness. It never rebuilds, deletes volumes, or
+runs `docker compose down`. If a migration succeeds but the application does not
+become healthy, do not downgrade the database automatically; follow the exact-digest
+rollback procedure after compatibility and backup review. A failed deployment can
+be retried from the same completed workflow run after correcting the activation or
+host condition.
+
+If a post-migration failure leaves `/etc/cinegraph/dev.env.previous`, preserve that
+mode-0600 file while investigating. Compare its recorded release with the current
+digest, check migration compatibility, and restore the prior env/release pointer only
+through the reviewed rollback procedure; never delete volumes or overwrite a GHCR
+release tag to recover.
+
 ## Dev-first promotion
 
 1. Verify Hostinger reports `x86_64`/`linux/amd64` and Docker supports the published platform.

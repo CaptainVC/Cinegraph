@@ -15,4 +15,5 @@
 - [ADR-0013: Isolated single-host container runtime baseline](0013-vps-container-runtime-baseline.md)
 - [ADR-0014: Layered security and quality gates](0014-security-quality-gates.md)
 - [ADR-0015: Immutable GHCR image publishing and digest promotion](0015-immutable-image-publishing.md)
+- [ADR-0016: Activation-gated Dev promotion over pinned SSH](0016-dev-deployment-over-pinned-ssh.md)
 - [ADR template](template.md)

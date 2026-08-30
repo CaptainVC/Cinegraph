@@ -1,8 +1,9 @@
 # VPS host baseline
 
-This document defines the Phase 40 single-host runtime contract. It is deliberately
-not a deployment workflow: GitHub Actions, DNS, TLS termination, and corpus transfer
-are separate phases. The stack is safe to run behind a future reverse proxy because
+This document defines the Phase 40 single-host runtime contract. Phase 44 adds an
+activation-gated Dev promotion workflow, but this document remains the host-side
+contract: DNS, TLS termination, and corpus transfer are separate phases. The stack
+is safe to run behind a future reverse proxy because
 only a configurable loopback port is published by Compose.
 
 ## Layout and isolation
@@ -33,6 +34,9 @@ single process (`scripts/run_api.py`); do not scale the app service horizontally
 ## First install (operator-run)
 
 Install Docker Engine and the Compose v2 plugin from the vendor-supported packages.
+The dedicated deployment user must be able to write `/opt/cinegraph`, update the
+mode-0600 environment file under `/etc/cinegraph`, acquire the deployment lock, and
+run Docker Compose without interactive `sudo` (a dedicated Docker group is preferred).
 The baseline requires at least 4 GiB of memory and 20 GiB of free disk so the three
 bounded services, model cache, images, and operational headroom do not begin in an
 overcommitted state. Check that the selected loopback port is available. Clone a
@@ -139,10 +143,12 @@ or backup logs.
 
 This baseline owns one host and one API process. It does not provide HA, autoscaling,
 zero-downtime migrations, external secret management, backups by itself, a reverse
-proxy, TLS, DNS, or GitHub Actions deployment. Hostinger access, firewall policy,
-domain ownership, and an operator-approved SSH key must be activated and verified
-before any remote mutation. Phase 40 intentionally performs no VPS mutation and no
-private corpus/API-key transfer.
+proxy, TLS, DNS, or Prod deployment. Hostinger access, firewall policy, domain
+ownership, and an operator-approved SSH key must be activated and verified before any
+remote mutation. The Phase 44 Dev workflow remains skipped until the repository
+activation variable is exactly `true` and the protected `dev` Environment contains
+the pinned SSH material. Phase 44 does not configure that Environment, mutate the VPS,
+or transfer private corpus/API-key data. It requires `x86_64`/`linux/amd64`.
 
 ## Image update cadence
 

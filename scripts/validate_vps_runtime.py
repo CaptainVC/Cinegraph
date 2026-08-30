@@ -21,6 +21,12 @@ from pathlib import Path
 from typing import Final
 from urllib.parse import unquote, urlsplit
 
+from scripts.container_image_contract import (
+    EXPECTED_IMAGE_NAME,
+    IMAGE_DIGEST_PATTERN,
+    RELEASE_SHA_PATTERN,
+)
+
 REQUIRED_VALUES = (
     "OPENAI_API_KEY",
     "POSTGRES_USER",
@@ -47,9 +53,6 @@ PLACEHOLDER_MARKERS = ("REPLACE_", "CHANGE_ME", "YOUR_", "<", ">")
 DEFAULT_PUBLISHED_PORT = 18_000
 MIN_FREE_DISK_BYTES = 20 * 1024**3
 MIN_MEMORY_BYTES = 4 * 1024**3
-EXPECTED_IMAGE_NAME: Final = "ghcr.io/captainvc/cinegraph"
-IMAGE_DIGEST_PATTERN: Final = r"^sha256:[0-9a-f]{64}$"
-RELEASE_SHA_PATTERN: Final = r"^[0-9a-f]{40}$"
 # Intentional container-wide bind; the host publishes it on loopback only.
 CONTAINER_API_HOST: Final = "0.0.0.0"  # nosec B104
 
