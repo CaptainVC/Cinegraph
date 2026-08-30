@@ -395,7 +395,6 @@ def _ensure_host_files(public_key: str, *, apply: bool) -> None:
                 stream.write(content)
                 sudoers_candidate = Path(stream.name)
             try:
-                os.chmod(sudoers_candidate, 0o440)
                 _require_success(["visudo", "-cf", str(sudoers_candidate)])
             finally:
                 sudoers_candidate.unlink(missing_ok=True)
