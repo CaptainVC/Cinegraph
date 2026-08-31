@@ -74,6 +74,13 @@ sudo python3 -B -m scripts.bootstrap_dev_host \
 The refresh replaces only changed dispatcher/helper files, using an atomic replacement
 for each file, then revalidates their root:root `0755` contract and the runtime. It
 never refreshes the environment, `authorized_keys`, or sudoers content.
+Bootstrap `--check` and `--refresh-deploy-code` deliberately allow the existing
+canonical loopback API port during this verification, since these operator checks may
+run while the current app is still serving. This is not a general collision bypass:
+the validator remains strict by default, and only reviewed in-place operator and
+deployment paths may opt into `--allow-active-port` before replacing the active app.
+The flag suppresses only the port-availability issue; every other runtime contract
+remains fail closed.
 
 Bootstrap must leave the dedicated account without Docker, sudo, admin, or other
 supplementary groups. The account receives only the root-owned forced dispatcher and

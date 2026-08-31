@@ -8,6 +8,7 @@ the stack. It is stdlib-only so it can be run during host provisioning.
 from __future__ import annotations
 
 import argparse
+import errno
 import os
 import platform
 import re
@@ -268,10 +269,17 @@ def validate_host(env_file: Path, allow_active_port: bool = False) -> list[Valid
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
         try:
             probe.bind(("127.0.0.1", port))
-        except OSError:
-            if allow_active_port:
+        except OSError as error:
+            if allow_active_port and error.errno == errno.EADDRINUSE:
                 return issues
-            issues.append(ValidationIssue("port-in-use", "published API loopback port is unavailable"))
+            issue = (
+                ValidationIssue("port-in-use", "published API loopback port is unavailable")
+                if error.errno == errno.EADDRINUSE
+                else ValidationIssue(
+                    "port-check", "published API loopback port could not be validated"
+                )
+            )
+            issues.append(issue)
     return issues
 
 

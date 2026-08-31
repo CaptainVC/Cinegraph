@@ -147,6 +147,12 @@ operator-only `--refresh-deploy-code` bootstrap mode after confirming the checko
 exactly matches live `main`; it replaces only the dispatcher/helper and leaves the
 environment, authorized keys, and sudoers unchanged. Each changed deploy-code file is
 replaced atomically and reverified; follow the refresh with `--check`.
+Both operator-only modes pass `--allow-active-port` to the runtime validator because
+the canonical Dev API may already be serving the loopback port while the host contract
+is being checked. The validator remains strict by default; only reviewed in-place
+operator, deployment, and rollback paths may opt into the flag before replacing the
+active app. The exception suppresses only the port-availability issue and leaves every
+other runtime check fail closed.
 
 For a known-good rollback, first verify that the prior digest is still available. Set
 `CINEGRAPH_IMAGE_DIGEST` and `CINEGRAPH_RELEASE_SHA` in the private environment file,
