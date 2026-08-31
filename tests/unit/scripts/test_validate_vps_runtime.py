@@ -1,6 +1,8 @@
+import errno
 import socket
 from pathlib import Path
 
+import pytest
 from scripts.validate_vps_runtime import (
     parse_env_file,
     validate_env_file,
@@ -126,6 +128,32 @@ def test_active_port_can_only_be_allowed_explicitly(tmp_path: Path) -> None:
         assert not any(
             issue.code == "port-in-use" for issue in validate_host(path, allow_active_port=True)
         )
+
+
+def test_allow_active_port_does_not_suppress_unexpected_bind_failures(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from scripts.validate_vps_runtime import validate_host
+
+    class FailingSocket:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return None
+
+        def bind(self, _address):
+            raise OSError(errno.EACCES, "denied")
+
+    path = tmp_path / "dev.env"
+    _write_env(path, environment="development")
+    monkeypatch.setattr(socket, "socket", lambda *_args, **_kwargs: FailingSocket())
+
+    issues = validate_host(path, allow_active_port=True)
+
+    assert any(issue.code == "port-check" for issue in issues)
+    assert not any("denied" in issue.message for issue in issues)
 
 
 def test_container_and_image_contracts_fail_closed(tmp_path: Path) -> None:

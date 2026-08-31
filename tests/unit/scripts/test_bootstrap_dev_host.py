@@ -349,6 +349,25 @@ def test_check_mode_runs_existing_fail_closed_runtime_validator(monkeypatch: pyt
     assert calls == ["runtime"]
 
 
+def test_operator_runtime_verification_allows_existing_canonical_port(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    commands: list[list[str]] = []
+
+    monkeypatch.setattr(
+        bootstrap_dev_host,
+        "_require_success",
+        lambda command, *, cwd=None: commands.append(command)
+        or SimpleNamespace(stdout="", returncode=0),
+    )
+
+    bootstrap_dev_host._verify_runtime_contract()
+
+    assert commands
+    assert commands[0][-1] == bootstrap_dev_host.RUNTIME_VALIDATOR_ALLOW_ACTIVE_PORT
+    assert commands[0].count(bootstrap_dev_host.RUNTIME_VALIDATOR_ALLOW_ACTIVE_PORT) == 1
+
+
 def test_refresh_deploy_code_is_explicit_and_revalidates_host_without_mutating_other_files(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

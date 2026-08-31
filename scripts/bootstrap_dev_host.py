@@ -54,6 +54,7 @@ SOURCE_ENV: Final = REPOSITORY_ROOT / "deploy/env/dev.env.example"
 HOST_PUBLIC_KEY: Final = Path("/etc/ssh/ssh_host_ed25519_key.pub")
 AUTHORIZED_KEYS: Final = DEPLOY_HOME / ".ssh/authorized_keys"
 FORBIDDEN_GROUPS: Final = frozenset({"adm", "admin", "docker", "sudo", "wheel"})
+RUNTIME_VALIDATOR_ALLOW_ACTIVE_PORT: Final = "--allow-active-port"
 
 
 class BootstrapError(RuntimeError):
@@ -529,6 +530,7 @@ def _verify_runtime_contract() -> None:
             str(DEV_ENV_FILE),
             "--compose-file",
             str(REPOSITORY_ROOT / "deploy/compose.yaml"),
+            RUNTIME_VALIDATOR_ALLOW_ACTIVE_PORT,
         ],
         cwd=REPOSITORY_ROOT,
     )
