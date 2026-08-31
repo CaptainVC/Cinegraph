@@ -211,4 +211,11 @@ for _ in {1..12}; do
 done
 [[ "$ready" -eq 1 ]] || fail "Dev readiness check did not pass within the bounded window"
 
+# Readiness proves dependencies are available; this separate loopback contract
+# proves the deployed guest authentication and entitlement boundary.  It is
+# intentionally before success cleanup so a failed smoke leaves the previous
+# environment backup in place and keeps the promotion fail-closed.
+PYTHONPATH="$CURRENT_LINK" python3 -B "$CURRENT_LINK/scripts/dev_post_deploy_smoke.py" \
+    --base-url "http://127.0.0.1:$DEV_COMPOSE_PORT"
+
 deployment_succeeded=1
