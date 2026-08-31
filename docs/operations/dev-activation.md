@@ -55,9 +55,47 @@ From the Hostinger console as root:
 7. Run bootstrap again with `--check`. Stop on any placeholder, permission, platform,
    Compose, repository, or runtime-contract failure.
 
+If the installed static helper differs from the reviewed checkout, the normal apply
+and `--check` modes intentionally refuse to overwrite it. After confirming the
+checkout is clean and exactly matches live `main`, use the explicit operator-only
+refresh once:
+
+```bash
+sudo python3 -B -m scripts.bootstrap_dev_host \
+  --public-key-file <root-owned-public-key-file> \
+  --expected-key-fingerprint SHA256:<operator-recorded-public-key-fingerprint> \
+  --host <canonical-vps-host> --refresh-deploy-code
+sudo python3 -B -m scripts.bootstrap_dev_host \
+  --public-key-file <root-owned-public-key-file> \
+  --expected-key-fingerprint SHA256:<operator-recorded-public-key-fingerprint> \
+  --host <canonical-vps-host> --check
+```
+
+The refresh replaces only changed dispatcher/helper files, using an atomic replacement
+for each file, then revalidates their root:root `0755` contract and the runtime. It
+never refreshes the environment, `authorized_keys`, or sudoers content.
+
 Bootstrap must leave the dedicated account without Docker, sudo, admin, or other
 supplementary groups. The account receives only the root-owned forced dispatcher and
 the no-argument sudo path to the bounded root helper.
+
+The installed `/usr/local/sbin/cinegraph-deploy-dev` is a static host copy; reviewed
+repository changes do not update it automatically. Before a helper-changing release
+can reach the VPS, an operator must refresh it from reviewed live `main` through the
+operator refresh/check procedure. The helper verifies that the tracked public
+`knowledge/catalogue.json` is root-owned and mode `0644` before any image pull or
+database mutation. Its read-only Compose bind mount can then be read by the UID 10001
+app container while all other checkout files retain the restrictive deployment umask.
+
+After the exact image identity is verified, the helper runs an egress-only embedding
+warmup before starting dependencies or running migrations. The one-shot receives no
+OpenAI key, database setting, Qdrant setting, or corpus mount. It materializes both
+configured FastEmbed models in the persistent non-root `app-cache` volume and performs
+a fixed, corpus-free dense/sparse sanity encode. Only the one-shot redirects generic
+model-download temporary files to that volume; application temp files keep using the
+hardened 64 MiB `/tmp` tmpfs. The application mounts the completed model cache
+read-only and forces Hugging Face offline mode, so serving cannot drift models or
+silently repair an incomplete deployment from the network.
 
 ## Gate 3: forced-command probe
 
@@ -117,6 +155,17 @@ merging the triggering PR.
 - Never overwrite/delete a GHCR release tag or substitute a different digest.
 - If `/etc/cinegraph/dev.env.previous` exists, preserve it and stop repeated mutation
   until the earlier failure is understood.
+- For the catalogue permission failure, stop the app and inspect the release checkout
+  and container logs without deleting volumes. Confirm the exact release contains the
+  tracked regular `knowledge/catalogue.json` and that the reviewed helper normalized
+  only that public file to mode `0644`; do not broaden permissions on the checkout.
+- The current failed activation must be diagnosed and recovered in place. Do not delete
+  volumes, auto-downgrade migrations, or retry until the static installed helper has
+  been refreshed and the prior failure is understood.
+- If model download reports `No space left on device` while host disk and inodes are
+  healthy, inspect the container tmpfs and model cache separately. Do not enlarge the
+  tmpfs or delete volumes reflexively. Verify the reviewed warmup uses the persistent
+  cache/temp paths and completes before allowing migrations or app startup.
 - After migration starts, do not automatically roll back the database. Review schema
   compatibility and backups before selecting a previous exact digest and SHA.
 - Never delete volumes, use `compose down -v`, downgrade migrations casually, accept a

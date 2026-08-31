@@ -36,7 +36,9 @@ ENV PATH=/opt/venv/bin:${PATH} \
 RUN groupadd --system --gid 10001 cinegraph \
     && useradd --system --uid 10001 --gid 10001 --home-dir /home/cinegraph \
        --create-home cinegraph \
-    && mkdir -p /app /app/knowledge /home/cinegraph/.cache \
+    && mkdir -p /app /app/knowledge /home/cinegraph/.cache/fastembed \
+       /home/cinegraph/.cache/huggingface/hub /home/cinegraph/.cache/huggingface/xet \
+       /home/cinegraph/.cache/model-download-work \
     && chown -R cinegraph:cinegraph /app /home/cinegraph
 
 # The runtime only executes the locked virtual environment; remove the base

@@ -2,7 +2,11 @@ from collections.abc import Iterable
 from typing import Any, Protocol, TypeVar, cast
 
 from cinegraph.common.error_messages import RetrievalErrorMessages
-from cinegraph.config import DEFAULT_EMBEDDING_CONFIGURATION, EmbeddingConfiguration
+from cinegraph.config import (
+    DEFAULT_EMBEDDING_CONFIGURATION,
+    EmbeddingConfiguration,
+    resolve_fastembed_cache_path,
+)
 from cinegraph.domain.retrieval.vector_data import (
     DenseVector,
     DocumentVector,
@@ -53,10 +57,22 @@ class FastEmbedVectorEncoder:
     def from_default_models(cls) -> "FastEmbedVectorEncoder":
         from fastembed import SparseTextEmbedding, TextEmbedding
 
+        cache_path = resolve_fastembed_cache_path()
+        model_options = {} if cache_path is None else {"cache_dir": cache_path}
         return cls(
-            dense_backend=TextEmbedding(model_name=DEFAULT_EMBEDDING_CONFIGURATION.dense_model),
-            sparse_backend=SparseTextEmbedding(
-                model_name=DEFAULT_EMBEDDING_CONFIGURATION.sparse_model
+            dense_backend=cast(
+                DenseEmbeddingBackend,
+                TextEmbedding(
+                    model_name=DEFAULT_EMBEDDING_CONFIGURATION.dense_model,
+                    **model_options,
+                ),
+            ),
+            sparse_backend=cast(
+                SparseEmbeddingBackend,
+                SparseTextEmbedding(
+                    model_name=DEFAULT_EMBEDDING_CONFIGURATION.sparse_model,
+                    **model_options,
+                ),
             ),
         )
 

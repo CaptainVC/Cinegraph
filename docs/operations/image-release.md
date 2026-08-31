@@ -125,10 +125,17 @@ not send a syntactically valid deploy command during this probe.
 The root helper reads only the canonical SHA and digest from the forced dispatcher,
 checks out the public repository at the attested SHA, creates a
 candidate env changing only the digest and release SHA, validates it, pulls the
-attested digest, runs migrations and Qdrant provisioning, atomically updates the
-Dev release pointer, checks readiness, and runs the secret-free guest entitlement
-smoke contract. The smoke is loopback-only, retains the real auth cookie, verifies
-the configured API prefix and approved guest scope, requires exactly the canonical
+attested digest, verifies and normalizes the tracked public catalogue manifest for
+the UID 10001 read-only bind mount, and warms both configured embedding models before
+starting dependencies or mutating schemas. The warmup has egress plus the persistent
+model cache only; it receives no OpenAI key, backend credentials, Qdrant settings, or
+corpus mount. It performs a fixed corpus-free dense/sparse sanity encode and fails the
+promotion before migration if the cache is unusable. The serving app receives that
+cache read-only with Hugging Face offline mode enabled. The helper then runs migrations
+and Qdrant provisioning, atomically updates the Dev release pointer, checks readiness,
+and runs the secret-free guest entitlement smoke contract. The smoke is loopback-only,
+retains the real auth cookie, verifies the configured API prefix and approved guest scope,
+and requires exactly the canonical
 Modern Family series with Seasons 1 and 2, and never calls the answer/RAG endpoint
 or prints response bodies. It never rebuilds, deletes volumes, or
 runs `docker compose down`. If a migration succeeds but the application does not
@@ -142,6 +149,17 @@ mode-0600 file while investigating. Compare its recorded release with the curren
 digest, check migration compatibility, and restore the prior env/release pointer only
 through the reviewed rollback procedure; never delete volumes or overwrite a GHCR
 release tag to recover.
+
+The root helper is installed as a static host file and is not updated by a repository
+checkout or merge. Before deploying this fix, the operator must refresh
+`/usr/local/sbin/cinegraph-deploy-dev` from reviewed live `main` using the bootstrap
+and `--check` procedure. The current failed activation must be diagnosed and recovered
+without deleting volumes or automatically downgrading migrations; preserve
+`dev.env.previous` until the failure and migration compatibility are reviewed.
+If the installed helper still contains the static Phase 46 bytes, use the explicit
+operator-only `--refresh-deploy-code` path only after the root-controlled checkout
+exactly matches live `main`, then rerun `--check`; ordinary apply/check modes do not
+overwrite reviewed host files.
 
 ## Dev-first promotion
 

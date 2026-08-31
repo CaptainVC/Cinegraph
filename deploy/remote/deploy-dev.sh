@@ -111,6 +111,31 @@ cleanup() {
 }
 trap cleanup EXIT
 
+normalize_public_catalogue_permissions() {
+    local checkout_dir="$1"
+    local knowledge_dir="$checkout_dir/knowledge"
+    local catalogue_path="$checkout_dir/knowledge/catalogue.json"
+    local tracked_path
+
+    [[ -d "$knowledge_dir" && ! -L "$knowledge_dir" ]] || \
+        fail "release knowledge directory must be a regular non-symlink directory"
+    [[ -f "$catalogue_path" && ! -L "$catalogue_path" ]] || \
+        fail "release catalogue manifest must be a regular non-symlink file"
+    tracked_path="$(git -C "$checkout_dir" ls-files --error-unmatch -- knowledge/catalogue.json 2>/dev/null)" || \
+        fail "release catalogue manifest is not tracked"
+    [[ "$tracked_path" == "knowledge/catalogue.json" ]] || fail "release catalogue manifest tracking is invalid"
+    [[ "$(stat -c '%u:%g' "$catalogue_path")" == "0:0" ]] || \
+        fail "release catalogue manifest must be root-owned"
+
+    # The helper keeps umask 077 for every release file except this public manifest,
+    # which is bind-mounted read-only into the UID 10001 application container.
+    chmod 0644 "$catalogue_path" || fail "release catalogue manifest permissions could not be normalized"
+    [[ "$(stat -c '%u:%g' "$catalogue_path")" == "0:0" ]] || \
+        fail "release catalogue manifest ownership changed unexpectedly"
+    [[ "$(stat -c '%a' "$catalogue_path")" == "644" ]] || \
+        fail "release catalogue manifest must be mode 0644"
+}
+
 docker_config="$(mktemp -d /run/cinegraph-docker.XXXXXX)"
 chmod 700 "$docker_config"
 export DOCKER_CONFIG="$docker_config"
@@ -144,6 +169,11 @@ else
     rmdir "$staging_parent"
     staging_parent=""
 fi
+
+# Verify and normalize only the committed public manifest before any image pull,
+# dependency startup, migration, or Qdrant mutation. All other checkout files keep
+# the helper's restrictive umask and the checkout remains otherwise untouched.
+normalize_public_catalogue_permissions "$release_dir"
 
 awk -v image_name="$IMAGE_NAME" -v digest="$image_digest" -v release_sha="$release_sha" -v env_file="$candidate_env" '
     BEGIN { image_found = 0; digest_found = 0; sha_found = 0 }
@@ -179,6 +209,10 @@ image_revision="$(docker image inspect --format '{{ index .Config.Labels "org.op
 [[ "$image_revision" == "$release_sha" ]] || fail "pulled image revision does not match the requested release"
 docker container rm "$probe_container" >/dev/null
 probe_container=""
+# Materialize both configured FastEmbed models into the persistent app-cache before
+# any dependency startup or schema mutation. This one-shot has egress only and does
+# not receive the candidate environment's backend, Qdrant, or OpenAI settings.
+"${compose[@]}" --profile warmup run --rm warmup-embeddings
 "${compose[@]}" up -d postgres qdrant
 "${compose[@]}" --profile migration run --rm migrate
 "${compose[@]}" --profile provisioning run --rm provision-qdrant

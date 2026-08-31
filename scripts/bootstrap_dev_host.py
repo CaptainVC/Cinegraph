@@ -384,6 +384,55 @@ def _ensure_exact_file(expected: ExpectedPath, content: bytes, *, apply: bool) -
         raise BootstrapError(f"existing managed file differs from the reviewed contract: {expected.path}")
 
 
+def _replace_exact_file(expected: ExpectedPath, content: bytes) -> None:
+    """Atomically replace one existing reviewed helper, preserving its contract."""
+
+    if expected.path.is_symlink() or not expected.path.is_file():
+        raise BootstrapError(f"managed helper must already be a regular file: {expected.path}")
+    _verify_path(expected)
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=f".{expected.path.name}.", dir=expected.path.parent
+    )
+    temporary_path = Path(temporary_name)
+    try:
+        fchmod = getattr(os, "fchmod")
+        fchown = getattr(os, "fchown")
+        fchmod(descriptor, expected.mode)
+        fchown(descriptor, expected.uid, expected.gid)
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            descriptor = -1
+            stream.write(content)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary_path, expected.path)
+        if os.name != "nt":
+            directory_flags = os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            directory_descriptor = os.open(expected.path.parent, directory_flags)
+            try:
+                os.fsync(directory_descriptor)
+            finally:
+                os.close(directory_descriptor)
+    except OSError as error:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise BootstrapError("managed helper could not be atomically refreshed") from error
+    except BaseException:
+        if descriptor >= 0:
+            os.close(descriptor)
+        raise
+    finally:
+        temporary_path.unlink(missing_ok=True)
+    _verify_path(expected)
+    try:
+        installed = expected.path.read_bytes()
+    except OSError as error:
+        raise BootstrapError("refreshed helper could not be read") from error
+    if installed != content:
+        raise BootstrapError(
+            f"refreshed helper differs from the reviewed contract: {expected.path}"
+        )
+
+
 def _read_source(path: Path) -> bytes:
     metadata = _path_metadata(path)
     if not stat.S_ISREG(metadata.st_mode):
@@ -394,7 +443,7 @@ def _read_source(path: Path) -> bytes:
         raise BootstrapError("managed source could not be read") from error
 
 
-def _ensure_host_files(public_key: str, *, apply: bool) -> None:
+def _ensure_host_files(public_key: str, *, apply: bool, refresh_deploy_code: bool = False) -> None:
     managed = {
         DISPATCH_PATH: _read_source(SOURCE_DISPATCH),
         HELPER_PATH: _read_source(SOURCE_HELPER),
@@ -402,6 +451,35 @@ def _ensure_host_files(public_key: str, *, apply: bool) -> None:
         AUTHORIZED_KEYS: authorized_key_entry(public_key).encode("utf-8"),
     }
     by_path = {expected.path: expected for expected in FILE_CONTRACT}
+    if refresh_deploy_code:
+        # Complete the read-only preflight before replacing either deploy-code file.
+        # In particular, a drifted authorization or sudoers file must not leave a
+        # partially refreshed host behind.
+        installed: dict[Path, bytes] = {}
+        for path, content in managed.items():
+            expected = by_path[path]
+            _verify_path(expected)
+            try:
+                installed[path] = path.read_bytes()
+            except OSError as error:
+                raise BootstrapError(f"required file could not be read: {path}") from error
+            if path not in {DISPATCH_PATH, HELPER_PATH} and installed[path] != content:
+                raise BootstrapError(
+                    f"existing managed file differs from the reviewed contract: {path}"
+                )
+        if not DEV_ENV_FILE.exists() or DEV_ENV_FILE.is_symlink():
+            raise BootstrapError("Dev environment file is missing")
+        _verify_path(by_path[DEV_ENV_FILE])
+        _require_success(["visudo", "-cf", str(SUDOERS_PATH)])
+        for path in (DISPATCH_PATH, HELPER_PATH):
+            if installed[path] != managed[path]:
+                _replace_exact_file(by_path[path], managed[path])
+        for path, content in managed.items():
+            _ensure_exact_file(by_path[path], content, apply=False)
+        _verify_path(by_path[DEV_ENV_FILE])
+        _require_success(["visudo", "-cf", str(SUDOERS_PATH)])
+        return
+
     for path, content in managed.items():
         if path == SUDOERS_PATH and apply and not path.exists() and not path.is_symlink():
             with tempfile.NamedTemporaryFile("wb", delete=False, dir=SUDOERS_PATH.parent) as stream:
@@ -434,7 +512,7 @@ def _host_evidence(host: str, mode: str) -> dict[str, str]:
         "host_key_fingerprint": host_fingerprint,
         "known_hosts": known_hosts_line(host, host_key),
         "mode": mode,
-        "status": "activation-ready" if mode == "check" else "bootstrap-applied",
+        "status": "activation-ready" if mode in {"check", "refresh-deploy-code"} else "bootstrap-applied",
     }
 
 
@@ -456,7 +534,16 @@ def _verify_runtime_contract() -> None:
     )
 
 
-def bootstrap(*, public_key_file: Path, expected_fingerprint: str, host: str, check: bool) -> dict[str, str]:
+def bootstrap(
+    *,
+    public_key_file: Path,
+    expected_fingerprint: str,
+    host: str,
+    check: bool,
+    refresh_deploy_code: bool = False,
+) -> dict[str, str]:
+    if check and refresh_deploy_code:
+        raise BootstrapError("--refresh-deploy-code cannot be combined with --check")
     _validate_platform_and_tools()
     checkout_sha = _verify_bootstrap_checkout()
     try:
@@ -468,7 +555,7 @@ def bootstrap(*, public_key_file: Path, expected_fingerprint: str, host: str, ch
     if fingerprint(public_key_file) != expected_fingerprint:
         raise BootstrapError("deployment public-key fingerprint does not match the operator value")
     if not _account_exists():
-        if check:
+        if check or refresh_deploy_code:
             raise BootstrapError("deployment account is missing")
         _create_account()
     _verify_account()
@@ -484,14 +571,21 @@ def bootstrap(*, public_key_file: Path, expected_fingerprint: str, host: str, ch
             Path("/run"),
         }:
             _verify_path(expected)
-        elif check:
+        elif check or refresh_deploy_code:
             _verify_path(expected)
         else:
             _create_directory(expected)
-    _ensure_host_files(public_key, apply=not check)
-    if check:
+    if refresh_deploy_code:
         _verify_runtime_contract()
-    evidence = _host_evidence(host, "check" if check else "apply")
+        _ensure_host_files(public_key, apply=True, refresh_deploy_code=True)
+    else:
+        _ensure_host_files(public_key, apply=not check)
+    if check or refresh_deploy_code:
+        _verify_runtime_contract()
+    evidence = _host_evidence(
+        host,
+        "refresh-deploy-code" if refresh_deploy_code else "check" if check else "apply",
+    )
     evidence["bootstrap_sha"] = checkout_sha
     return evidence
 
@@ -502,6 +596,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--expected-key-fingerprint", required=True)
     parser.add_argument("--host", required=True)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument(
+        "--refresh-deploy-code",
+        action="store_true",
+        help="operator-only atomic refresh of the reviewed dispatcher and deploy helper",
+    )
     arguments = parser.parse_args(argv)
     try:
         evidence = bootstrap(
@@ -509,6 +608,7 @@ def main(argv: list[str] | None = None) -> int:
             expected_fingerprint=arguments.expected_key_fingerprint,
             host=arguments.host,
             check=arguments.check,
+            refresh_deploy_code=arguments.refresh_deploy_code,
         )
     except BootstrapError as error:
         print(f"Dev host bootstrap failed: {error}", file=sys.stderr)

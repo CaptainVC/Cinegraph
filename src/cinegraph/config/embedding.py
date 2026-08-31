@@ -1,7 +1,34 @@
+import os
 from dataclasses import dataclass
 from math import isfinite
+from typing import Final
 
 from cinegraph.common.error_messages import RetrievalErrorMessages
+
+# These directories are on the persistent app-cache volume in the container.  Keep
+# model downloads and their temporary reconstruction files off the small /tmp tmpfs.
+APP_CACHE_ROOT: Final = "/home/cinegraph/.cache"
+FASTEMBED_CACHE_DIR: Final = f"{APP_CACHE_ROOT}/fastembed"
+FASTEMBED_CACHE_PATH_ENVIRONMENT_VARIABLE: Final = "FASTEMBED_CACHE_PATH"
+HUGGINGFACE_HOME_DIR: Final = f"{APP_CACHE_ROOT}/huggingface"
+HUGGINGFACE_HUB_CACHE_DIR: Final = f"{HUGGINGFACE_HOME_DIR}/hub"
+HUGGINGFACE_XET_CACHE_DIR: Final = f"{HUGGINGFACE_HOME_DIR}/xet"
+MODEL_DOWNLOAD_TMPDIR: Final = f"{APP_CACHE_ROOT}/model-download-work"
+
+
+def resolve_fastembed_cache_path() -> str | None:
+    """Resolve an optional runtime cache override without import-time env capture."""
+
+    configured = os.environ.get(FASTEMBED_CACHE_PATH_ENVIRONMENT_VARIABLE)
+    if configured is None:
+        return None
+    if (
+        not configured
+        or configured.strip() != configured
+        or any(ord(character) < 32 for character in configured)
+    ):
+        raise ValueError("FASTEMBED_CACHE_PATH must be a non-empty path")
+    return configured
 
 
 @dataclass(frozen=True, slots=True)
