@@ -97,7 +97,15 @@ merging the triggering PR.
 5. Confirm the release SHA is the publisher head SHA, the registry digest belongs to
    its immutable tag, GitHub verifies the expected signer and `main` source ref, and
    the remote helper reports bounded readiness.
-6. Validate the sanitized evidence record. Attach only safe evidence to the merged PR
+6. Confirm the helper's secret-free post-deploy smoke gate passes. It uses only the
+   loopback Dev origin, discovers and validates the deployed API prefix through the
+   public `/client-config` contract, obtains a guest session, retains the issued
+   cookie, and reads the configured catalogue endpoint. It must observe the approved
+   guest scope revision and schema plus exactly the canonical `Modern Family` series
+   with exactly Seasons 1 and 2. The gate never calls the answer/RAG endpoint and
+   never prints response bodies, tokens, or corpus data. A failure occurs before
+   deployment success cleanup, preserving the existing fail-closed recovery state.
+7. Validate the sanitized evidence record. Attach only safe evidence to the merged PR
    or protected operational record; do not create a second deployment merely to edit
    evidence in Git.
 

@@ -126,7 +126,11 @@ The root helper reads only the canonical SHA and digest from the forced dispatch
 checks out the public repository at the attested SHA, creates a
 candidate env changing only the digest and release SHA, validates it, pulls the
 attested digest, runs migrations and Qdrant provisioning, atomically updates the
-Dev release pointer, and checks readiness. It never rebuilds, deletes volumes, or
+Dev release pointer, checks readiness, and runs the secret-free guest entitlement
+smoke contract. The smoke is loopback-only, retains the real auth cookie, verifies
+the configured API prefix and approved guest scope, requires exactly the canonical
+Modern Family series with Seasons 1 and 2, and never calls the answer/RAG endpoint
+or prints response bodies. It never rebuilds, deletes volumes, or
 runs `docker compose down`. If a migration succeeds but the application does not
 become healthy, do not downgrade the database automatically; follow the exact-digest
 rollback procedure after compatibility and backup review. A failed deployment can
