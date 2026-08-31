@@ -1,5 +1,7 @@
 import math
+import sys
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 import pytest
 
@@ -7,7 +9,7 @@ from cinegraph.adapters.retrieval.fastembed_vector_encoder import (
     FastEmbedVectorEncoder,
 )
 from cinegraph.common.error_messages import RetrievalErrorMessages
-from cinegraph.config import EmbeddingConfiguration
+from cinegraph.config import EmbeddingConfiguration, resolve_fastembed_cache_path
 from cinegraph.domain.exceptions.errors import InvalidModelError
 from cinegraph.domain.retrieval.vector_data import DocumentVector, QueryVector
 
@@ -188,3 +190,62 @@ def test_dense_dimension_must_match_configuration() -> None:
         match=RetrievalErrorMessages.VECTOR_ENCODER_DENSE_DIMENSION_MUST_MATCH,
     ):
         encoder.encode_query("query")
+
+
+def test_default_models_use_the_persistent_fastembed_cache(monkeypatch: pytest.MonkeyPatch) -> None:
+    dense_calls: list[dict[str, object]] = []
+    sparse_calls: list[dict[str, object]] = []
+
+    class Dense:
+        def __init__(self, **kwargs: object) -> None:
+            dense_calls.append(kwargs)
+
+    class Sparse:
+        def __init__(self, **kwargs: object) -> None:
+            sparse_calls.append(kwargs)
+
+    monkeypatch.setenv("FASTEMBED_CACHE_PATH", "/persistent/fastembed")
+    monkeypatch.setitem(
+        sys.modules, "fastembed", SimpleNamespace(TextEmbedding=Dense, SparseTextEmbedding=Sparse)
+    )
+
+    FastEmbedVectorEncoder.from_default_models()
+
+    assert dense_calls[0]["cache_dir"] == "/persistent/fastembed"
+    assert sparse_calls[0]["cache_dir"] == "/persistent/fastembed"
+
+
+def test_default_models_omit_cache_override_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
+    dense_calls: list[dict[str, object]] = []
+    sparse_calls: list[dict[str, object]] = []
+
+    class Dense:
+        def __init__(self, **kwargs: object) -> None:
+            dense_calls.append(kwargs)
+
+    class Sparse:
+        def __init__(self, **kwargs: object) -> None:
+            sparse_calls.append(kwargs)
+
+    monkeypatch.delenv("FASTEMBED_CACHE_PATH", raising=False)
+    monkeypatch.setitem(
+        sys.modules, "fastembed", SimpleNamespace(TextEmbedding=Dense, SparseTextEmbedding=Sparse)
+    )
+
+    FastEmbedVectorEncoder.from_default_models()
+
+    assert "cache_dir" not in dense_calls[0]
+    assert "cache_dir" not in sparse_calls[0]
+
+
+@pytest.mark.parametrize(
+    "malformed",
+    ["", "   ", " /tmp/leading-space", "/tmp/trailing-space ", "/tmp/invalid\npath"],
+)
+def test_cache_override_rejects_malformed_environment(
+    monkeypatch: pytest.MonkeyPatch, malformed: str
+) -> None:
+    monkeypatch.setenv("FASTEMBED_CACHE_PATH", malformed)
+
+    with pytest.raises(ValueError, match="FASTEMBED_CACHE_PATH"):
+        resolve_fastembed_cache_path()

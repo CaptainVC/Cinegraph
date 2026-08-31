@@ -349,6 +349,104 @@ def test_check_mode_runs_existing_fail_closed_runtime_validator(monkeypatch: pyt
     assert calls == ["runtime"]
 
 
+def test_refresh_deploy_code_is_explicit_and_revalidates_host_without_mutating_other_files(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[object] = []
+    monkeypatch.setattr(bootstrap_dev_host, "_validate_platform_and_tools", lambda: None)
+    monkeypatch.setattr(bootstrap_dev_host, "_verify_bootstrap_checkout", lambda: "a" * 40)
+    monkeypatch.setattr(bootstrap_dev_host, "read_single_public_key", lambda _: _public_key())
+    monkeypatch.setattr(bootstrap_dev_host, "fingerprint", lambda _: "SHA256:" + "A" * 43)
+    monkeypatch.setattr(bootstrap_dev_host, "_account_exists", lambda: True)
+    monkeypatch.setattr(bootstrap_dev_host, "_verify_account", lambda: calls.append("account"))
+    monkeypatch.setattr(bootstrap_dev_host, "DIRECTORY_CONTRACT", ())
+    monkeypatch.setattr(
+        bootstrap_dev_host,
+        "_ensure_host_files",
+        lambda _key, *, apply, refresh_deploy_code=False: calls.append(
+            (apply, refresh_deploy_code)
+        ),
+    )
+    monkeypatch.setattr(
+        bootstrap_dev_host, "_verify_runtime_contract", lambda: calls.append("runtime")
+    )
+    monkeypatch.setattr(
+        bootstrap_dev_host,
+        "_host_evidence",
+        lambda host, mode: {"host": host, "mode": mode, "status": "activation-ready"},
+    )
+
+    evidence = bootstrap_dev_host.bootstrap(
+        public_key_file=Path("unused"),
+        expected_fingerprint="SHA256:" + "A" * 43,
+        host="dev.example.com",
+        check=False,
+        refresh_deploy_code=True,
+    )
+
+    assert evidence["mode"] == "refresh-deploy-code"
+    assert calls == ["account", "runtime", (True, True), "runtime"]
+
+
+def test_refresh_deploy_code_cannot_be_combined_with_check() -> None:
+    with pytest.raises(BootstrapError, match="cannot be combined"):
+        bootstrap_dev_host.bootstrap(
+            public_key_file=Path("unused"),
+            expected_fingerprint="SHA256:" + "A" * 43,
+            host="dev.example.com",
+            check=True,
+            refresh_deploy_code=True,
+        )
+
+
+def test_refresh_deploy_code_preflights_non_helper_files_before_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dispatch = tmp_path / "dispatch"
+    helper = tmp_path / "helper"
+    sudoers = tmp_path / "sudoers"
+    authorized_keys = tmp_path / "authorized_keys"
+    env_file = tmp_path / "dev.env"
+    source_dispatch = tmp_path / "source-dispatch"
+    source_helper = tmp_path / "source-helper"
+    for path, content in (
+        (dispatch, b"old-dispatch"),
+        (helper, b"old-helper"),
+        (sudoers, b"reviewed-sudoers"),
+        (authorized_keys, b"drifted-authorized-key"),
+        (env_file, b"environment"),
+    ):
+        path.write_bytes(content)
+    source_dispatch.write_bytes(b"new-dispatch")
+    source_helper.write_bytes(b"new-helper")
+
+    monkeypatch.setattr(bootstrap_dev_host, "DISPATCH_PATH", dispatch)
+    monkeypatch.setattr(bootstrap_dev_host, "HELPER_PATH", helper)
+    monkeypatch.setattr(bootstrap_dev_host, "SUDOERS_PATH", sudoers)
+    monkeypatch.setattr(bootstrap_dev_host, "AUTHORIZED_KEYS", authorized_keys)
+    monkeypatch.setattr(bootstrap_dev_host, "DEV_ENV_FILE", env_file)
+    monkeypatch.setattr(bootstrap_dev_host, "SOURCE_DISPATCH", source_dispatch)
+    monkeypatch.setattr(bootstrap_dev_host, "SOURCE_HELPER", source_helper)
+    monkeypatch.setattr(bootstrap_dev_host, "SUDOERS_CONTENT", "reviewed-sudoers")
+    monkeypatch.setattr(bootstrap_dev_host, "authorized_key_entry", lambda _key: "expected-key")
+    monkeypatch.setattr(
+        bootstrap_dev_host,
+        "FILE_CONTRACT",
+        tuple(
+            ExpectedPath(path, "file", 0, 0, 0o644)
+            for path in (dispatch, helper, sudoers, authorized_keys, env_file)
+        ),
+    )
+    monkeypatch.setattr(bootstrap_dev_host, "_verify_path", lambda _expected: None)
+    monkeypatch.setattr(bootstrap_dev_host, "_require_success", lambda _command: None)
+
+    with pytest.raises(BootstrapError, match="differs"):
+        bootstrap_dev_host._ensure_host_files(_public_key(), apply=True, refresh_deploy_code=True)
+
+    assert dispatch.read_bytes() == b"old-dispatch"
+    assert helper.read_bytes() == b"old-helper"
+
+
 def test_safe_host_evidence_contains_only_public_contract(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(bootstrap_dev_host, "read_single_public_key", lambda _: _public_key("host"))
     monkeypatch.setattr(bootstrap_dev_host, "fingerprint", lambda _: "SHA256:" + "B" * 43)
@@ -385,3 +483,6 @@ def test_bootstrap_source_does_not_accept_private_material_or_broaden_privilege(
     assert "rm -rf" not in text
     assert "ssh-keyscan" not in text
     assert "prod.env" not in text
+    assert "--refresh-deploy-code" in text
+    assert "os.replace" in text
+    assert "refreshed helper" in text

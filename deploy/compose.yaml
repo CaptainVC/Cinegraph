@@ -1,6 +1,23 @@
 name: ${CINEGRAPH_STACK_NAME:-cinegraph}
 
+x-model-cache-environment: &model-cache-environment
+  HF_HOME: /home/cinegraph/.cache/huggingface
+  HF_HUB_CACHE: /home/cinegraph/.cache/huggingface/hub
+  HF_XET_CACHE: /home/cinegraph/.cache/huggingface/xet
+  FASTEMBED_CACHE_PATH: /home/cinegraph/.cache/fastembed
+  HF_HUB_DISABLE_XET: "1"
+  HF_HUB_DISABLE_PROGRESS_BARS: "1"
+  HF_HUB_DISABLE_TELEMETRY: "1"
+
+x-model-warmup-environment: &model-warmup-environment
+  <<: *model-cache-environment
+  TMPDIR: /home/cinegraph/.cache/model-download-work
+  TEMP: /home/cinegraph/.cache/model-download-work
+  TMP: /home/cinegraph/.cache/model-download-work
+
 x-app-environment: &app-environment
+  <<: *model-cache-environment
+  HF_HUB_OFFLINE: "1"
   CINEGRAPH_ENVIRONMENT: ${CINEGRAPH_ENVIRONMENT:?CINEGRAPH_ENVIRONMENT is required}
   CINEGRAPH_KNOWLEDGE_ROOT: ${CINEGRAPH_KNOWLEDGE_ROOT:?CINEGRAPH_KNOWLEDGE_ROOT is required}
   CINEGRAPH_IDENTITY_DATABASE_PATH: ${CINEGRAPH_IDENTITY_DATABASE_PATH:?CINEGRAPH_IDENTITY_DATABASE_PATH is required}
@@ -19,7 +36,7 @@ x-app-environment: &app-environment
 
 services:
   app:
-    image: ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}
+    image: &cinegraph-image ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}
     environment: *app-environment
     ports:
       - "127.0.0.1:${CINEGRAPH_PUBLISHED_PORT:-18000}:8000"
@@ -29,7 +46,7 @@ services:
     volumes:
       - knowledge:/app/knowledge
       - ../knowledge/catalogue.json:/app/knowledge/catalogue.json:ro
-      - app-cache:/home/cinegraph/.cache
+      - app-cache:/home/cinegraph/.cache:ro
     read_only: true
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=64m
@@ -46,6 +63,27 @@ services:
         condition: service_healthy
       qdrant:
         condition: service_started
+
+  warmup-embeddings:
+    profiles: [warmup]
+    image: *cinegraph-image
+    environment: *model-warmup-environment
+    networks:
+      - egress
+    volumes:
+      - app-cache:/home/cinegraph/.cache
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 256
+    mem_limit: ${CINEGRAPH_APP_MEMORY_LIMIT:-768m}
+    cpus: ${CINEGRAPH_APP_CPU_LIMIT:-1.0}
+    restart: "no"
+    command: ["python", "scripts/warmup_embeddings.py"]
 
   migrate:
     profiles: [migration]

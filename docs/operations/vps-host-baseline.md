@@ -37,6 +37,18 @@ to either data service. The app runs as UID/GID 10001,
 drops Linux capabilities, uses a read-only root
 filesystem, and has bounded memory/CPU/PID settings. The API supervisor remains a
 single process (`scripts/run_api.py`); do not scale the app service horizontally.
+The deployment helper keeps its `umask 077` for release files, then explicitly
+normalizes only the tracked public `knowledge/catalogue.json` to root:root mode
+`0644` before any pull or migration. This is required because Compose bind-mounts
+that manifest read-only into the UID 10001 app container; private or derived files
+must not be made world-readable.
+Embedding warmup downloads never use that small tmpfs for reconstruction. A non-root,
+egress-only one-shot writes model files and download temporaries to the persistent
+`app-cache` volume, sanity-checks both configured models with fixed public probe text,
+and must pass before dependencies, migrations, or Qdrant provisioning begin. The app
+uses the same centralized FastEmbed cache read-only and forces Hugging Face offline
+mode on startup; its unrelated temporary files remain on the non-persistent hardened
+tmpfs.
 
 ## First install (operator-run)
 
@@ -123,6 +135,18 @@ provision/verify Qdrant, and then replace the app container. Keep the previous i
 until health and a smoke query pass. Rollback means selecting the previous digest, not
 deleting volumes; never downgrade a database migration without an explicit backup and
 compatibility review. See [the image release runbook](image-release.md).
+
+The root helper at `/usr/local/sbin/cinegraph-deploy-dev` is a static host copy. A
+reviewed repository merge does not refresh it. The operator must refresh the helper
+from reviewed live `main` through the explicit bootstrap refresh/check procedure
+before a helper-changing release can reach the VPS. Diagnose failed activation in
+place, preserve `dev.env.previous`, and never delete volumes or auto-downgrade
+migrations while recovering.
+When a reviewed helper differs from the installed static copy, use only the explicit
+operator-only `--refresh-deploy-code` bootstrap mode after confirming the checkout
+exactly matches live `main`; it replaces only the dispatcher/helper and leaves the
+environment, authorized keys, and sudoers unchanged. Each changed deploy-code file is
+replaced atomically and reverified; follow the refresh with `--check`.
 
 For a known-good rollback, first verify that the prior digest is still available. Set
 `CINEGRAPH_IMAGE_DIGEST` and `CINEGRAPH_RELEASE_SHA` in the private environment file,

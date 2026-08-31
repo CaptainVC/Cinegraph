@@ -45,7 +45,7 @@ def test_publish_workflow_contains_only_immutable_release_tag_and_attestation() 
     assert "--request HEAD" not in text
     assert text.count("--connect-timeout 10 --max-time 30") == 2
     assert "curl_status=$?" in text
-    assert "if [[ \"$curl_status\" -ne 0 ]]" in text
+    assert 'if [[ "$curl_status" -ne 0 ]]' in text
     assert "http_status" in text
 
 
@@ -64,10 +64,63 @@ def test_runtime_compose_has_no_build_fallback_and_uses_digest_for_all_app_jobs(
     text = COMPOSE.read_text(encoding="utf-8")
 
     assert "    build:" not in text
-    assert text.count(
-        "image: ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}"
-    ) == 3
+    assert (
+        text.count(
+            "image: ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}"
+        )
+        == 2
+    )
+    assert "image: &cinegraph-image" in text
     assert "CINEGRAPH_IMAGE_VERSION" not in text
+
+
+def test_runtime_catalogue_mount_is_read_only_for_the_non_root_app() -> None:
+    compose = COMPOSE.read_text(encoding="utf-8")
+    dockerfile = DOCKERFILE.read_text(encoding="utf-8")
+
+    assert "../knowledge/catalogue.json:/app/knowledge/catalogue.json:ro" in compose
+    assert "USER cinegraph" in dockerfile
+    assert "groupadd --system --gid 10001 cinegraph" in dockerfile
+    assert "useradd --system --uid 10001" in dockerfile
+
+
+def test_embedding_warmup_is_cache_only_and_egress_only() -> None:
+    text = COMPOSE.read_text(encoding="utf-8")
+    service = text[text.index("  warmup-embeddings:") : text.index("  migrate:")]
+
+    assert "profiles: [warmup]" in service
+    assert "image: *cinegraph-image" in service
+    assert "app-cache:/home/cinegraph/.cache" in service
+    assert "app-cache:/home/cinegraph/.cache:ro" not in service
+    assert "- egress" in service
+    assert "- backend" not in service
+    assert "OPENAI_API_KEY" not in service
+    assert "CINEGRAPH_DATABASE_URL" not in service
+    assert "CINEGRAPH_QDRANT_URL" not in service
+    assert "read_only: true" in service
+    assert "no-new-privileges:true" in service
+    assert "cap_drop:" in service and "ALL" in service
+    assert 'restart: "no"' in service
+    assert "scripts/warmup_embeddings.py" in service
+
+
+def test_model_download_temp_and_huggingface_caches_use_persistent_volume() -> None:
+    text = COMPOSE.read_text(encoding="utf-8")
+    app_environment = text[text.index("x-app-environment:") : text.index("services:")]
+    app_service = text[text.index("  app:") : text.index("  warmup-embeddings:")]
+    warmup_service = text[text.index("  warmup-embeddings:") : text.index("  migrate:")]
+
+    assert "HF_HOME: /home/cinegraph/.cache/huggingface" in text
+    assert "HF_HUB_CACHE: /home/cinegraph/.cache/huggingface/hub" in text
+    assert "HF_XET_CACHE: /home/cinegraph/.cache/huggingface/xet" in text
+    assert "FASTEMBED_CACHE_PATH: /home/cinegraph/.cache/fastembed" in text
+    assert "TMPDIR: /home/cinegraph/.cache/model-download-work" in text
+    assert 'HF_HUB_DISABLE_XET: "1"' in text
+    assert "environment: *model-warmup-environment" in warmup_service
+    assert "TMPDIR" not in app_service
+    assert 'HF_HUB_OFFLINE: "1"' in app_environment
+    assert "app-cache:/home/cinegraph/.cache:ro" in app_service
+    assert "HF_HUB_OFFLINE" not in warmup_service
 
 
 def test_runtime_image_removes_unused_global_package_installers() -> None:
