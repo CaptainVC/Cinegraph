@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import warnings
 
 from cinegraph.config import (
     FASTEMBED_CACHE_DIR,
@@ -38,10 +39,20 @@ def main() -> int:
     previous_disable_level = logging.root.manager.disable
     logging.disable(logging.CRITICAL)
     try:
-        result = warmup_fastembed_models(
-            DEFAULT_EMBEDDING_CONFIGURATION,
-            FASTEMBED_CACHE_DIR,
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=(
+                    r"^Cannot enable progress bars: environment variable "
+                    r"`HF_HUB_DISABLE_PROGRESS_BARS=1` is set and has priority\.$"
+                ),
+                category=UserWarning,
+                module=r"^huggingface_hub\.utils\.tqdm$",
+            )
+            result = warmup_fastembed_models(
+                DEFAULT_EMBEDDING_CONFIGURATION,
+                FASTEMBED_CACHE_DIR,
+            )
     except Exception:
         print(
             "Embedding model warmup failed: local model preparation or sanity check failed.",

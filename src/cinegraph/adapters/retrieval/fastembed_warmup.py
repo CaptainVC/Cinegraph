@@ -6,6 +6,7 @@ import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from math import isfinite
+from numbers import Integral, Real
 from os import PathLike
 from pathlib import Path
 from stat import S_IMODE
@@ -102,6 +103,30 @@ def _one_result(results: Iterable[object]) -> object:
     return first
 
 
+def _normalize_sparse_index(index: object) -> int:
+    """Validate and normalize a FastEmbed sparse index scalar."""
+
+    if isinstance(index, bool):
+        raise ValueError("embedding warmup sparse index is invalid")
+
+    if isinstance(index, Integral):
+        normalized_index = int(index)
+    elif isinstance(index, Real):
+        try:
+            numeric_index = float(index)
+            if not isfinite(numeric_index) or not numeric_index.is_integer():
+                raise ValueError("embedding warmup sparse index is invalid")
+            normalized_index = int(numeric_index)
+        except (TypeError, ValueError, OverflowError) as error:
+            raise ValueError("embedding warmup sparse index is invalid") from error
+    else:
+        raise ValueError("embedding warmup sparse index is invalid")
+
+    if normalized_index < 0:
+        raise ValueError("embedding warmup sparse index is invalid")
+    return normalized_index
+
+
 def warmup_fastembed_models(
     configuration: EmbeddingConfiguration = DEFAULT_EMBEDDING_CONFIGURATION,
     cache_dir: str | PathLike[str] = FASTEMBED_CACHE_DIR,
@@ -159,10 +184,8 @@ def warmup_fastembed_models(
         raise ValueError("embedding warmup sparse cardinality is invalid")
     normalized_indices: set[int] = set()
     for index in sparse_indices:
-        if isinstance(index, bool) or not isinstance(index, (int, float)) or int(index) != index:
-            raise ValueError("embedding warmup sparse index is invalid")
-        normalized_index = int(index)
-        if normalized_index < 0 or normalized_index in normalized_indices:
+        normalized_index = _normalize_sparse_index(index)
+        if normalized_index in normalized_indices:
             raise ValueError("embedding warmup sparse index is invalid")
         normalized_indices.add(normalized_index)
     for value in sparse_values:

@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from pathlib import Path
 
+import numpy as np
 import pytest
 
 from cinegraph.adapters.retrieval.fastembed_warmup import (
@@ -135,6 +136,46 @@ def test_warmup_rejects_sparse_index_value_mismatch(tmp_path: Path) -> None:
             tmp_path,
             dense_factory=FakeDenseModel,
             sparse_factory=WrongSparse,
+        )
+
+
+def test_warmup_accepts_numpy_sparse_scalars(tmp_path: Path) -> None:
+    class NumpySparse(FakeSparseModel):
+        def embed(self, documents: tuple[str, ...]):
+            return iter(
+                (
+                    FakeSparseResult(
+                        indices=(np.int64(1), np.int64(4)),
+                        values=(np.float64(0.5), np.float64(0.25)),
+                    ),
+                )
+            )
+
+    result = warmup_fastembed_models(
+        configuration(),
+        tmp_path,
+        dense_factory=FakeDenseModel,
+        sparse_factory=NumpySparse,
+    )
+
+    assert result.sparse_nonzero_count == 2
+
+
+@pytest.mark.parametrize(
+    "bad_index",
+    [np.float64(1.5), np.float64("nan"), np.float64("inf"), np.int64(-1), True, "1"],
+)
+def test_warmup_rejects_invalid_sparse_indices(tmp_path: Path, bad_index: object) -> None:
+    class BadSparse(FakeSparseModel):
+        def embed(self, documents: tuple[str, ...]):
+            return iter((FakeSparseResult(indices=(bad_index, 4), values=(0.5, 0.25)),))
+
+    with pytest.raises(ValueError, match="sparse index"):
+        warmup_fastembed_models(
+            configuration(),
+            tmp_path,
+            dense_factory=FakeDenseModel,
+            sparse_factory=BadSparse,
         )
 
 
