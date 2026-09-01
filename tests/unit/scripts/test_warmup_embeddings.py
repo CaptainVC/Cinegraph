@@ -1,5 +1,7 @@
+import warnings
 from pathlib import Path
 
+import pytest
 from scripts import warmup_embeddings
 
 
@@ -34,3 +36,35 @@ def test_warmup_cli_failure_is_sanitized(monkeypatch, capsys) -> None:
     assert "private-corpus" not in output.err
     assert "/home/secret" not in output.err
     assert "vector payload" not in output.err
+
+
+def test_warmup_cli_suppresses_only_huggingface_progress_warning(monkeypatch) -> None:
+    class Result:
+        dense_model = "public-dense"
+        dense_dimension = 384
+        sparse_model = "public-sparse"
+
+    def warn(*_args: object, **_kwargs: object) -> Result:
+        warnings.warn_explicit(
+            "Cannot enable progress bars: environment variable `HF_HUB_DISABLE_PROGRESS_BARS=1` "
+            "is set and has priority.",
+            UserWarning,
+            filename="tqdm.py",
+            lineno=1,
+            module="huggingface_hub.utils.tqdm",
+        )
+        warnings.warn_explicit(
+            "unrelated warning",
+            UserWarning,
+            filename="other.py",
+            lineno=1,
+            module="other.module",
+        )
+        return Result()
+
+    monkeypatch.setattr(warmup_embeddings, "warmup_fastembed_models", warn)
+
+    with pytest.warns(UserWarning, match="unrelated warning") as caught_warnings:
+        assert warmup_embeddings.main() == 0
+
+    assert [str(warning.message) for warning in caught_warnings] == ["unrelated warning"]
