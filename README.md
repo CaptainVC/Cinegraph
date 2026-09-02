@@ -144,6 +144,11 @@ readiness unless a caller explicitly requests a safe detail file beneath the cor
 
 ## Private Speaker Review
 
+Private corpus handoff is constrained by the [Phase 51 private-corpus bundle
+boundary](docs/operations/private-corpus-transfer.md). Bundles are explicit,
+deterministic, and fail closed; the bundle tools never transfer a whole corpus root
+or mutate a live volume. Transport and installation belong to Phase 52.
+
 The private corpus remains outside Git. The review workflow reads screenplay PDFs
 and script-aligned SRT files from a caller-provided corpus directory, writes all
 run artifacts beneath that directory, and never modifies the source files.
@@ -280,8 +285,8 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The verified branch baseline is 87.02% total branch coverage (911 passed and 7
-skipped, measured with `pytest-cov` on 2026-08-29). The centralized coverage
+The verified branch baseline is 87.14% total branch coverage (1,127 passed and 12
+skipped, measured with `pytest-cov` on 2026-09-02). The centralized coverage
 configuration floors ordinary (non-browser) tests at 87%, so coverage cannot
 silently regress. Coverage XML and JSON reports are generated locally and uploaded
 by CI. Ruff syntax/error classes, Pyflakes, and import sorting are gated across the

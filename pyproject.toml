@@ -16,7 +16,7 @@ dependencies = [
     "openai>=2.45.0",
     "pydantic>=2.13.4",
     "pydantic-settings>=2.14.2",
-    "pypdf>=6.15.0",
+    "pypdf>=6.16.1,<7",
     "psycopg[binary]>=3.2,<4",
     "pytest-bdd>=8.1.0",
     "qdrant-client==1.19.0",
