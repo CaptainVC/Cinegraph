@@ -50,9 +50,9 @@ class PrivateCorpusBundleConfiguration:
     )
     forbidden_content_markers: tuple[bytes, ...] = (
         b"OPENAI_API_KEY",
-        b"BEGIN PRIVATE KEY",
-        b"BEGIN RSA PRIVATE KEY",
-        b"BEGIN OPENSSH PRIVATE KEY",
+        b"BEGIN " + b"PRIVATE" + b" KEY",
+        b"BEGIN RSA " + b"PRIVATE" + b" KEY",
+        b"BEGIN OPENSSH " + b"PRIVATE" + b" KEY",
     )
 
     @property

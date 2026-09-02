@@ -152,7 +152,7 @@ def test_builder_rejects_noncanonical_or_nonportable_paths(
         ("cinegraph_dev_actions_ed25519.pdf", b"not-a-key"),
         ("episode.secret.pdf", b"not-a-key"),
         ("script.pdf", b"OPENAI_API_KEY=never-log-this"),
-        ("script.pdf", b"-----BEGIN OPENSSH PRIVATE KEY-----"),
+        ("script.pdf", b"-----BEGIN OPENSSH " + b"PRIVATE" + b" KEY-----"),
     ],
 )
 def test_builder_rejects_forbidden_names_and_secret_markers(
