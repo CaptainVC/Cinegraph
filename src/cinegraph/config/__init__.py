@@ -92,6 +92,10 @@ from cinegraph.config.observability import (
     DEFAULT_OBSERVABILITY_CONFIGURATION,
     ObservabilityConfiguration,
 )
+from cinegraph.config.private_corpus_bundle import (
+    DEFAULT_PRIVATE_CORPUS_BUNDLE_CONFIGURATION,
+    PrivateCorpusBundleConfiguration,
+)
 from cinegraph.config.qdrant import (
     DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA,
     QdrantPayloadIndexDefinition,
@@ -210,6 +214,8 @@ __all__ = [
     "RuntimeEnvironment",
     "SecretProvisioningConfiguration",
     "SpeakerReviewConfiguration",
+    "PrivateCorpusBundleConfiguration",
+    "DEFAULT_PRIVATE_CORPUS_BUNDLE_CONFIGURATION",
     "DEFAULT_SERIES_AGENT_CONFIGURATION",
     "SeriesAgentConfiguration",
 ]
