@@ -129,7 +129,8 @@ not use globs or recursive deletion against a computed path.
 
 Final objects are append-only and are not automatically pruned. Phase 55 processing
 must name an exact object digest and reverify catalogue binding. It is limited to
-reviewed-ingestion Season 1; Season 2 speaker review is deferred to Phase 56. See
+reviewed-ingestion Season 1; Phase 56 hardens live worker output and Season 2 speaker
+review is deferred to Phase 57. See
 `docs/operations/private-corpus-processing.md` for the processing request, offline
 Compose worker, deterministic workspace, and retry rules. Phase 52 does not
 transfer real data by itself, configure Prod, expose staged objects to containers,

@@ -2,6 +2,7 @@ import hashlib
 import json
 import os
 import stat
+import warnings
 from datetime import UTC, datetime
 from pathlib import Path
 from uuid import UUID
@@ -219,6 +220,35 @@ def test_ingest_workspace_uses_injected_dependencies_and_emits_aggregate(
         "indexed_segment_count": 0,
     }
     assert settings_values["knowledge_root"] == catalogue_path.parent
+
+
+def test_worker_suppresses_only_expected_dependency_warnings() -> None:
+    with pytest.warns(UserWarning, match="unrelated warning") as caught_warnings:
+        with worker._suppress_expected_worker_warnings():
+            warnings.warn_explicit(
+                "Api key is used with an insecure connection.",
+                UserWarning,
+                filename="composition_root.py",
+                lineno=1,
+                module="cinegraph.bootstrap.composition_root",
+            )
+            warnings.warn_explicit(
+                "Cannot enable progress bars: environment variable `HF_HUB_DISABLE_PROGRESS_BARS=1` "
+                "is set and has priority.",
+                UserWarning,
+                filename="tqdm.py",
+                lineno=1,
+                module="huggingface_hub.utils.tqdm",
+            )
+            warnings.warn_explicit(
+                "unrelated warning",
+                UserWarning,
+                filename="other.py",
+                lineno=1,
+                module="other.module",
+            )
+
+    assert [str(warning.message) for warning in caught_warnings] == ["unrelated warning"]
 
 
 def test_main_returns_generic_error_without_private_details(

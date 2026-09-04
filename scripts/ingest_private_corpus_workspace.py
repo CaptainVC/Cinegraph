@@ -8,9 +8,11 @@ import os
 import re
 import stat
 import sys
+import warnings
 from collections.abc import Callable
+from contextlib import contextmanager
 from pathlib import Path, PurePosixPath
-from typing import Final, NoReturn, cast
+from typing import Final, Iterator, NoReturn, cast
 
 from cinegraph.adapters.catalogue import (
     JsonCatalogueManifestLoader,
@@ -31,6 +33,7 @@ from cinegraph.common.private_corpus_policy import (
     DEFAULT_PRIVATE_CORPUS_BUNDLE_CONFIGURATION,
 )
 from cinegraph.config import DEFAULT_CORPUS_LAYOUT, CinegraphRuntimeSettings
+from cinegraph.config.corpus_worker import CORPUS_WORKER_WARNING_FILTERS
 from cinegraph.ports.catalogue import LoadedCatalogueManifest
 
 WORKSPACE_ROOT: Final = Path("/private-corpus")
@@ -44,6 +47,21 @@ PROCESSING_UID: Final = 10001
 PROCESSING_GID: Final = 10001
 MAX_OUTPUT_BYTES: Final = 4096
 SHA256_PATTERN: Final = re.compile(r"^[0-9a-f]{64}$")
+
+
+@contextmanager
+def _suppress_expected_worker_warnings() -> Iterator[None]:
+    """Hide only dependency warnings known to be safe for this one-shot."""
+
+    with warnings.catch_warnings():
+        for message, module in CORPUS_WORKER_WARNING_FILTERS:
+            warnings.filterwarnings(
+                "ignore",
+                message=message,
+                category=UserWarning,
+                module=module,
+            )
+        yield
 
 
 class WorkspaceError(RuntimeError):
@@ -399,15 +417,16 @@ def ingest_workspace(
     )
     if len(batch.items) != len(cast(list[object], manifest["files"])) - 1:
         _fail()
-    settings = settings_factory(_env_file=None, knowledge_root=catalogue_path.parent)
-    runtime = composition_root_factory(settings)
-    try:
-        runtime.provision_transcript_collection()
-        result = runtime.reviewed_corpus_ingestion_service.execute(
-            IngestReviewedCorpusCommand(batch=batch)
-        )
-    finally:
-        runtime.close()
+    with _suppress_expected_worker_warnings():
+        settings = settings_factory(_env_file=None, knowledge_root=catalogue_path.parent)
+        runtime = composition_root_factory(settings)
+        try:
+            runtime.provision_transcript_collection()
+            result = runtime.reviewed_corpus_ingestion_service.execute(
+                IngestReviewedCorpusCommand(batch=batch)
+            )
+        finally:
+            runtime.close()
     if not isinstance(result, IngestReviewedCorpusResult):
         # Keep this check permissive for injectable test doubles while requiring the
         # one application result property used by the public aggregate.

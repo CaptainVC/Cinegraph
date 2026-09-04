@@ -55,7 +55,8 @@ not automatically pruned.
 ## Consequences
 
 The boundary is intentionally narrow and Season 1-specific. Season 2 speaker review
-is deferred to Phase 56; no Phase 55 command accepts it. Processing does not transfer
+is deferred to Phase 57; no Phase 55 command accepts it. Phase 56 is limited to
+hardening the accepted worker output contract. Processing does not transfer
 or replace objects, alter the source bundle, restart the application, or run database
 migrations. The deployment's normal runtime remains unable to read the private object
 store.
