@@ -1,8 +1,8 @@
 # Private corpus bundle boundary
 
-Phase 51 defines a deterministic, fail-closed bundle contract for moving a small,
-explicitly selected private corpus set between environments. It does not transport,
-install, or connect to a server. Phase 52 owns transport and installation.
+Phase 51 defines the deterministic bundle. Phase 52 adds a separate synchronous
+operator-to-Dev transport and publishes a verified bundle into an immutable,
+root-private host object. Publication is not review, ingestion, or activation.
 
 ## Build and stage
 
@@ -60,4 +60,74 @@ Do not use GitHub Actions, artifacts, or releases; GHCR images; deployment-key
 reuse; direct Docker named-volume copying; or live-volume mutation as a corpus
 transfer mechanism. Do not put private SRT/PDF files, review ledgers, keys, or
 derived artifacts in Git, images, logs, or releases. A bundle is an audited handoff
-artifact only; Phase 52 will define the approved transport and install procedure.
+artifact only; the Phase 52 procedure below is the only approved transport and
+host-publication path.
+
+## Dev host bootstrap
+
+Generate a dedicated corpus-transfer Ed25519 identity outside the repository. Never
+reuse the deployment identity and never put the corpus private key in GitHub. Through
+the authenticated Hostinger console, place only its public line in a root-controlled
+temporary file. From a clean root-owned checkout exactly matching live `main`, compare
+the independently recorded corpus and deployment public fingerprints, then run:
+
+```bash
+python3 -B -m scripts.bootstrap_corpus_host \
+  --public-key-file <root-owned-corpus-public-key-file> \
+  --expected-key-fingerprint SHA256:<corpus-public-fingerprint> \
+  --expected-deploy-key-fingerprint SHA256:<deployment-public-fingerprint>
+
+python3 -B -m scripts.bootstrap_corpus_host \
+  --public-key-file <root-owned-corpus-public-key-file> \
+  --expected-key-fingerprint SHA256:<corpus-public-fingerprint> \
+  --expected-deploy-key-fingerprint SHA256:<deployment-public-fingerprint> \
+  --check
+```
+
+Existing differing files, accounts, groups, modes, ownership, symlinks, authorization,
+sudoers, or key identities fail closed. After a reviewed helper change reaches live
+`main`, `--refresh-corpus-code` may replace only the two corpus dispatcher/helper
+files; run `--check` immediately afterward. The existing deployment bootstrap and
+key remain unchanged.
+
+## Operator transfer
+
+Create a known-hosts file containing exactly one independently pinned canonical
+Ed25519 host-key line. On Windows, use the Python client rather than PowerShell or cmd
+redirection so all ZIP bytes remain unchanged:
+
+```powershell
+uv run python scripts/transfer_private_corpus.py `
+  --bundle C:\private\staging\reviewed.zip `
+  --identity C:\private\ssh\cinegraph-corpus-dev `
+  --known-hosts C:\private\ssh\known-hosts `
+  --host dev.example.invalid
+```
+
+The example values are placeholders. Do not paste a real host, key, digest, private
+path, or output into Git, a PR, or public logs. The client snapshots and verifies the
+bundle, computes the bytes actually sent, and invokes OpenSSH without a shell. The
+remote command is always the metadata-free literal `receive-v1`; the bounded header
+and binary archive travel only on encrypted stdin.
+
+Success is `installed` or `already_present` plus aggregate purpose/season/count/bytes.
+An exact retry always resends and reverifies the archive and does not alter an existing
+object. A disconnect, timeout, short/long stream, digest mismatch, catalogue mismatch,
+low capacity, archive violation, race, or corrupt replay fails without replacement.
+
+## Recovery and scope
+
+The transfer and deployment locks are taken in that order. No detached receive job is
+created: closing the workstation or losing SSH aborts the receive. Normal failure
+removes only the transaction whose inode the receiver created. After host power loss,
+inspect root-private transaction residue through the provider console and move a
+strictly verified residue to the dedicated quarantine directory before deletion; do
+not use globs or recursive deletion against a computed path.
+
+Final objects are append-only and are not automatically pruned. A later processing
+step must name an exact object digest and reverify catalogue binding. Phase 52 does not
+transfer real data by itself, configure Prod, expose staged objects to containers,
+copy into a Docker volume, run speaker review or ingestion, call OpenAI, mutate
+PostgreSQL/Qdrant, restart the app, change guest entitlements, or configure TLS/DNS.
+Actual Hostinger bootstrap, forced-command probing, and a synthetic then real transfer
+are explicit post-merge operator acceptance actions.

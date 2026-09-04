@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 
-from cinegraph.config import private_corpus_bundle as _bundle_config
-from cinegraph.config.private_corpus_bundle import PrivateCorpusBundleConfiguration
+from cinegraph.common import private_corpus_policy as _bundle_config
+from cinegraph.common.private_corpus_policy import PrivateCorpusBundleConfiguration
 
 _DEFAULT_POLICY = _bundle_config.DEFAULT_PRIVATE_CORPUS_BUNDLE_CONFIGURATION
 BUNDLE_SCHEMA_VERSION = _DEFAULT_POLICY.schema_version
@@ -785,6 +785,18 @@ def _rename_no_replace(source: Path, destination: Path) -> None:
     os.rename(source, destination)
 
 
+def _make_private_parents(root: Path, parent: Path) -> None:
+    """Create and explicitly harden every bundle-owned parent below root."""
+
+    parent.mkdir(parents=True, exist_ok=True, mode=_policy().directory_mode)
+    if os.name == "nt":
+        return
+    current = parent
+    while current != root:
+        current.chmod(_policy().directory_mode)
+        current = current.parent
+
+
 def stage_bundle(*, archive_path: Path, destination: Path) -> BundleResult:
     """Snapshot, verify, and atomically publish into a fresh private staging path."""
     source = Path(archive_path)
@@ -819,9 +831,7 @@ def stage_bundle(*, archive_path: Path, destination: Path) -> BundleResult:
         with zipfile.ZipFile(snapshot, "r") as archive:
             for item in files:
                 output = temp.joinpath(*PurePosixPath(item.path).parts)
-                output.parent.mkdir(parents=True, exist_ok=True, mode=_policy().directory_mode)
-                if os.name != "nt":
-                    output.parent.chmod(_policy().directory_mode)
+                _make_private_parents(temp, output.parent)
                 content = _verified_member_bytes(archive, archive.getinfo(item.path), item)
                 _write_private_file(output, content)
         snapshot.unlink()
