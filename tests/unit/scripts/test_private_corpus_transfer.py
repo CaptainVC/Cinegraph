@@ -158,6 +158,10 @@ def _host_roots(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         f_favail=100_000,
     )
     monkeypatch.setattr(receiver.os, "statvfs", lambda _: capacity, raising=False)
+    # The production receiver requires real root ownership. CI intentionally runs
+    # unprivileged, so this fixture supplies the already-verified ownership boundary
+    # while exercising the remaining filesystem and transaction behavior.
+    monkeypatch.setattr(receiver, "_root_owned", lambda _: True)
     monkeypatch.setattr(receiver, "_active_catalogue", _receiver_catalogue)
     monkeypatch.setattr(receiver, "_require_host_hierarchy", lambda: None)
     monkeypatch.setattr(receiver, "_fsync_tree", lambda _: None)
@@ -662,6 +666,7 @@ def test_active_catalogue_parses_the_securely_read_release_bytes(
         pytest.skip("directory symlinks are unavailable")
     monkeypatch.setattr(host_contract, "RELEASES_ROOT", releases)
     monkeypatch.setattr(host_contract, "CURRENT_LINK", current)
+    monkeypatch.setattr(receiver, "_root_owned", lambda _: True)
     assert receiver._active_catalogue() == _receiver_catalogue()
 
 
