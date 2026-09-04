@@ -122,6 +122,16 @@ returns `SSH command is not an authorized deployment request`; a password prompt
 generic public-key denial, shell, or any other result fails the activation check. Do
 not send a syntactically valid deploy command during this probe.
 
+The Dev workflow gives OpenSSH three bounded connection-establishment attempts,
+with a ten-second timeout per attempt, to absorb a transient runner-to-VPS TCP/22
+timeout. This is intentionally transport-level resilience: there is one SSH
+process and one remote deployment command, with no retry loop around an
+authenticated session. During a long migration or warmup, a fifteen-second
+server-alive probe and two missed responses protect the session from a dead
+connection without replaying the command. These settings are committed as
+workflow transport-policy constants; change them only with the pinned-SSH
+contract tests and ADR rationale updated together.
+
 The root helper reads only the canonical SHA and digest from the forced dispatcher,
 checks out the public repository at the attested SHA, creates a
 candidate env changing only the digest and release SHA, validates it, pulls the

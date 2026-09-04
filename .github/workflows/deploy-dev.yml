@@ -15,6 +15,12 @@ permissions:
 
 env:
   CINEGRAPH_IMAGE_NAME: ghcr.io/captainvc/cinegraph
+  # SSH transport policy. ConnectionAttempts applies only before a session is
+  # established; the workflow deliberately invokes the remote deployment once.
+  CINEGRAPH_SSH_CONNECTION_ATTEMPTS: 3
+  CINEGRAPH_SSH_CONNECT_TIMEOUT_SECONDS: 10
+  CINEGRAPH_SSH_SERVER_ALIVE_INTERVAL_SECONDS: 15
+  CINEGRAPH_SSH_SERVER_ALIVE_COUNT_MAX: 2
 
 jobs:
   deploy-dev:
@@ -150,8 +156,9 @@ jobs:
             -o BatchMode=yes \
             -o StrictHostKeyChecking=yes \
             -o UserKnownHostsFile="$known_hosts_file" \
-            -o ConnectTimeout=10 \
-            -o ServerAliveInterval=15 \
-            -o ServerAliveCountMax=2 \
+            -o "ConnectionAttempts=${CINEGRAPH_SSH_CONNECTION_ATTEMPTS}" \
+            -o "ConnectTimeout=${CINEGRAPH_SSH_CONNECT_TIMEOUT_SECONDS}" \
+            -o "ServerAliveInterval=${CINEGRAPH_SSH_SERVER_ALIVE_INTERVAL_SECONDS}" \
+            -o "ServerAliveCountMax=${CINEGRAPH_SSH_SERVER_ALIVE_COUNT_MAX}" \
             "$CINEGRAPH_DEV_USER@$CINEGRAPH_DEV_HOST" \
             "$remote_command"
