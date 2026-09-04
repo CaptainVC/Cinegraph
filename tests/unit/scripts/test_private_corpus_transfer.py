@@ -474,7 +474,7 @@ def test_client_streams_canonical_header_and_exact_binary_without_a_shell(
     identity.write_bytes(b"private-test-fixture")
     identity.chmod(0o600)
     host = "dev.example.invalid"
-    known_hosts = tmp_path / "known_hosts"
+    known_hosts = tmp_path / "known hosts"
     known_hosts.write_text(f"{host} {_public_key()}\n", encoding="utf-8")
     observed: dict[str, object] = {}
     response = host_contract.canonical_json(
@@ -506,6 +506,7 @@ def test_client_streams_canonical_header_and_exact_binary_without_a_shell(
     assert arguments[-1] == host_contract.RECEIVE_COMMAND
     assert f"{host_contract.CORPUS_USER}@{host}" in arguments
     assert str(archive) not in arguments
+    assert f'UserKnownHostsFile="{known_hosts.as_posix()}"' in arguments
     for option in (
         "StrictHostKeyChecking=yes",
         "IdentitiesOnly=yes",
@@ -555,6 +556,14 @@ def test_client_rejects_noncanonical_known_hosts_without_calling_ssh(
             host="dev.example.invalid",
         )
     assert called is False
+
+
+@pytest.mark.parametrize("unsafe_name", ['known"hosts', "known%hosts", "known$hosts"])
+def test_client_rejects_open_ssh_config_token_paths(
+    tmp_path: Path, unsafe_name: str
+) -> None:
+    with pytest.raises(client.ClientTransferError, match="known-hosts"):
+        client._ssh_config_path(tmp_path / unsafe_name)
 
 
 def test_client_rejects_unbounded_or_malformed_remote_output(
