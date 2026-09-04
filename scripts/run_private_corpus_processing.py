@@ -555,6 +555,8 @@ def _run_worker(release: Path, workspace: Path) -> dict[str, object]:
     arguments = [
         "docker",
         "compose",
+        "--progress",
+        "quiet",
         "--env-file",
         os.fspath(host_contract.DEV_ENV_FILE),
         "--profile",

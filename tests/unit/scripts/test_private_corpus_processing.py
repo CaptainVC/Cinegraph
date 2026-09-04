@@ -184,12 +184,51 @@ def test_worker_command_is_no_shell_read_only_one_shot(
         processor._run_worker(release, workspace)
     arguments = observed["arguments"]
     assert isinstance(arguments, list)
+    assert arguments[2:4] == ["--progress", "quiet"]
     assert "--no-deps" in arguments
     assert "--no-TTY" in arguments
     assert arguments[arguments.index("--pull") + 1] == "never"
     assert "--user" in arguments
     assert f"{workspace.as_posix()}:/private-corpus:ro" in arguments
     assert observed["kwargs"]["shell"] is False
+
+
+def test_worker_still_rejects_any_unexpected_stderr(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = tmp_path / "release"
+    (release / "deploy").mkdir(parents=True)
+    (release / "deploy/compose.yaml").write_text("services: {}", encoding="utf-8")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+    aggregate = {
+        "episode_count": 24,
+        "file_count": 25,
+        "indexed_segment_count": 100,
+        "mode": "ingest-reviewed",
+        "purpose": "reviewed_ingestion",
+        "season_number": 1,
+        "total_bytes": 123,
+    }
+
+    class FakeProcess:
+        stdout = io.BytesIO(contract.canonical_json(aggregate))
+        stderr = io.BytesIO(b"unexpected worker warning\n")
+
+        def wait(self, *, timeout: int) -> int:
+            assert timeout == contract.PROCESSING_WORKER_TIMEOUT_SECONDS
+            return 0
+
+        def poll(self) -> int:
+            return 0
+
+        def kill(self) -> None:
+            raise AssertionError("completed process must not be killed")
+
+    monkeypatch.setattr(processor.subprocess, "Popen", lambda *_args, **_kwargs: FakeProcess())
+
+    with pytest.raises(processor.ProcessingError, match="worker failed"):
+        processor._run_worker(release, workspace)
 
 
 def _manifest() -> dict[str, object]:

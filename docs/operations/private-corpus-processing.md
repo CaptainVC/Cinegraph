@@ -66,7 +66,10 @@ active release and object, copies verified members into a deterministic digest-n
 UID/GID-10001 workspace, and mounts that workspace read-only into the
 `corpus-reviewed-ingestion` Compose one-shot. The service runs offline, as an
 unprivileged user, with no OpenAI, identity, or PostgreSQL credential and no provider
-egress. Its Qdrant connection (including its API key when configured) is the narrowly
+egress. Compose progress output is disabled for this machine-readable boundary. The
+worker suppresses only the exact Qdrant internal-HTTP API-key and Hugging Face progress
+configuration warnings expected from this service; any other worker stderr remains a
+failure. Its Qdrant connection (including its API key when configured) is the narrowly
 supplied service configuration; the worker's result is aggregate-only.
 
 Before either operation, the processor requires `CINEGRAPH_RELEASE_SHA` in the
@@ -99,6 +102,7 @@ member names, content, keys, digests, or credentials.
 
 ## Scope
 
-Phase 55 covers reviewed-ingestion Season 1 only. Season 2 speaker review and its
-processing path are deferred to Phase 56. Processing does not transfer bundles,
+Phase 55 covers reviewed-ingestion Season 1 only. Phase 56 hardens the worker's
+machine-readable runtime after live acceptance; Season 2 speaker review and its
+processing path are deferred to Phase 57. Processing does not transfer bundles,
 change guest entitlements, restart the API, run migrations, or alter the source object.

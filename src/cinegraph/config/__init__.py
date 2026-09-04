@@ -33,6 +33,7 @@ from cinegraph.config.authentication import (
     AuthenticationConfiguration,
 )
 from cinegraph.config.corpus import DEFAULT_CORPUS_LAYOUT, CorpusLayoutConfiguration
+from cinegraph.config.corpus_worker import CORPUS_WORKER_WARNING_FILTERS
 from cinegraph.config.database import (
     DEFAULT_DATABASE_CONFIGURATION,
     DatabaseConfiguration,
@@ -147,6 +148,7 @@ __all__ = [
     "AUTHENTICATED_CORPUS_ACCESS_SCOPE_REVISION",
     "DEFAULT_DATABASE_CONFIGURATION",
     "DEFAULT_CORPUS_LAYOUT",
+    "CORPUS_WORKER_WARNING_FILTERS",
     "DEFAULT_EMBEDDING_CONFIGURATION",
     "APP_CACHE_ROOT",
     "FASTEMBED_CACHE_DIR",
