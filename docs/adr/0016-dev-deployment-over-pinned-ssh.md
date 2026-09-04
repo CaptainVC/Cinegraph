@@ -48,3 +48,13 @@ can be retried from the same completed workflow run after remediation; a failed
 migration is not auto-rolled back. ADR-0017 replaces the original direct-script SSH
 transport with a root-owned forced-command dispatcher and helper while preserving
 these activation gates.
+
+The workflow uses OpenSSH `ConnectionAttempts=3` with a ten-second
+`ConnectTimeout`. These are connection-establishment settings: OpenSSH may make
+bounded TCP/22 attempts when a GitHub-hosted runner sees a transient pre-session
+timeout, but the workflow does not wrap the deployment command in a shell retry
+loop and never repeats a command after SSH authentication/session establishment.
+The existing `ServerAliveInterval=15` and `ServerAliveCountMax=2` settings are
+keepalive protection for the potentially long migration and warmup command; they
+do not retry or replay the deployment. All four values are centralized as
+workflow-level transport-policy constants.

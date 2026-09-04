@@ -52,6 +52,17 @@ def test_nested_publisher_event_fixture_preserves_inactive_repository_gate() -> 
 def test_dev_deployment_uses_pinned_ssh_without_tofu_or_private_data_transfer() -> None:
     text = WORKFLOW.read_text(encoding="utf-8")
 
+    assert "CINEGRAPH_SSH_CONNECTION_ATTEMPTS: 3" in text
+    assert "CINEGRAPH_SSH_CONNECT_TIMEOUT_SECONDS: 10" in text
+    assert "CINEGRAPH_SSH_SERVER_ALIVE_INTERVAL_SECONDS: 15" in text
+    assert "CINEGRAPH_SSH_SERVER_ALIVE_COUNT_MAX: 2" in text
+    assert '-o "ConnectionAttempts=${CINEGRAPH_SSH_CONNECTION_ATTEMPTS}"' in text
+    assert '-o "ConnectTimeout=${CINEGRAPH_SSH_CONNECT_TIMEOUT_SECONDS}"' in text
+    assert '-o "ServerAliveInterval=${CINEGRAPH_SSH_SERVER_ALIVE_INTERVAL_SECONDS}"' in text
+    assert '-o "ServerAliveCountMax=${CINEGRAPH_SSH_SERVER_ALIVE_COUNT_MAX}"' in text
+    assert text.count("\n          ssh \\\n") == 1
+    assert "until ssh" not in text
+    assert "while ssh" not in text
     assert "StrictHostKeyChecking=yes" in text
     assert "UserKnownHostsFile=" in text
     assert "IdentitiesOnly=yes" in text
