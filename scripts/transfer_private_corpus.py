@@ -93,6 +93,20 @@ def _validate_known_hosts(path: Path, host: str) -> None:
         raise ClientTransferError("known-hosts input is invalid") from error
 
 
+def _ssh_config_path(path: Path) -> str:
+    """Quote one absolute path for OpenSSH's second config-tokenization pass."""
+
+    value = path.as_posix()
+    if (
+        not path.is_absolute()
+        or not value
+        or any(ord(character) < 32 for character in value)
+        or any(character in value for character in ('"', "\\", "%", "$"))
+    ):
+        raise ClientTransferError("known-hosts input is invalid")
+    return f'"{value}"'
+
+
 def _snapshot_bundle(source: Path, destination: Path) -> tuple[int, str]:
     before = _require_regular(source)
     policy_limit = DEFAULT_PRIVATE_CORPUS_BUNDLE_CONFIGURATION.max_archive_bytes
@@ -155,7 +169,7 @@ def _ssh_arguments(*, ssh: str, identity: Path, known_hosts: Path, host: str) ->
         "-o",
         "StrictHostKeyChecking=yes",
         "-o",
-        f"UserKnownHostsFile={known_hosts}",
+        f"UserKnownHostsFile={_ssh_config_path(known_hosts)}",
         "-o",
         f"GlobalKnownHostsFile={os.devnull}",
         "-o",
