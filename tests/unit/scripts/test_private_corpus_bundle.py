@@ -120,7 +120,8 @@ def test_bundle_is_deterministic_and_stages_with_private_modes(tmp_path: Path) -
     assert not (destination / ".bundle.zip").exists()
     assert (destination / "manifest.json").is_file()
     if os.name != "nt":
-        assert stat.S_IMODE(destination.stat().st_mode) == 0o700
+        staged_directories = (destination, *tuple(path for path in destination.rglob("*") if path.is_dir()))
+        assert all(stat.S_IMODE(path.stat().st_mode) == 0o700 for path in staged_directories)
         staged = destination / REVIEWED_DIRECTORY / "ep.reviewed.srt"
         assert stat.S_IMODE(staged.stat().st_mode) == 0o600
 

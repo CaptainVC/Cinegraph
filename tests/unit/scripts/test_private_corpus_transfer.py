@@ -458,7 +458,7 @@ def test_cleanup_refuses_replaced_transaction_identity(
     transaction = host_contract.TRANSACTIONS_ROOT / ".receive-owned"
     transaction.mkdir()
     metadata = transaction.stat()
-    transaction.rmdir()
+    transaction.rename(host_contract.TRANSACTIONS_ROOT / ".receive-original")
     transaction.mkdir()
     marker = transaction / "preserve"
     marker.write_text("unrelated", encoding="utf-8")
