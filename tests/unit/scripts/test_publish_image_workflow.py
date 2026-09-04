@@ -104,6 +104,30 @@ def test_embedding_warmup_is_cache_only_and_egress_only() -> None:
     assert "scripts/warmup_embeddings.py" in service
 
 
+def test_reviewed_corpus_ingestion_job_is_unprivileged_offline_and_bounded() -> None:
+    text = COMPOSE.read_text(encoding="utf-8")
+    environment = text[
+        text.index("x-corpus-ingestion-environment:") : text.index("services:")
+    ]
+    service_start = text.index("  corpus-reviewed-ingestion:")
+    service = text[service_start : text.index("  postgres:", service_start)]
+
+    assert "profiles: [corpus-processing]" in service
+    assert "image: *cinegraph-image" in service
+    assert 'user: "10001:10001"' in service
+    assert "- backend" in service
+    assert "- egress" not in service
+    assert "OPENAI_API_KEY" not in environment + service
+    assert "CINEGRAPH_DATABASE_URL" not in environment + service
+    assert "read_only: true" in service
+    assert "/tmp:rw,noexec,nosuid,size=64m" in service
+    assert "no-new-privileges:true" in service
+    assert "cap_drop:" in service and "ALL" in service
+    assert 'restart: "no"' in service
+    assert "scripts/ingest_private_corpus_workspace.py" in service
+    assert "/private-corpus" not in service
+
+
 def test_model_download_temp_and_huggingface_caches_use_persistent_volume() -> None:
     text = COMPOSE.read_text(encoding="utf-8")
     app_environment = text[text.index("x-app-environment:") : text.index("services:")]

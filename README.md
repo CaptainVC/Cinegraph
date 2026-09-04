@@ -153,6 +153,13 @@ does not reuse the deployment key, pass corpus metadata in the SSH command, or m
 the application, database, vector store, named volumes, or guest scope. See
 [ADR-0018](docs/adr/0018-private-corpus-vps-handoff.md) and the transfer runbook.
 
+Phase 55 adds a second exact forced command for validating and ingesting the already
+installed reviewed Season 1 object. Bundle bytes are not retransmitted. The locked
+root processor revalidates the immutable object and active catalogue, then runs a
+read-only, unprivileged, backend-only Compose one-shot with no OpenAI, identity, or
+PostgreSQL credential. See [ADR-0019](docs/adr/0019-private-corpus-processing-boundary.md)
+and the [processing runbook](docs/operations/private-corpus-processing.md).
+
 The private corpus remains outside Git. The review workflow reads screenplay PDFs
 and script-aligned SRT files from a caller-provided corpus directory, writes all
 run artifacts beneath that directory, and never modifies the source files.

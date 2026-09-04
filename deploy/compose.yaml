@@ -34,6 +34,19 @@ x-app-environment: &app-environment
   CINEGRAPH_API_PORT: ${CINEGRAPH_API_PORT:?CINEGRAPH_API_PORT is required}
   OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
 
+# The reviewed-corpus ingestion one-shot has no provider egress and receives no
+# OpenAI or identity/PostgreSQL credential. The exact private workspace is added
+# by the root processing helper as one read-only `docker compose run` mount.
+x-corpus-ingestion-environment: &corpus-ingestion-environment
+  <<: *model-cache-environment
+  HF_HUB_OFFLINE: "1"
+  CINEGRAPH_ENVIRONMENT: development
+  CINEGRAPH_KNOWLEDGE_ROOT: /app/knowledge
+  CINEGRAPH_QDRANT_MODE: ${CINEGRAPH_QDRANT_MODE:?CINEGRAPH_QDRANT_MODE is required}
+  CINEGRAPH_QDRANT_URL: ${CINEGRAPH_QDRANT_URL:?CINEGRAPH_QDRANT_URL is required}
+  CINEGRAPH_QDRANT_API_KEY: ${CINEGRAPH_QDRANT_API_KEY-}
+  CINEGRAPH_QDRANT_COLLECTION_NAME: ${CINEGRAPH_QDRANT_COLLECTION_NAME:?CINEGRAPH_QDRANT_COLLECTION_NAME is required}
+
 services:
   app:
     image: &cinegraph-image ${CINEGRAPH_IMAGE:?CINEGRAPH_IMAGE is required}@${CINEGRAPH_IMAGE_DIGEST:?CINEGRAPH_IMAGE_DIGEST is required}
@@ -129,6 +142,28 @@ services:
       qdrant:
         condition: service_started
     command: ["python", "scripts/provision_qdrant_collection.py"]
+
+  corpus-reviewed-ingestion:
+    profiles: [corpus-processing]
+    image: *cinegraph-image
+    user: "10001:10001"
+    environment: *corpus-ingestion-environment
+    networks:
+      - backend
+    volumes:
+      - app-cache:/home/cinegraph/.cache:ro
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: ${CINEGRAPH_CORPUS_INGESTION_MEMORY_LIMIT:-768m}
+    cpus: ${CINEGRAPH_CORPUS_INGESTION_CPU_LIMIT:-1.0}
+    restart: "no"
+    command: ["python", "scripts/ingest_private_corpus_workspace.py"]
 
   postgres:
     image: postgres:16.15-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685

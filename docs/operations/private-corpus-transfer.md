@@ -2,7 +2,8 @@
 
 Phase 51 defines the deterministic bundle. Phase 52 adds a separate synchronous
 operator-to-Dev transport and publishes a verified bundle into an immutable,
-root-private host object. Publication is not review, ingestion, or activation.
+root-private host object. Phase 55 adds the separate synchronous processing boundary;
+publication is not review, ingestion, or activation.
 
 ## Build and stage
 
@@ -86,9 +87,11 @@ python3 -B -m scripts.bootstrap_corpus_host \
 
 Existing differing files, accounts, groups, modes, ownership, symlinks, authorization,
 sudoers, or key identities fail closed. After a reviewed helper change reaches live
-`main`, `--refresh-corpus-code` may replace only the two corpus dispatcher/helper
-files; run `--check` immediately afterward. The existing deployment bootstrap and
-key remain unchanged.
+`main`, `--refresh-corpus-code` may atomically refresh the corpus dispatcher, receive
+and processing helpers, and exact no-argument sudoers contract; it also creates only
+the newly reviewed root-private processing directories when upgrading the legacy
+transfer-only boundary. Run `--check` immediately afterward. The corpus authorization,
+existing objects, deployment bootstrap, and deployment key remain unchanged.
 
 ## Operator transfer
 
@@ -124,8 +127,11 @@ inspect root-private transaction residue through the provider console and move a
 strictly verified residue to the dedicated quarantine directory before deletion; do
 not use globs or recursive deletion against a computed path.
 
-Final objects are append-only and are not automatically pruned. A later processing
-step must name an exact object digest and reverify catalogue binding. Phase 52 does not
+Final objects are append-only and are not automatically pruned. Phase 55 processing
+must name an exact object digest and reverify catalogue binding. It is limited to
+reviewed-ingestion Season 1; Season 2 speaker review is deferred to Phase 56. See
+`docs/operations/private-corpus-processing.md` for the processing request, offline
+Compose worker, deterministic workspace, and retry rules. Phase 52 does not
 transfer real data by itself, configure Prod, expose staged objects to containers,
 copy into a Docker volume, run speaker review or ingestion, call OpenAI, mutate
 PostgreSQL/Qdrant, restart the app, change guest entitlements, or configure TLS/DNS.

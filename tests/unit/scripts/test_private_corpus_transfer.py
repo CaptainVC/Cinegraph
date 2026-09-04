@@ -682,11 +682,16 @@ def test_active_catalogue_parses_the_securely_read_release_bytes(
 def test_static_forced_command_and_helper_are_separate_and_bounded() -> None:
     dispatcher = Path("deploy/remote/corpus-dispatch.sh").read_text(encoding="utf-8")
     helper = Path("deploy/remote/receive-private-corpus.sh").read_text(encoding="utf-8")
+    process_helper = Path("deploy/remote/process-private-corpus.sh").read_text(
+        encoding="utf-8"
+    )
     deployment = Path("deploy/remote/deploy-dispatch.sh").read_text(encoding="utf-8")
     quality = Path(".github/workflows/quality.yml").read_text(encoding="utf-8")
 
-    assert '[[ "${SSH_ORIGINAL_COMMAND-}" == "receive-v1" ]]' in dispatcher
+    assert "receive-v1)" in dispatcher
+    assert "process-v1)" in dispatcher
     assert "sudo -n /usr/local/sbin/cinegraph-receive-private-corpus" in dispatcher
+    assert "sudo -n /usr/local/sbin/cinegraph-process-private-corpus" in dispatcher
     assert "eval" not in dispatcher
     assert "bash -c" not in dispatcher
     assert "scp" not in dispatcher.lower()
@@ -698,8 +703,20 @@ def test_static_forced_command_and_helper_are_separate_and_bounded() -> None:
     assert 'python3 -I -S -B "$receiver"' in helper
     assert "docker" not in helper
     assert "OPENAI_API_KEY" not in helper
+    assert process_helper.index('exec 8>"$TRANSFER_LOCK"') < process_helper.index(
+        'exec 9>"$DEPLOYMENT_LOCK"'
+    ) < process_helper.index('exec 7>"$PROCESSING_LOCK"')
+    assert 'python3 -I -S -B "$processor"' in process_helper
+    assert "SUDO_USER=cinegraph-corpus" in process_helper
+    assert "refs/remotes/origin/main" in process_helper
+    assert "scripts/run_private_corpus_processing.py" in process_helper
+    assert "OPENAI_API_KEY" not in process_helper
+    assert "archive_sha256" not in process_helper
+    assert "eval" not in process_helper
+    assert "bash -c" not in process_helper
     assert "corpus-dispatch.sh" in quality
     assert "receive-private-corpus.sh" in quality
+    assert "process-private-corpus.sh" in quality
 
 
 def test_shell_boundaries_parse_when_bash_is_available() -> None:
@@ -712,6 +729,7 @@ def test_shell_boundaries_parse_when_bash_is_available() -> None:
             "-n",
             "deploy/remote/corpus-dispatch.sh",
             "deploy/remote/receive-private-corpus.sh",
+            "deploy/remote/process-private-corpus.sh",
         ],
         capture_output=True,
         check=False,
