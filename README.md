@@ -147,7 +147,11 @@ readiness unless a caller explicitly requests a safe detail file beneath the cor
 Private corpus handoff is constrained by the [Phase 51 private-corpus bundle
 boundary](docs/operations/private-corpus-transfer.md). Bundles are explicit,
 deterministic, and fail closed; the bundle tools never transfer a whole corpus root
-or mutate a live volume. Transport and installation belong to Phase 52.
+or mutate a live volume. Phase 52 adds a distinct, operator-run, pinned-SSH transfer
+identity that publishes verified bundles as immutable root-private Dev objects. It
+does not reuse the deployment key, pass corpus metadata in the SSH command, or mutate
+the application, database, vector store, named volumes, or guest scope. See
+[ADR-0018](docs/adr/0018-private-corpus-vps-handoff.md) and the transfer runbook.
 
 The private corpus remains outside Git. The review workflow reads screenplay PDFs
 and script-aligned SRT files from a caller-provided corpus directory, writes all
@@ -285,8 +289,8 @@ uv run pre-commit run --all-files
 uv build --wheel
 ```
 
-The verified branch baseline is 87.14% total branch coverage (1,127 passed and 12
-skipped, measured with `pytest-cov` on 2026-09-02). The centralized coverage
+The verified branch baseline is 87.15% total branch coverage (1,178 passed and 14
+skipped, measured with `pytest-cov` on 2026-09-04). The centralized coverage
 configuration floors ordinary (non-browser) tests at 87%, so coverage cannot
 silently regress. Coverage XML and JSON reports are generated locally and uploaded
 by CI. Ruff syntax/error classes, Pyflakes, and import sorting are gated across the

@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Mapping
 
-from cinegraph.config import private_corpus_bundle as _bundle_config
-from cinegraph.config.private_corpus_bundle import PrivateCorpusBundleConfiguration
+from cinegraph.common import private_corpus_policy as _bundle_config
+from cinegraph.common.private_corpus_policy import PrivateCorpusBundleConfiguration
 
 _DEFAULT_POLICY = _bundle_config.DEFAULT_PRIVATE_CORPUS_BUNDLE_CONFIGURATION
 BUNDLE_SCHEMA_VERSION = _DEFAULT_POLICY.schema_version

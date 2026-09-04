@@ -1,5 +1,7 @@
 from dataclasses import dataclass
 
+from cinegraph.common.private_corpus_policy import SCRIPT_PDF_FILENAME_TEMPLATE
+
 
 @dataclass(frozen=True, slots=True)
 class ModelTokenPricing:
@@ -92,7 +94,7 @@ DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
     poll_interval_seconds=30,
     maximum_wait_seconds=86_400,
     calibration_sample_size=100,
-    script_pdf_filename_template="Modern Family S{season:02d} Script.pdf",
+    script_pdf_filename_template=SCRIPT_PDF_FILENAME_TEMPLATE,
     season_directory_glob_template="*season {season}.en",
     aligned_subtitle_glob="*.script-aligned.srt",
     run_directory_name="review-runs",
