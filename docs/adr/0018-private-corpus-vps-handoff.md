@@ -39,10 +39,25 @@ and independently recorded corpus/deployment public fingerprints, refuses identi
 identities, creates only the bounded account/files/directories, and permits helper
 replacement only through explicit reviewed refresh mode.
 
+## Relationship to Phase 55
+
+Phase 55 consumes an exact installed object through the separate synchronous
+`process-v1` boundary. The local processing client sends a canonical request—not the
+bundle bytes again—over encrypted stdin; the root processing boundary revalidates the
+object and catalogue binding, uses a
+deterministic read-only workspace, and runs only the unprivileged offline reviewed-
+ingestion Compose service. It does not mutate the source object. Validation performs
+no Qdrant mutation, while exact ingestion retries are safe because Qdrant IDs are
+deterministic and receipts are digest-keyed. Processing takes locks after transfer and
+deployment in that order, and workstation disconnect can abort the synchronous run.
+Only reviewed-ingestion Season 1 is in scope; Season 2 speaker review is deferred to
+Phase 56. The safe code refresh is `--refresh-corpus-code` followed immediately by
+`--check`.
+
 ## Consequences
 
-The serving API cannot read staged objects. A later phase must define an explicit,
-unprivileged, exact-digest review/ingestion one-shot and revalidate the then-active
+The serving API cannot read staged objects. Phase 55 defines the explicit,
+unprivileged, exact-digest reviewed-ingestion one-shot and revalidates the then-active
 catalogue. Supporting any additional series requires a new bundle schema containing
 an immutable series identity; those corpora must remain authenticated-only.
 

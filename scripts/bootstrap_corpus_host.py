@@ -41,9 +41,14 @@ from scripts.private_corpus_host_contract import (  # noqa: E402
     CORPUS_UID,
     CORPUS_USER,
     DEV_PRIVATE_CORPUS_ROOT,
+    LEGACY_TRANSFER_ONLY_SUDOERS_CONTENT,
     MINIMUM_PYTHON_VERSION,
     OBJECTS_ROOT,
     PRIVATE_CORPUS_ROOT,
+    PROCESS_HELPER_PATH,
+    PROCESSING_RECEIPTS_ROOT,
+    PROCESSING_ROOT,
+    PROCESSOR_REQUIRED_COMMANDS,
     QUARANTINE_ROOT,
     RECEIVER_REQUIRED_COMMANDS,
     TRANSACTIONS_ROOT,
@@ -55,6 +60,7 @@ from scripts.private_corpus_host_contract import (  # noqa: E402
 REPOSITORY_ROOT: Final = Path(__file__).resolve().parents[1]
 SOURCE_DISPATCH: Final = REPOSITORY_ROOT / "deploy/remote/corpus-dispatch.sh"
 SOURCE_HELPER: Final = REPOSITORY_ROOT / "deploy/remote/receive-private-corpus.sh"
+SOURCE_PROCESS_HELPER: Final = REPOSITORY_ROOT / "deploy/remote/process-private-corpus.sh"
 DEPLOY_AUTHORIZED_KEYS: Final = DEPLOY_HOME / ".ssh/authorized_keys"
 FORBIDDEN_GROUP_NAMES: Final = frozenset(
     {"adm", "admin", "docker", "sudo", "wheel", "cinegraph-deploy"}
@@ -87,13 +93,19 @@ DIRECTORY_CONTRACT: Final = (
     ExpectedPath(TRANSACTIONS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(OBJECTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(QUARANTINE_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(PROCESSING_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(PROCESSING_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
 )
 FILE_CONTRACT: Final = (
     ExpectedPath(CORPUS_DISPATCH_PATH, "file", 0, 0, 0o755),
     ExpectedPath(CORPUS_HELPER_PATH, "file", 0, 0, 0o755),
+    ExpectedPath(PROCESS_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(CORPUS_SUDOERS_PATH, "file", 0, 0, 0o440),
     ExpectedPath(CORPUS_AUTHORIZED_KEYS, "file", 0, 0, 0o644),
     ExpectedPath(DEPLOY_AUTHORIZED_KEYS, "file", 0, 0, 0o644),
+)
+REFRESH_ADDED_DIRECTORIES: Final = frozenset(
+    {PROCESSING_ROOT, PROCESSING_RECEIPTS_ROOT}
 )
 
 
@@ -104,11 +116,13 @@ def _validate_platform_and_tools() -> None:
         raise BootstrapError("corpus host Python is below the supported version")
     if not hasattr(os, "geteuid") or os.geteuid() != 0:
         raise BootstrapError("corpus bootstrap/check must run as root")
-    if any(shutil.which(item, path=SAFE_PATH) is None for item in RECEIVER_REQUIRED_COMMANDS):
+    required_runtime_commands = RECEIVER_REQUIRED_COMMANDS + PROCESSOR_REQUIRED_COMMANDS
+    if any(shutil.which(item, path=SAFE_PATH) is None for item in required_runtime_commands):
         raise BootstrapError("a required corpus host command is missing")
     for command in ("getent", "groupadd", "install", "ssh-keygen", "useradd", "visudo"):
         if shutil.which(command, path=SAFE_PATH) is None:
             raise BootstrapError("a required corpus bootstrap command is missing")
+    bootstrap_dev_host._require_success(["docker", "compose", "version"])
 
 
 def _public_key(path: Path) -> str:
@@ -248,29 +262,52 @@ def _managed_content(corpus_public_key: str) -> dict[Path, bytes]:
     return {
         CORPUS_DISPATCH_PATH: _read_source(SOURCE_DISPATCH),
         CORPUS_HELPER_PATH: _read_source(SOURCE_HELPER),
+        PROCESS_HELPER_PATH: _read_source(SOURCE_PROCESS_HELPER),
         CORPUS_SUDOERS_PATH: CORPUS_SUDOERS_CONTENT.encode("utf-8"),
         CORPUS_AUTHORIZED_KEYS: corpus_authorized_key_entry(corpus_public_key).encode("utf-8"),
     }
 
 
-def _ensure_host_files(corpus_public_key: str, *, apply: bool, refresh_corpus_code: bool) -> None:
+def _preflight_refresh_host_files(
+    corpus_public_key: str,
+) -> tuple[dict[Path, bytes], dict[Path, bytes]]:
     managed = _managed_content(corpus_public_key)
     by_path = {item.path: item for item in FILE_CONTRACT}
+    installed: dict[Path, bytes] = {}
+    for path, content in managed.items():
+        if path == PROCESS_HELPER_PATH and not path.exists() and not path.is_symlink():
+            continue
+        bootstrap_dev_host._verify_path(by_path[path])
+        installed[path] = path.read_bytes()
+        if path == CORPUS_AUTHORIZED_KEYS and installed[path] != content:
+            raise BootstrapError("corpus authorization differs from the reviewed key")
+        if path == CORPUS_SUDOERS_PATH and installed[path] not in {
+            content,
+            LEGACY_TRANSFER_ONLY_SUDOERS_CONTENT.encode("utf-8"),
+        }:
+            raise BootstrapError("corpus sudoers differs from a supported contract")
+    _validate_sudoers_candidate(managed[CORPUS_SUDOERS_PATH])
+    return managed, installed
+
+
+def _ensure_host_files(corpus_public_key: str, *, apply: bool, refresh_corpus_code: bool) -> None:
+    by_path = {item.path: item for item in FILE_CONTRACT}
     if refresh_corpus_code:
-        installed: dict[Path, bytes] = {}
-        for path, content in managed.items():
-            bootstrap_dev_host._verify_path(by_path[path])
-            installed[path] = path.read_bytes()
-            if (
-                path not in {CORPUS_DISPATCH_PATH, CORPUS_HELPER_PATH}
-                and installed[path] != content
-            ):
-                raise BootstrapError("non-helper corpus host state differs")
-        bootstrap_dev_host._require_success(["visudo", "-cf", str(CORPUS_SUDOERS_PATH)])
-        for path in (CORPUS_DISPATCH_PATH, CORPUS_HELPER_PATH):
-            if installed[path] != managed[path]:
+        managed, installed = _preflight_refresh_host_files(corpus_public_key)
+        # Install the inert helper and its grant before publishing the dispatcher
+        # that can reach it, so interruption remains fail-closed.
+        for path in (
+            CORPUS_HELPER_PATH,
+            PROCESS_HELPER_PATH,
+            CORPUS_SUDOERS_PATH,
+            CORPUS_DISPATCH_PATH,
+        ):
+            if path not in installed:
+                bootstrap_dev_host._ensure_exact_file(by_path[path], managed[path], apply=True)
+            elif installed[path] != managed[path]:
                 bootstrap_dev_host._replace_exact_file(by_path[path], managed[path])
     else:
+        managed = _managed_content(corpus_public_key)
         if apply and not CORPUS_SUDOERS_PATH.exists() and not CORPUS_SUDOERS_PATH.is_symlink():
             _validate_sudoers_candidate(managed[CORPUS_SUDOERS_PATH])
         for path, content in managed.items():
@@ -308,8 +345,19 @@ def bootstrap(
             raise BootstrapError("corpus account is missing")
         _create_account()
     _verify_account()
+    if refresh_corpus_code:
+        # Perform every source, authorization, and sudoers check before creating
+        # the newly introduced processing directories.
+        _preflight_refresh_host_files(corpus_key)
     for expected in DIRECTORY_CONTRACT:
-        if check or refresh_corpus_code or expected.path == Path("/opt/cinegraph/shared"):
+        if (
+            refresh_corpus_code
+            and expected.path in REFRESH_ADDED_DIRECTORIES
+            and not expected.path.exists()
+            and not expected.path.is_symlink()
+        ):
+            bootstrap_dev_host._create_directory(expected)
+        elif check or refresh_corpus_code or expected.path == Path("/opt/cinegraph/shared"):
             bootstrap_dev_host._verify_path(expected)
         else:
             bootstrap_dev_host._create_directory(expected)

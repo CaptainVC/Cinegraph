@@ -21,6 +21,7 @@ from cinegraph.adapters.qdrant.qdrant_collection_provisioner import (
 )
 from cinegraph.adapters.qdrant.qdrant_transcript_index_writer import (
     QdrantTranscriptIndexWriter,
+    QdrantTranscriptReplacementMode,
 )
 from cinegraph.adapters.qdrant.qdrant_vector_index import QdrantVectorIndex
 from cinegraph.adapters.repository.in_memory.in_memory_transcript_ingestion_repository import (
@@ -131,6 +132,7 @@ class CinegraphCompositionRoot:
                 QdrantTranscriptIndexWriter(
                     self.qdrant_client,
                     self.qdrant_schema,
+                    replacement_mode=QdrantTranscriptReplacementMode.EPISODE_LANGUAGE,
                 ),
             ),
         )

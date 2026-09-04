@@ -8,6 +8,7 @@ from tests.factories import make_episode_ref
 
 from cinegraph.adapters.qdrant.qdrant_transcript_index_writer import (
     QdrantTranscriptIndexWriter,
+    QdrantTranscriptReplacementMode,
 )
 from cinegraph.common.error_messages import QdrantErrorMessages
 from cinegraph.config import DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA
@@ -177,6 +178,107 @@ def test_replacement_upserts_new_points_before_deleting_retired_source() -> None
         ]
     }
     assert client.calls[1]["wait"] is True
+
+
+def test_episode_language_replacement_upserts_before_deleting_other_source_versions() -> None:
+    client = FakeQdrantClient()
+    new_source_id = uuid4()
+    point = replace(
+        make_point(),
+        payload=replace(make_point().payload, source_version_id=new_source_id),
+    )
+
+    QdrantTranscriptIndexWriter(
+        client,
+        SCHEMA,
+        replacement_mode=QdrantTranscriptReplacementMode.EPISODE_LANGUAGE,
+    ).replace_source_version(new_source_id, None, (point,))
+
+    assert len(client.calls) == 2
+    assert "points" in client.calls[0]
+    selector = client.calls[1]["points_selector"]
+    assert isinstance(selector, models.FilterSelector)
+    assert selector.filter.model_dump(exclude_none=True) == {
+        "must": [
+            {
+                "key": "episode_id",
+                "match": {"value": str(point.payload.episode_id)},
+            },
+            {
+                "key": "language",
+                "match": {"value": Language.ENGLISH.value},
+            },
+        ],
+        "must_not": [
+            {
+                "key": "source_version_id",
+                "match": {"value": str(new_source_id)},
+            }
+        ],
+    }
+    assert client.calls[1]["wait"] is True
+
+
+def test_episode_language_replacement_upsert_failure_never_deletes_existing_points() -> None:
+    class FailingClient(FakeQdrantClient):
+        def upsert(self, **kwargs: Any) -> models.UpdateResult:
+            self.calls.append(kwargs)
+            raise RuntimeError("synthetic upsert failure")
+
+    client = FailingClient()
+    point = make_point()
+
+    with pytest.raises(RuntimeError, match="synthetic upsert failure"):
+        QdrantTranscriptIndexWriter(
+            client,
+            SCHEMA,
+            replacement_mode=QdrantTranscriptReplacementMode.EPISODE_LANGUAGE,
+        ).replace_source_version(SOURCE_VERSION_ID, None, (point,))
+
+    assert len(client.calls) == 1
+    assert "points" in client.calls[0]
+
+
+def test_episode_language_replacement_rejects_mismatched_episode_before_qdrant_calls() -> None:
+    client = FakeQdrantClient()
+    first = make_point(segment_id=uuid4())
+    second = replace(
+        make_point(segment_id=uuid4()),
+        payload=replace(make_point().payload, episode_id=uuid4()),
+    )
+
+    with pytest.raises(
+        InvalidModelError,
+        match=QdrantErrorMessages.SOURCE_VERSION_POINTS_MUST_SHARE_EPISODE_AND_LANGUAGE,
+    ):
+        QdrantTranscriptIndexWriter(
+            client,
+            SCHEMA,
+            replacement_mode=QdrantTranscriptReplacementMode.EPISODE_LANGUAGE,
+        ).replace_source_version(SOURCE_VERSION_ID, None, (first, second))
+
+    assert client.calls == []
+
+
+def test_episode_language_replacement_rejects_mismatched_language_before_qdrant_calls() -> None:
+    client = FakeQdrantClient()
+    first = make_point(segment_id=uuid4())
+    second = replace(
+        make_point(segment_id=uuid4()),
+        payload=replace(make_point().payload, language="fr"),
+    )
+
+    with pytest.raises(
+        InvalidModelError,
+        match=QdrantErrorMessages.SOURCE_VERSION_POINTS_MUST_SHARE_EPISODE_AND_LANGUAGE,
+    ):
+        QdrantTranscriptIndexWriter(
+            client,
+            SCHEMA,
+            replacement_mode=QdrantTranscriptReplacementMode.EPISODE_LANGUAGE,
+        ).replace_source_version(SOURCE_VERSION_ID, None, (first, second))
+
+    assert client.calls == []
 
 
 def test_empty_replacement_still_deletes_retired_source() -> None:

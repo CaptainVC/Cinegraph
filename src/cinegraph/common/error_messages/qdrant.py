@@ -3,6 +3,9 @@ class QdrantErrorMessages:
     SOURCE_VERSION_POINT_MUST_MATCH_NEW = (
         "Every replacement point must belong to the new source version."
     )
+    SOURCE_VERSION_POINTS_MUST_SHARE_EPISODE_AND_LANGUAGE = (
+        "Episode-language replacement points must share one episode and language."
+    )
     SOURCE_VERSION_POINTS_MUST_BE_UNIQUE = "Replacement chunk IDs must be unique."
     SOURCE_VERSION_POINT_REVISION_MUST_MATCH = (
         "Replacement point index revision must match the current revision."

@@ -1,5 +1,9 @@
 from pathlib import Path
 
+from cinegraph.adapters.qdrant.qdrant_transcript_index_writer import (
+    QdrantTranscriptIndexWriter,
+    QdrantTranscriptReplacementMode,
+)
 from cinegraph.bootstrap import CinegraphCompositionRoot
 from cinegraph.config import CinegraphRuntimeSettings
 
@@ -59,5 +63,8 @@ def test_composition_root_lazily_reuses_injected_client_and_encoder() -> None:
     assert runtime.reviewed_corpus_ingestion_service is (
         runtime.reviewed_corpus_ingestion_service
     )
+    reviewed_writer = runtime.reviewed_corpus_ingestion_service._transcript_indexing._writer
+    assert isinstance(reviewed_writer, QdrantTranscriptIndexWriter)
+    assert reviewed_writer._replacement_mode is QdrantTranscriptReplacementMode.EPISODE_LANGUAGE
     assert client_calls == [settings]
     assert encoder_calls == [True]

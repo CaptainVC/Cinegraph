@@ -29,6 +29,12 @@ def test_corpus_host_contract_is_distinct_and_root_private() -> None:
     assert contract.QUARANTINE_ROOT.parent == contract.DEV_PRIVATE_CORPUS_ROOT
     assert "cinegraph-deploy-dev" not in contract.CORPUS_SUDOERS_CONTENT
     assert contract.CORPUS_HELPER_PATH.as_posix() in contract.CORPUS_SUDOERS_CONTENT
+    assert contract.PROCESS_HELPER_PATH.as_posix() in contract.CORPUS_SUDOERS_CONTENT
+    assert contract.PROCESS_COMMAND == "process-v1"
+    assert contract.PROCESSING_ROOT.parent == contract.DEV_PRIVATE_CORPUS_ROOT
+    assert contract.PROCESSING_RECEIPTS_ROOT.parent == contract.PROCESSING_ROOT
+    assert contract.PROCESSING_LOCK.parent == contract.DEV_PRIVATE_CORPUS_ROOT
+    assert contract.PROCESSOR_REQUIRED_COMMANDS == ("docker",)
     assert '""' in contract.CORPUS_SUDOERS_CONTENT
 
 
@@ -141,6 +147,7 @@ def test_bootstrap_contract_manages_only_corpus_paths() -> None:
     paths = {item.path for item in bootstrap_corpus_host.FILE_CONTRACT}
     assert contract.CORPUS_DISPATCH_PATH in paths
     assert contract.CORPUS_HELPER_PATH in paths
+    assert contract.PROCESS_HELPER_PATH in paths
     assert contract.CORPUS_SUDOERS_PATH in paths
     assert contract.CORPUS_AUTHORIZED_KEYS in paths
     assert Path("/usr/local/libexec/cinegraph-deploy-dispatch") not in paths
@@ -170,3 +177,106 @@ def test_existing_deployment_boundary_was_not_given_a_corpus_command() -> None:
     assert "cinegraph-corpus" not in dispatcher
     assert "receive-v1" not in bootstrap
     assert "cinegraph-corpus" not in bootstrap
+
+
+def test_refresh_upgrades_transfer_only_boundary_in_fail_closed_order(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dispatch = tmp_path / "dispatch"
+    receive_helper = tmp_path / "receive"
+    process_helper = tmp_path / "process"
+    sudoers = tmp_path / "sudoers"
+    authorized_keys = tmp_path / "authorized_keys"
+    managed = {
+        dispatch: b"new-dispatch",
+        receive_helper: b"new-receive",
+        process_helper: b"new-process",
+        sudoers: contract.CORPUS_SUDOERS_CONTENT.encode("utf-8"),
+        authorized_keys: b"reviewed-key",
+    }
+    for path, content in (
+        (dispatch, b"old-dispatch"),
+        (receive_helper, b"old-receive"),
+        (sudoers, contract.LEGACY_TRANSFER_ONLY_SUDOERS_CONTENT.encode("utf-8")),
+        (authorized_keys, b"reviewed-key"),
+    ):
+        path.write_bytes(content)
+
+    monkeypatch.setattr(bootstrap_corpus_host, "CORPUS_DISPATCH_PATH", dispatch)
+    monkeypatch.setattr(bootstrap_corpus_host, "CORPUS_HELPER_PATH", receive_helper)
+    monkeypatch.setattr(bootstrap_corpus_host, "PROCESS_HELPER_PATH", process_helper)
+    monkeypatch.setattr(bootstrap_corpus_host, "CORPUS_SUDOERS_PATH", sudoers)
+    monkeypatch.setattr(bootstrap_corpus_host, "CORPUS_AUTHORIZED_KEYS", authorized_keys)
+    monkeypatch.setattr(bootstrap_corpus_host, "_managed_content", lambda _key: managed)
+    monkeypatch.setattr(
+        bootstrap_corpus_host,
+        "FILE_CONTRACT",
+        tuple(
+            bootstrap_corpus_host.ExpectedPath(path, "file", 0, 0, 0o755)
+            for path in managed
+        ),
+    )
+    monkeypatch.setattr(bootstrap_corpus_host.bootstrap_dev_host, "_verify_path", lambda _: None)
+    monkeypatch.setattr(bootstrap_corpus_host, "_validate_sudoers_candidate", lambda _: None)
+    monkeypatch.setattr(
+        bootstrap_corpus_host.bootstrap_dev_host,
+        "_require_success",
+        lambda _command: None,
+    )
+    mutations: list[tuple[str, Path]] = []
+
+    def replace(expected: bootstrap_corpus_host.ExpectedPath, content: bytes) -> None:
+        mutations.append(("replace", expected.path))
+        expected.path.write_bytes(content)
+
+    def ensure(
+        expected: bootstrap_corpus_host.ExpectedPath, content: bytes, *, apply: bool
+    ) -> None:
+        if apply:
+            mutations.append(("install", expected.path))
+            expected.path.write_bytes(content)
+        assert expected.path.read_bytes() == content
+
+    monkeypatch.setattr(bootstrap_corpus_host.bootstrap_dev_host, "_replace_exact_file", replace)
+    monkeypatch.setattr(bootstrap_corpus_host.bootstrap_dev_host, "_ensure_exact_file", ensure)
+
+    bootstrap_corpus_host._ensure_host_files(
+        "unused", apply=True, refresh_corpus_code=True
+    )
+
+    assert mutations == [
+        ("replace", receive_helper),
+        ("install", process_helper),
+        ("replace", sudoers),
+        ("replace", dispatch),
+    ]
+
+
+def test_refresh_preflights_existing_boundary_before_creating_processing_directories(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    corpus_key = _public_key(b"x")
+    deploy_key = _public_key(b"y")
+    _mock_bootstrap_boundary(monkeypatch, corpus_key=corpus_key, deploy_key=deploy_key)
+    processing = tmp_path / "processing"
+    monkeypatch.setattr(
+        bootstrap_corpus_host,
+        "DIRECTORY_CONTRACT",
+        (bootstrap_corpus_host.ExpectedPath(processing, "directory", 0, 0, 0o700),),
+    )
+    monkeypatch.setattr(
+        bootstrap_corpus_host,
+        "_preflight_refresh_host_files",
+        lambda _key: (_ for _ in ()).throw(BootstrapError("preflight rejected")),
+    )
+
+    with pytest.raises(BootstrapError, match="preflight rejected"):
+        bootstrap_corpus_host.bootstrap(
+            public_key_file=tmp_path / "public",
+            expected_key_fingerprint="SHA256:" + "A" * 43,
+            expected_deploy_key_fingerprint="SHA256:" + "B" * 43,
+            check=False,
+            refresh_corpus_code=True,
+        )
+
+    assert not processing.exists()

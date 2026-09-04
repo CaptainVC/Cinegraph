@@ -214,6 +214,7 @@ jobs:
           deploy/remote/deploy-dev.sh
           deploy/remote/corpus-dispatch.sh
           deploy/remote/receive-private-corpus.sh
+          deploy/remote/process-private-corpus.sh
       - name: Render and build Dev/Prod runtime
         shell: bash
         run: |

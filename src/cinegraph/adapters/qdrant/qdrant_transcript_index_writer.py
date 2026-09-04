@@ -1,3 +1,4 @@
+from enum import StrEnum
 from typing import Protocol
 from uuid import UUID
 
@@ -44,11 +45,26 @@ class QdrantWriteClient(Protocol):
     def delete(self, *, collection_name: str, points_selector: object, wait: bool) -> object: ...
 
 
+class QdrantTranscriptReplacementMode(StrEnum):
+    """Select how a transcript source replacement retires existing points."""
+
+    RETIRED_SOURCE_VERSION = "retired_source_version"
+    EPISODE_LANGUAGE = "episode_language"
+
+
 class QdrantTranscriptIndexWriter(TranscriptIndexWriter):
     # Store the client and collection used for transcript point writes.
-    def __init__(self, client: QdrantWriteClient, schema: QdrantTranscriptCollectionSchema) -> None:
+    def __init__(
+        self,
+        client: QdrantWriteClient,
+        schema: QdrantTranscriptCollectionSchema,
+        replacement_mode: QdrantTranscriptReplacementMode = (
+            QdrantTranscriptReplacementMode.RETIRED_SOURCE_VERSION
+        ),
+    ) -> None:
         self._client = client
         self._schema = schema
+        self._replacement_mode = replacement_mode
 
     # Persist one ordered batch of transcript index points in Qdrant.
     def replace_source_version(
@@ -85,9 +101,23 @@ class QdrantTranscriptIndexWriter(TranscriptIndexWriter):
             for point in points
         ):
             raise InvalidModelError(QdrantErrorMessages.SOURCE_VERSION_POINT_MEMBERS_MUST_BE_VALID)
+        if self._replacement_mode is QdrantTranscriptReplacementMode.EPISODE_LANGUAGE and points:
+            episode_ids = {point.payload.episode_id for point in points}
+            languages = {point.payload.language for point in points}
+            if len(episode_ids) != 1 or len(languages) != 1:
+                raise InvalidModelError(
+                    QdrantErrorMessages.SOURCE_VERSION_POINTS_MUST_SHARE_EPISODE_AND_LANGUAGE
+                )
         if points:
             self._upsert(points)
-        if retired_source_version_id is not None:
+        if self._replacement_mode is QdrantTranscriptReplacementMode.EPISODE_LANGUAGE and points:
+            first_payload = points[0].payload
+            self._delete_episode_language(
+                episode_id=first_payload.episode_id,
+                language=first_payload.language.value,
+                new_source_version_id=new_source_version_id,
+            )
+        elif retired_source_version_id is not None:
             self._delete_retired(retired_source_version_id)
 
     def _upsert(self, points: tuple[TranscriptIndexPoint, ...]) -> None:
@@ -150,3 +180,36 @@ class QdrantTranscriptIndexWriter(TranscriptIndexWriter):
                 points_selector=selector,
                 wait=True,
             )
+
+    def _delete_episode_language(
+        self,
+        *,
+        episode_id: UUID,
+        language: str,
+        new_source_version_id: UUID,
+    ) -> None:
+        selector = models.FilterSelector(
+            filter=models.Filter(
+                must=[
+                    models.FieldCondition(
+                        key=QDRANT_EPISODE_ID_FIELD,
+                        match=models.MatchValue(value=str(episode_id)),
+                    ),
+                    models.FieldCondition(
+                        key=QDRANT_LANGUAGE_FIELD,
+                        match=models.MatchValue(value=language),
+                    ),
+                ],
+                must_not=[
+                    models.FieldCondition(
+                        key=QDRANT_SOURCE_VERSION_ID_FIELD,
+                        match=models.MatchValue(value=str(new_source_version_id)),
+                    )
+                ],
+            )
+        )
+        self._client.delete(
+            collection_name=self._schema.collection_name,
+            points_selector=selector,
+            wait=True,
+        )
