@@ -51,7 +51,7 @@ no Qdrant mutation, while exact ingestion retries are safe because Qdrant IDs ar
 deterministic and receipts are digest-keyed. Processing takes locks after transfer and
 deployment in that order, and workstation disconnect can abort the synchronous run.
 Only reviewed-ingestion Season 1 is in scope; Season 2 speaker review is deferred to
-Phase 57. The safe code refresh is `--refresh-corpus-code` followed immediately by
+Phase 58. The safe code refresh is `--refresh-corpus-code` followed immediately by
 `--check`.
 
 ## Consequences

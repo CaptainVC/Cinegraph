@@ -20,3 +20,6 @@ class ConfigurationErrorMessages:
     DATABASE_POOL_SETTINGS_MUST_BE_POSITIVE = (
         "Database pool settings must be positive integers."
     )
+    EMBEDDING_RUNTIME_SETTINGS_MUST_BE_POSITIVE = (
+        "Embedding runtime settings must be positive integers."
+    )

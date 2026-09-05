@@ -33,7 +33,11 @@ from cinegraph.common.private_corpus_policy import (
     DEFAULT_PRIVATE_CORPUS_BUNDLE_CONFIGURATION,
 )
 from cinegraph.config import DEFAULT_CORPUS_LAYOUT, CinegraphRuntimeSettings
-from cinegraph.config.corpus_worker import CORPUS_WORKER_WARNING_FILTERS
+from cinegraph.config.corpus_worker import (
+    CORPUS_WORKER_EMBEDDING_INFERENCE_THREADS,
+    CORPUS_WORKER_EMBEDDING_MAX_BATCH_SIZE,
+    CORPUS_WORKER_WARNING_FILTERS,
+)
 from cinegraph.ports.catalogue import LoadedCatalogueManifest
 
 WORKSPACE_ROOT: Final = Path("/private-corpus")
@@ -418,7 +422,12 @@ def ingest_workspace(
     if len(batch.items) != len(cast(list[object], manifest["files"])) - 1:
         _fail()
     with _suppress_expected_worker_warnings():
-        settings = settings_factory(_env_file=None, knowledge_root=catalogue_path.parent)
+        settings = settings_factory(
+            _env_file=None,
+            knowledge_root=catalogue_path.parent,
+            embedding_max_batch_size=CORPUS_WORKER_EMBEDDING_MAX_BATCH_SIZE,
+            embedding_inference_threads=CORPUS_WORKER_EMBEDDING_INFERENCE_THREADS,
+        )
         runtime = composition_root_factory(settings)
         try:
             runtime.provision_transcript_collection()

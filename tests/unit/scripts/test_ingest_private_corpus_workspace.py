@@ -220,6 +220,8 @@ def test_ingest_workspace_uses_injected_dependencies_and_emits_aggregate(
         "indexed_segment_count": 0,
     }
     assert settings_values["knowledge_root"] == catalogue_path.parent
+    assert settings_values["embedding_max_batch_size"] == 8
+    assert settings_values["embedding_inference_threads"] == 1
 
 
 def test_worker_suppresses_only_expected_dependency_warnings() -> None:

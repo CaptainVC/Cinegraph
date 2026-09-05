@@ -22,6 +22,44 @@ def test_development_defaults_to_private_local_qdrant() -> None:
     )
     assert settings.qdrant_collection_name == "transcript_segments_development"
     assert settings.qdrant_api_key is None
+    assert settings.embedding_max_batch_size == 64
+    assert settings.embedding_inference_threads == 4
+
+
+@pytest.mark.parametrize(
+    "field",
+    ["embedding_max_batch_size", "embedding_inference_threads"],
+)
+@pytest.mark.parametrize("value", [0, -1, True])
+def test_embedding_runtime_settings_require_positive_integers(field: str, value: object) -> None:
+    with pytest.raises(
+        ValidationError,
+        match=ConfigurationErrorMessages.EMBEDDING_RUNTIME_SETTINGS_MUST_BE_POSITIVE,
+    ):
+        CinegraphRuntimeSettings(_env_file=None, **{field: value})
+
+
+def test_embedding_runtime_settings_load_canonical_environment_integers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("CINEGRAPH_EMBEDDING_MAX_BATCH_SIZE", "8")
+    monkeypatch.setenv("CINEGRAPH_EMBEDDING_INFERENCE_THREADS", "1")
+
+    settings = CinegraphRuntimeSettings(_env_file=None)
+
+    assert settings.embedding_max_batch_size == 8
+    assert settings.embedding_inference_threads == 1
+
+
+@pytest.mark.parametrize("value", [" 1", "1 ", "+1", "1.0", "true"])
+def test_embedding_runtime_settings_reject_noncanonical_environment_values(
+    value: str,
+) -> None:
+    with pytest.raises(
+        ValidationError,
+        match=ConfigurationErrorMessages.EMBEDDING_RUNTIME_SETTINGS_MUST_BE_POSITIVE,
+    ):
+        CinegraphRuntimeSettings(_env_file=None, embedding_max_batch_size=value)
 
 
 def test_remote_settings_load_from_prefixed_environment_file(tmp_path: Path) -> None:

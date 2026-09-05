@@ -50,6 +50,12 @@ uses the same centralized FastEmbed cache read-only and forces Hugging Face offl
 mode on startup; its unrelated temporary files remain on the non-persistent hardened
 tmpfs.
 
+The separate reviewed-corpus one-shot uses batch size 8 and one FastEmbed inference
+thread, with a 1536 MB default memory envelope. These limits are deliberately
+separate from the app/Qdrant/PostgreSQL limits. The prior 768 MB worker envelope
+was observed to exit 137/OOM; resource failures remain fail-closed and are not
+converted into successful processing receipts.
+
 ## First install (operator-run)
 
 Install Docker Engine and the Compose v2 plugin from the vendor-supported packages.

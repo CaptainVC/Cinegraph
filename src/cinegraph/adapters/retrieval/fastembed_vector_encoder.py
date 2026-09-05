@@ -26,7 +26,9 @@ class DenseEmbeddingBackend(Protocol):
     def query_embed(self, text: str) -> Iterable[Iterable[object]]: ...
 
     # Return dense passage embeddings for one batch of texts.
-    def passage_embed(self, texts: tuple[str, ...]) -> Iterable[Iterable[object]]: ...
+    def passage_embed(
+        self, texts: tuple[str, ...], *, batch_size: int
+    ) -> Iterable[Iterable[object]]: ...
 
 
 class SparseEmbeddingBackend(Protocol):
@@ -34,7 +36,9 @@ class SparseEmbeddingBackend(Protocol):
     def query_embed(self, text: str) -> Iterable[SparseEmbeddingResult]: ...
 
     # Return sparse passage embeddings for one batch of texts.
-    def passage_embed(self, texts: tuple[str, ...]) -> Iterable[SparseEmbeddingResult]: ...
+    def passage_embed(
+        self, texts: tuple[str, ...], *, batch_size: int
+    ) -> Iterable[SparseEmbeddingResult]: ...
 
 
 EmbeddingResult = TypeVar("EmbeddingResult")
@@ -54,7 +58,10 @@ class FastEmbedVectorEncoder:
 
     @classmethod
     # Build an encoder using FastEmbed's configured dense and sparse models.
-    def from_default_models(cls) -> "FastEmbedVectorEncoder":
+    def from_default_models(
+        cls,
+        configuration: EmbeddingConfiguration = DEFAULT_EMBEDDING_CONFIGURATION,
+    ) -> "FastEmbedVectorEncoder":
         from fastembed import SparseTextEmbedding, TextEmbedding
 
         cache_path = resolve_fastembed_cache_path()
@@ -63,17 +70,20 @@ class FastEmbedVectorEncoder:
             dense_backend=cast(
                 DenseEmbeddingBackend,
                 TextEmbedding(
-                    model_name=DEFAULT_EMBEDDING_CONFIGURATION.dense_model,
+                    model_name=configuration.dense_model,
+                    threads=configuration.inference_threads,
                     **model_options,
                 ),
             ),
             sparse_backend=cast(
                 SparseEmbeddingBackend,
                 SparseTextEmbedding(
-                    model_name=DEFAULT_EMBEDDING_CONFIGURATION.sparse_model,
+                    model_name=configuration.sparse_model,
+                    threads=configuration.inference_threads,
                     **model_options,
                 ),
             ),
+            configuration=configuration,
         )
 
     # Encode query text into one validated hybrid query vector.
@@ -94,8 +104,16 @@ class FastEmbedVectorEncoder:
         size = self._configuration.max_batch_size
         for offset in range(0, len(texts), size):
             batch = texts[offset : offset + size]
-            dense_results = tuple(self._dense_backend.passage_embed(batch))
-            sparse_results = tuple(self._sparse_backend.passage_embed(batch))
+            dense_results = tuple(
+                self._dense_backend.passage_embed(
+                    batch, batch_size=self._configuration.max_batch_size
+                )
+            )
+            sparse_results = tuple(
+                self._sparse_backend.passage_embed(
+                    batch, batch_size=self._configuration.max_batch_size
+                )
+            )
             if len(dense_results) != len(batch) or len(sparse_results) != len(batch):
                 raise ValueError(
                     RetrievalErrorMessages.VECTOR_ENCODER_BACKEND_RESULT_CARDINALITY_MUST_MATCH

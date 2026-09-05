@@ -17,6 +17,10 @@ Add `--apply` only after validation succeeds. Apply mode checks/provisions the Q
 schema, creates local FastEmbed dense and sparse embeddings, and upserts deterministic
 point IDs. It does not use the OpenAI API. Runtime location, collection, and credentials
 come only from the centralized `CINEGRAPH_QDRANT_*` settings.
+The restricted corpus worker uses a centrally configured FastEmbed batch size of 8
+and one inference thread, with a 1536 MB Compose memory envelope. This bounded
+profile prevents the previous 768 MB exit-137/OOM failure; an exit-137 retry is a
+failed operation and cannot produce a receipt.
 Local development uses Qdrant's embedded storage, which supports the same filters but
 does not create payload indexes. Remote/production mode provisions all filter indexes.
 

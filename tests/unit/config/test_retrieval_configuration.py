@@ -15,6 +15,12 @@ def test_embedding_dense_dimension_requires_a_positive_integer(value: object) ->
         EmbeddingConfiguration("dense", "sparse", 1, 1.0, value)  # type: ignore[arg-type]
 
 
+@pytest.mark.parametrize("value", [0, -1, True])
+def test_embedding_inference_threads_require_positive_integer(value: object) -> None:
+    with pytest.raises(ValueError, match="Embedding inference threads"):
+        EmbeddingConfiguration("dense", "sparse", 1, 1.0, inference_threads=value)  # type: ignore[arg-type]
+
+
 @pytest.mark.parametrize("value", [True, 2.0, "2", None])
 def test_hybrid_candidate_limits_require_positive_integers(value: object) -> None:
     with pytest.raises(
