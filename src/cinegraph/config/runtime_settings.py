@@ -8,6 +8,7 @@ from sqlalchemy.exc import ArgumentError
 
 from cinegraph.common.error_messages import ConfigurationErrorMessages
 from cinegraph.config.database import DEFAULT_DATABASE_CONFIGURATION
+from cinegraph.config.embedding import DEFAULT_EMBEDDING_CONFIGURATION
 
 
 class RuntimeEnvironment(StrEnum):
@@ -48,6 +49,8 @@ class CinegraphRuntimeSettings(BaseSettings):
     qdrant_collection_name: str = "transcript_segments_development"
     api_host: str = "127.0.0.1"
     api_port: int = 8000
+    embedding_max_batch_size: int = DEFAULT_EMBEDDING_CONFIGURATION.max_batch_size
+    embedding_inference_threads: int = DEFAULT_EMBEDDING_CONFIGURATION.inference_threads
 
     @field_validator("qdrant_collection_name")
     @classmethod
@@ -83,6 +86,27 @@ class CinegraphRuntimeSettings(BaseSettings):
         if isinstance(value, bool) or value < 1:
             raise ValueError(
                 ConfigurationErrorMessages.DATABASE_POOL_SETTINGS_MUST_BE_POSITIVE
+            )
+        return value
+
+    @field_validator(
+        "embedding_max_batch_size", "embedding_inference_threads", mode="before"
+    )
+    @classmethod
+    def require_positive_embedding_setting(cls, value: object) -> object:
+        if isinstance(value, bool):
+            raise ValueError(
+                ConfigurationErrorMessages.EMBEDDING_RUNTIME_SETTINGS_MUST_BE_POSITIVE
+            )
+        if isinstance(value, str):
+            if not value.isascii() or not value.isdecimal():
+                raise ValueError(
+                    ConfigurationErrorMessages.EMBEDDING_RUNTIME_SETTINGS_MUST_BE_POSITIVE
+                )
+            value = int(value)
+        if not isinstance(value, int) or value < 1:
+            raise ValueError(
+                ConfigurationErrorMessages.EMBEDDING_RUNTIME_SETTINGS_MUST_BE_POSITIVE
             )
         return value
 

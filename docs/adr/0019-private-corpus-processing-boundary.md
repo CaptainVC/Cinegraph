@@ -55,13 +55,20 @@ not automatically pruned.
 ## Consequences
 
 The boundary is intentionally narrow and Season 1-specific. Season 2 speaker review
-is deferred to Phase 57; no Phase 55 command accepts it. Phase 56 is limited to
+is deferred to Phase 58; no Phase 55 command accepts it. Phase 56 is limited to
 hardening the accepted worker output contract. Processing does not transfer
 or replace objects, alter the source bundle, restart the application, or run database
 migrations. The deployment's normal runtime remains unable to read the private object
 store.
 
 The operator must use the reviewed exact object digest and a pinned known-hosts file.
+
+The restricted ingestion worker uses a centrally controlled FastEmbed profile (batch
+size 8 and one inference thread) and a 1536 MB default container envelope. This was
+added after the 768 MB envelope produced an exit-137 OOM with no process output;
+the corrected profile completed with its aggregate result. An exit-137 failure is
+not accepted as a successful receipt and should be retried only after inspecting
+the worker/container resource event. Worker stderr remains fail-closed.
 After a safe code upgrade, the Hostinger-console bootstrap supports
 `--refresh-corpus-code`, followed by `--check`; those commands must pass before a
 processing request is attempted.

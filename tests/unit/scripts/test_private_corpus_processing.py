@@ -231,6 +231,35 @@ def test_worker_still_rejects_any_unexpected_stderr(
         processor._run_worker(release, workspace)
 
 
+def test_worker_oom_exit_with_empty_streams_remains_a_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    release = tmp_path / "release"
+    (release / "deploy").mkdir(parents=True)
+    (release / "deploy/compose.yaml").write_text("services: {}", encoding="utf-8")
+    workspace = tmp_path / "workspace"
+    workspace.mkdir()
+
+    class FakeProcess:
+        stdout = io.BytesIO()
+        stderr = io.BytesIO()
+
+        def wait(self, *, timeout: int) -> int:
+            assert timeout == contract.PROCESSING_WORKER_TIMEOUT_SECONDS
+            return 137
+
+        def poll(self) -> int:
+            return 137
+
+        def kill(self) -> None:
+            raise AssertionError("completed process must not be killed")
+
+    monkeypatch.setattr(processor.subprocess, "Popen", lambda *_args, **_kwargs: FakeProcess())
+
+    with pytest.raises(processor.ProcessingError, match="worker failed"):
+        processor._run_worker(release, workspace)
+
+
 def _manifest() -> dict[str, object]:
     return {
         "purpose": "reviewed_ingestion",

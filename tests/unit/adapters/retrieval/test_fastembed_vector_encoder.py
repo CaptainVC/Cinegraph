@@ -25,13 +25,15 @@ class FakeBackend:
         self.result = result
         self.query_texts: list[str] = []
         self.passage_texts: list[tuple[str, ...]] = []
+        self.passage_batch_sizes: list[int] = []
 
     def query_embed(self, text: str):
         self.query_texts.append(text)
         return iter((self.result,))
 
-    def passage_embed(self, texts: tuple[str, ...]):
+    def passage_embed(self, texts: tuple[str, ...], *, batch_size: int):
         self.passage_texts.append(texts)
+        self.passage_batch_sizes.append(batch_size)
         return iter(self.result for _ in texts)
 
 
@@ -39,7 +41,7 @@ class EmptyBackend:
     def query_embed(self, text: str):
         return iter(())
 
-    def passage_embed(self, texts: tuple[str, ...]):
+    def passage_embed(self, texts: tuple[str, ...], *, batch_size: int):
         return iter(())
 
 
@@ -159,6 +161,8 @@ def test_document_encoding_batches_once_per_backend_and_preserves_order() -> Non
         ("five",),
     ]
     assert sparse_backend.passage_texts == dense_backend.passage_texts
+    assert dense_backend.passage_batch_sizes == [2, 2, 2]
+    assert sparse_backend.passage_batch_sizes == [2, 2, 2]
 
 
 def test_document_backend_cardinality_mismatch_is_rejected() -> None:
@@ -213,6 +217,37 @@ def test_default_models_use_the_persistent_fastembed_cache(monkeypatch: pytest.M
 
     assert dense_calls[0]["cache_dir"] == "/persistent/fastembed"
     assert sparse_calls[0]["cache_dir"] == "/persistent/fastembed"
+    assert dense_calls[0]["threads"] == 4
+    assert sparse_calls[0]["threads"] == 4
+
+
+def test_default_model_factory_retains_custom_execution_configuration(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class Dense:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    class Sparse:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+    configuration = EmbeddingConfiguration(
+        dense_model="dense",
+        sparse_model="sparse",
+        empty_sparse_fallback_index=1,
+        empty_sparse_fallback_value=1.0,
+        dense_vector_size=3,
+        max_batch_size=8,
+        inference_threads=1,
+    )
+    monkeypatch.setitem(
+        sys.modules, "fastembed", SimpleNamespace(TextEmbedding=Dense, SparseTextEmbedding=Sparse)
+    )
+
+    encoder = FastEmbedVectorEncoder.from_default_models(configuration)
+
+    assert encoder._configuration is configuration
 
 
 def test_default_models_omit_cache_override_when_unset(monkeypatch: pytest.MonkeyPatch) -> None:
