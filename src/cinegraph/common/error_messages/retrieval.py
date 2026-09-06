@@ -16,6 +16,9 @@ class RetrievalErrorMessages:
     QDRANT_RESULT_REVIEW_STATUS_MUST_BE_APPROVED = "Qdrant result review status must be approved."
     EMBEDDING_DENSE_DIMENSION_MUST_BE_POSITIVE = "Embedding dense dimension must be positive."
     EMBEDDING_BATCH_SIZE_MUST_BE_POSITIVE = "Embedding batch size must be positive."
+    EMBEDDING_INFERENCE_THREADS_MUST_BE_POSITIVE = (
+        "Embedding inference threads must be positive."
+    )
     EMBEDDING_MODEL_NAME_MUST_BE_TRIMMED_NONEMPTY = (
         "Embedding model names must be non-empty and trimmed."
     )

@@ -1,5 +1,10 @@
 from pathlib import Path
 
+from cinegraph.config import (
+    CORPUS_WORKER_EMBEDDING_INFERENCE_THREADS,
+    CORPUS_WORKER_EMBEDDING_MAX_BATCH_SIZE,
+)
+
 WORKFLOW = Path(".github/workflows/publish-image.yml")
 QUALITY_WORKFLOW = Path(".github/workflows/quality.yml")
 COMPOSE = Path("deploy/compose.yaml")
@@ -126,6 +131,18 @@ def test_reviewed_corpus_ingestion_job_is_unprivileged_offline_and_bounded() -> 
     assert 'restart: "no"' in service
     assert "scripts/ingest_private_corpus_workspace.py" in service
     assert "/private-corpus" not in service
+    assert 'mem_limit: ${CINEGRAPH_CORPUS_INGESTION_MEMORY_LIMIT:-1536m}' in service
+    assert (
+        f"CINEGRAPH_EMBEDDING_MAX_BATCH_SIZE: {CORPUS_WORKER_EMBEDDING_MAX_BATCH_SIZE}"
+        in environment
+    )
+    assert (
+        f"CINEGRAPH_EMBEDDING_INFERENCE_THREADS: {CORPUS_WORKER_EMBEDDING_INFERENCE_THREADS}"
+        in environment
+    )
+    assert 'OMP_NUM_THREADS: "1"' in environment
+    assert 'OPENBLAS_NUM_THREADS: "1"' in environment
+    assert 'MKL_NUM_THREADS: "1"' in environment
 
 
 def test_model_download_temp_and_huggingface_caches_use_persistent_volume() -> None:

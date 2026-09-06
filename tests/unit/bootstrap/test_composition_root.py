@@ -4,6 +4,7 @@ from cinegraph.adapters.qdrant.qdrant_transcript_index_writer import (
     QdrantTranscriptIndexWriter,
     QdrantTranscriptReplacementMode,
 )
+from cinegraph.adapters.retrieval.fastembed_vector_encoder import FastEmbedVectorEncoder
 from cinegraph.bootstrap import CinegraphCompositionRoot
 from cinegraph.config import CinegraphRuntimeSettings
 
@@ -68,3 +69,30 @@ def test_composition_root_lazily_reuses_injected_client_and_encoder() -> None:
     assert reviewed_writer._replacement_mode is QdrantTranscriptReplacementMode.EPISODE_LANGUAGE
     assert client_calls == [settings]
     assert encoder_calls == [True]
+
+
+def test_composition_root_builds_default_encoder_from_runtime_embedding_settings(
+    monkeypatch,
+) -> None:
+    captured = []
+
+    def factory(cls, configuration):
+        captured.append(configuration)
+        return object()
+
+    monkeypatch.setattr(
+        FastEmbedVectorEncoder,
+        "from_default_models",
+        classmethod(factory),
+    )
+    settings = CinegraphRuntimeSettings(
+        _env_file=None,
+        embedding_max_batch_size=8,
+        embedding_inference_threads=1,
+    )
+
+    encoder = CinegraphCompositionRoot(settings).vector_encoder
+
+    assert encoder is not None
+    assert captured[0].max_batch_size == 8
+    assert captured[0].inference_threads == 1

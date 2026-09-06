@@ -15,3 +15,7 @@ CORPUS_WORKER_WARNING_FILTERS: Final[tuple[tuple[str, str], ...]] = (
         r"^huggingface_hub\.utils\.tqdm$",
     ),
 )
+
+# Keep the restricted one-shot independent of operator model-runtime overrides.
+CORPUS_WORKER_EMBEDDING_MAX_BATCH_SIZE: Final[int] = 8
+CORPUS_WORKER_EMBEDDING_INFERENCE_THREADS: Final[int] = 1

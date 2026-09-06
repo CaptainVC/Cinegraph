@@ -49,6 +49,7 @@ from cinegraph.application.service.search_visible_hybrid_segments_service import
     SearchVisibleHybridSegmentsService,
 )
 from cinegraph.config import (
+    DEFAULT_EMBEDDING_CONFIGURATION,
     DEFAULT_QDRANT_TRANSCRIPT_COLLECTION_SCHEMA,
     CinegraphRuntimeSettings,
     QdrantRuntimeMode,
@@ -79,7 +80,7 @@ class CinegraphCompositionRoot:
         self,
         settings: CinegraphRuntimeSettings,
         qdrant_client_factory: QdrantClientFactory = _default_qdrant_client_factory,
-        vector_encoder_factory: VectorEncoderFactory = (FastEmbedVectorEncoder.from_default_models),
+        vector_encoder_factory: VectorEncoderFactory | None = None,
     ) -> None:
         self.settings = settings
         self._qdrant_client_factory = qdrant_client_factory
@@ -103,7 +104,14 @@ class CinegraphCompositionRoot:
 
     @cached_property
     def vector_encoder(self) -> VectorEncoder:
-        return self._vector_encoder_factory()
+        if self._vector_encoder_factory is not None:
+            return self._vector_encoder_factory()
+        configuration = replace(
+            DEFAULT_EMBEDDING_CONFIGURATION,
+            max_batch_size=self.settings.embedding_max_batch_size,
+            inference_threads=self.settings.embedding_inference_threads,
+        )
+        return FastEmbedVectorEncoder.from_default_models(configuration)
 
     @cached_property
     def hybrid_search_service(self) -> SearchVisibleHybridSegmentsService:

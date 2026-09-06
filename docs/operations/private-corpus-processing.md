@@ -71,6 +71,11 @@ worker suppresses only the exact Qdrant internal-HTTP API-key and Hugging Face p
 configuration warnings expected from this service; any other worker stderr remains a
 failure. Its Qdrant connection (including its API key when configured) is the narrowly
 supplied service configuration; the worker's result is aggregate-only.
+The one-shot uses the centrally configured bounded embedding profile (batch size 8,
+one inference thread) and a 1536 MB default memory envelope. The 768 MB default was
+observed to terminate the worker with exit 137/OOM before it could emit output; the
+corrected profile completed successfully. If a retry again exits 137, treat it as a
+resource failure, inspect the container event, and do not create or accept a receipt.
 
 Before either operation, the processor requires `CINEGRAPH_RELEASE_SHA` in the
 root-private Dev environment to equal the active checkout and verifies that the exact
@@ -104,5 +109,5 @@ member names, content, keys, digests, or credentials.
 
 Phase 55 covers reviewed-ingestion Season 1 only. Phase 56 hardens the worker's
 machine-readable runtime after live acceptance; Season 2 speaker review and its
-processing path are deferred to Phase 57. Processing does not transfer bundles,
+processing path are deferred to Phase 58. Processing does not transfer bundles,
 change guest entitlements, restart the API, run migrations, or alter the source object.

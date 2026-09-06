@@ -39,6 +39,7 @@ class EmbeddingConfiguration:
     empty_sparse_fallback_value: float
     dense_vector_size: int = 384
     max_batch_size: int = 64
+    inference_threads: int = 4
 
     def __post_init__(self) -> None:
         if any(
@@ -73,6 +74,12 @@ class EmbeddingConfiguration:
             or self.max_batch_size < 1
         ):
             raise ValueError(RetrievalErrorMessages.EMBEDDING_BATCH_SIZE_MUST_BE_POSITIVE)
+        if (
+            isinstance(self.inference_threads, bool)
+            or not isinstance(self.inference_threads, int)
+            or self.inference_threads < 1
+        ):
+            raise ValueError(RetrievalErrorMessages.EMBEDDING_INFERENCE_THREADS_MUST_BE_POSITIVE)
 
 
 DEFAULT_EMBEDDING_CONFIGURATION = EmbeddingConfiguration(
