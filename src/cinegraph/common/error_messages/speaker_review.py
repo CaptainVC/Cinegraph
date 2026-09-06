@@ -25,6 +25,9 @@ class SpeakerReviewErrorMessages:
     ACTIVE_BATCH_ID_MISSING = (
         "{stage} review state does not contain the active Batch ID."
     )
+    BATCH_SUBMISSION_RECONCILIATION_REQUIRED = (
+        "A Batch submission is awaiting operator reconciliation; refusing to submit again."
+    )
     OPENAI_KEY_NOT_FOUND = "No labelled OPENAI_API_KEY was found in the source file."
     OPENAI_KEY_DUPLICATED = "More than one OPENAI_API_KEY was found in the source file."
     SECRET_DESTINATION_NOT_PRIVATE = "Secret destination permissions are not private."

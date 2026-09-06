@@ -1,5 +1,9 @@
 import json
+import threading
+from dataclasses import replace
 from pathlib import Path
+
+import pytest
 
 from cinegraph.config import DEFAULT_SPEAKER_REVIEW_CONFIGURATION
 from cinegraph.domain.enums.enum import (
@@ -14,6 +18,7 @@ from cinegraph.domain.models.transcript import (
 from cinegraph.ingestion.speaker_review.workflow import (
     SpeakerReviewRunState,
     SpeakerReviewWorkflow,
+    _submission_path,
 )
 from cinegraph.ports.llm.speaker_review_batch_gateway import (
     BatchSnapshot,
@@ -80,6 +85,61 @@ class CompletedRetryGateway:
         return self.output_text
 
 
+class CountingSubmissionGateway:
+    def __init__(self, fail: bool = False) -> None:
+        self.calls = 0
+        self.fail = fail
+
+    def submit(
+        self, request_path: Path, completion_window: str, metadata: dict[str, str]
+    ) -> BatchSubmission:
+        self.calls += 1
+        if self.fail:
+            raise RuntimeError("ambiguous provider failure")
+        return BatchSubmission("batch-safe", "input-safe", "validating")
+
+    def retrieve(self, batch_id: str) -> BatchSnapshot:
+        raise AssertionError("not used")
+
+    def download_file(self, file_id: str) -> str:
+        raise AssertionError("not used")
+
+
+def _prepared_state(run_id: str = "run-safe") -> SpeakerReviewRunState:
+    return SpeakerReviewRunState(
+        schema_version=2,
+        run_id=run_id,
+        status=SpeakerReviewRunStatus.PREPARED,
+        created_at="2026-08-15T00:00:00+00:00",
+        updated_at="2026-08-15T00:00:00+00:00",
+        candidate_count=1,
+        primary_model="gpt-5.6-luna",
+        adjudication_model="gpt-5.6-terra",
+        prompt_version="speaker-review-v1",
+        maximum_cost_usd=5.0,
+        estimated_primary_cost_usd=1.0,
+        actual_primary_cost_usd=0.0,
+        actual_adjudication_cost_usd=0.0,
+        primary_part_count=1,
+    )
+
+
+def _workflow(
+    gateway: CountingSubmissionGateway,
+    configuration=DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
+) -> SpeakerReviewWorkflow:
+    return SpeakerReviewWorkflow(
+        gateway=gateway,
+        configuration=configuration,
+        primary_model="gpt-5.6-luna",
+        adjudication_model="gpt-5.6-terra",
+        final_review_model="gpt-5.6-sol",
+        primary_reasoning_effort="low",
+        adjudication_reasoning_effort="medium",
+        final_review_reasoning_effort="high",
+    )
+
+
 def test_completed_part_submits_only_the_next_part(tmp_path: Path) -> None:
     gateway = CompletingPartGateway()
     workflow = SpeakerReviewWorkflow(
@@ -123,6 +183,210 @@ def test_completed_part_submits_only_the_next_part(tmp_path: Path) -> None:
     assert updated.primary_input_file_ids == ("input-1", "input-2")
     assert gateway.submitted_paths == [next_path]
     assert (tmp_path / "primary-part-0001-output.jsonl").read_text() == "{}\n"
+
+
+def test_submission_snapshot_is_reused_without_a_second_paid_submit(
+    tmp_path: Path,
+) -> None:
+    gateway = CountingSubmissionGateway()
+    workflow = SpeakerReviewWorkflow(
+        gateway=gateway,
+        configuration=DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
+        primary_model="gpt-5.6-luna",
+        adjudication_model="gpt-5.6-terra",
+        final_review_model="gpt-5.6-sol",
+        primary_reasoning_effort="low",
+        adjudication_reasoning_effort="medium",
+        final_review_reasoning_effort="high",
+    )
+    request = tmp_path / "primary-part-0001-requests.jsonl"
+    request.write_text("{}\n", encoding="utf-8")
+    state = SpeakerReviewRunState(
+        schema_version=2,
+        run_id="run-safe",
+        status=SpeakerReviewRunStatus.PREPARED,
+        created_at="2026-08-15T00:00:00+00:00",
+        updated_at="2026-08-15T00:00:00+00:00",
+        candidate_count=1,
+        primary_model="gpt-5.6-luna",
+        adjudication_model="gpt-5.6-terra",
+        prompt_version="speaker-review-v1",
+        maximum_cost_usd=5.0,
+        estimated_primary_cost_usd=1.0,
+        actual_primary_cost_usd=0.0,
+        actual_adjudication_cost_usd=0.0,
+        primary_part_count=1,
+    )
+    first = workflow.submit_primary(tmp_path, state)
+    second = workflow.submit_primary(tmp_path, state)
+    assert first.primary_batch_id == second.primary_batch_id == "batch-safe"
+    assert gateway.calls == 1
+
+
+def test_ambiguous_submission_intent_blocks_automatic_resubmit(tmp_path: Path) -> None:
+    gateway = CountingSubmissionGateway(fail=True)
+    workflow = SpeakerReviewWorkflow(
+        gateway=gateway,
+        configuration=DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
+        primary_model="gpt-5.6-luna",
+        adjudication_model="gpt-5.6-terra",
+        final_review_model="gpt-5.6-sol",
+        primary_reasoning_effort="low",
+        adjudication_reasoning_effort="medium",
+        final_review_reasoning_effort="high",
+    )
+    (tmp_path / "primary-part-0001-requests.jsonl").write_text("{}\n", encoding="utf-8")
+    state = SpeakerReviewRunState(
+        schema_version=2,
+        run_id="run-ambiguous",
+        status=SpeakerReviewRunStatus.PREPARED,
+        created_at="2026-08-15T00:00:00+00:00",
+        updated_at="2026-08-15T00:00:00+00:00",
+        candidate_count=1,
+        primary_model="gpt-5.6-luna",
+        adjudication_model="gpt-5.6-terra",
+        prompt_version="speaker-review-v1",
+        maximum_cost_usd=5.0,
+        estimated_primary_cost_usd=1.0,
+        actual_primary_cost_usd=0.0,
+        actual_adjudication_cost_usd=0.0,
+        primary_part_count=1,
+    )
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        workflow.submit_primary(tmp_path, state)
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        workflow.submit_primary(tmp_path, state)
+    assert gateway.calls == 1
+
+
+def test_changed_request_and_transport_binding_cannot_reuse_snapshot(
+    tmp_path: Path,
+) -> None:
+    request = tmp_path / "primary-part-0001-requests.jsonl"
+    request.write_text("{}\n", encoding="utf-8")
+    gateway = CountingSubmissionGateway()
+    state = _prepared_state()
+    _workflow(gateway).submit_primary(tmp_path, state)
+    request.write_text('{"changed":true}\n', encoding="utf-8")
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        _workflow(gateway).submit_primary(tmp_path, state)
+    request.write_text("{}\n", encoding="utf-8")
+    changed = replace(
+        DEFAULT_SPEAKER_REVIEW_CONFIGURATION, batch_completion_window="1h"
+    )
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        _workflow(gateway, changed).submit_primary(tmp_path, state)
+    assert gateway.calls == 1
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        b'{"binding":{},"binding":{},"status":"intent"}\n',
+        b"x" * 4097,
+    ],
+)
+def test_malformed_submission_intent_is_fail_closed(tmp_path: Path, raw: bytes) -> None:
+    (tmp_path / "primary-part-0001-requests.jsonl").write_text("{}\n", encoding="utf-8")
+    _submission_path(tmp_path, "primary", 0, "intent").write_bytes(raw)
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        _workflow(CountingSubmissionGateway()).submit_primary(
+            tmp_path, _prepared_state()
+        )
+
+
+def test_orphan_completed_submission_is_rejected(tmp_path: Path) -> None:
+    (tmp_path / "primary-part-0001-requests.jsonl").write_text("{}\n", encoding="utf-8")
+    gateway = CountingSubmissionGateway()
+    _workflow(gateway).submit_primary(tmp_path, _prepared_state())
+    _submission_path(tmp_path, "primary", 0, "intent").unlink()
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        _workflow(gateway).submit_primary(tmp_path, _prepared_state())
+    assert gateway.calls == 1
+
+
+@pytest.mark.parametrize("link_kind", ["symlink", "hardlink"])
+def test_submission_journal_rejects_links(tmp_path: Path, link_kind: str) -> None:
+    (tmp_path / "primary-part-0001-requests.jsonl").write_text("{}\n", encoding="utf-8")
+    target = tmp_path / "outside"
+    target.write_text("x", encoding="utf-8")
+    journal = _submission_path(tmp_path, "primary", 0, "intent")
+    try:
+        if link_kind == "symlink":
+            journal.symlink_to(target)
+        else:
+            journal.hardlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip(f"{link_kind} unavailable")
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        _workflow(CountingSubmissionGateway()).submit_primary(
+            tmp_path, _prepared_state()
+        )
+
+
+def test_intent_must_match_completed_submission(tmp_path: Path) -> None:
+    (tmp_path / "primary-part-0001-requests.jsonl").write_text("{}\n", encoding="utf-8")
+    gateway = CountingSubmissionGateway()
+    state = _prepared_state()
+    _workflow(gateway).submit_primary(tmp_path, state)
+    intent_path = _submission_path(tmp_path, "primary", 0, "intent")
+    payload = json.loads(intent_path.read_text())
+    payload["binding"]["run_id"] = "other-run"
+    intent_path.write_text(
+        json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        _workflow(gateway).submit_primary(tmp_path, state)
+    assert gateway.calls == 1
+
+
+def test_resume_reuses_submission_after_run_state_write_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from cinegraph.ingestion.speaker_review import workflow as workflow_module
+
+    (tmp_path / "primary-part-0001-requests.jsonl").write_text("{}\n", encoding="utf-8")
+    gateway = CountingSubmissionGateway()
+    state = _prepared_state()
+
+    def fail_save(*args: object) -> None:
+        raise OSError("synthetic state-write interruption")
+
+    with monkeypatch.context() as scoped:
+        scoped.setattr(workflow_module, "save_run_state", fail_save)
+        with pytest.raises(OSError, match="synthetic"):
+            _workflow(gateway).submit_primary(tmp_path, state)
+
+    resumed = _workflow(gateway).submit_primary(tmp_path, state)
+    assert resumed.primary_batch_id == "batch-safe"
+    assert gateway.calls == 1
+
+
+def test_concurrent_exact_attempt_has_one_gateway_call(tmp_path: Path) -> None:
+    (tmp_path / "primary-part-0001-requests.jsonl").write_text("{}\n", encoding="utf-8")
+    gateway = CountingSubmissionGateway()
+    state = _prepared_state()
+    results: list[object] = []
+
+    def attempt() -> None:
+        try:
+            results.append(
+                _workflow(gateway)._submit_part(
+                    run_directory=tmp_path, state=state, stage="primary", part_index=0
+                )
+            )
+        except RuntimeError as error:
+            results.append(error)
+
+    threads = [threading.Thread(target=attempt) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    assert gateway.calls == 1
+    assert len(results) == 2
 
 
 def test_terminal_run_retries_only_missing_final_verdict_once(tmp_path: Path) -> None:

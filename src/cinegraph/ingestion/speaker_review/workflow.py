@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -8,6 +10,14 @@ from pathlib import Path
 
 from cinegraph.common.error_messages import SpeakerReviewErrorMessages
 from cinegraph.config import SpeakerReviewConfiguration
+from cinegraph.config.speaker_review_submission import (
+    SUBMISSION_KINDS,
+    SUBMISSION_RECORD_MAX_BYTES,
+    SUBMISSION_REQUEST_MAX_BYTES,
+    SUBMISSION_SCHEMA_VERSION,
+    SUBMISSION_STAGES,
+    submission_filename,
+)
 from cinegraph.domain.enums.enum import (
     SpeakerReviewAction,
     SpeakerReviewDisposition,
@@ -1014,16 +1024,82 @@ class SpeakerReviewWorkflow:
         stage: str,
         part_index: int,
     ) -> BatchSubmission:
-        return self._gateway.submit(
-            _request_part_path(run_directory, stage, part_index),
-            self._configuration.batch_completion_window,
+        request_path = _request_part_path(run_directory, stage, part_index)
+        metadata = {
+            "cinegraph_run_id": state.run_id,
+            "stage": f"speaker-review-{stage}",
+            "part": str(part_index + 1),
+            "prompt_version": state.prompt_version,
+        }
+        request_hash = _bounded_file_sha256(request_path)
+        binding = {
+            "schema_version": SUBMISSION_SCHEMA_VERSION,
+            "request_sha256": request_hash,
+            "run_id": state.run_id,
+            "stage": stage,
+            "part": part_index + 1,
+            "prompt_version": state.prompt_version,
+            "batch_endpoint": self._configuration.batch_endpoint,
+            "completion_window": self._configuration.batch_completion_window,
+        }
+        intent_path = _submission_path(run_directory, stage, part_index, "intent")
+        completed_path = _submission_path(run_directory, stage, part_index, "completed")
+        intent = _read_submission_record(intent_path, completed=False)
+        completed = _read_submission_record(completed_path, completed=True)
+        if completed is not None and intent is None:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        if completed is not None:
+            if completed["binding"] != binding or intent["binding"] != binding:
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+                )
+            return BatchSubmission(
+                str(completed["batch_id"]),
+                str(completed["input_file_id"]),
+                str(completed["status"]),
+            )
+        if intent is not None:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        _write_submission_record(intent_path, {"binding": binding, "status": "intent"})
+        try:
+            submission = self._gateway.submit(
+                request_path,
+                self._configuration.batch_completion_window,
+                metadata,
+            )
+            if (
+                not isinstance(submission, BatchSubmission)
+                or not all(
+                    isinstance(value, str) and value and value.strip() == value
+                    for value in (
+                        submission.batch_id,
+                        submission.input_file_id,
+                        submission.status,
+                    )
+                )
+                or _bounded_file_sha256(request_path) != request_hash
+            ):
+                raise ValueError
+        except Exception:
+            # The intent is deliberately retained: the provider call may have
+            # succeeded even when the client observed an exception.
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            ) from None
+        _write_submission_record(
+            completed_path,
             {
-                "cinegraph_run_id": state.run_id,
-                "stage": f"speaker-review-{stage}",
-                "part": str(part_index + 1),
-                "prompt_version": state.prompt_version,
+                "binding": binding,
+                "batch_id": submission.batch_id,
+                "input_file_id": submission.input_file_id,
+                "status": submission.status,
             },
         )
+        return submission
 
     def _required_snapshot(self, batch_id: str | None) -> BatchSnapshot:
         if batch_id is None:
@@ -1283,6 +1359,226 @@ def _write_text_if_new_or_unchanged(path: Path, content: str) -> None:
         raise FileExistsError(f"Refusing to overwrite different run artifact: {path}")
     if not path.exists():
         path.write_text(content, encoding="utf-8")
+
+
+def _submission_path(
+    run_directory: Path, stage: str, part_index: int, kind: str
+) -> Path:
+    if stage not in SUBMISSION_STAGES or part_index < 0 or kind not in SUBMISSION_KINDS:
+        raise RuntimeError(
+            SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+        )
+    return run_directory / submission_filename(stage, part_index + 1, kind)
+
+
+def _submission_exists(path: Path) -> bool:
+    try:
+        metadata = path.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        raise RuntimeError(
+            SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+        ) from None
+    if not _regular_submission_file(metadata):
+        raise RuntimeError(
+            SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+        )
+    return True
+
+
+def _regular_submission_file(metadata: os.stat_result) -> bool:
+    return (
+        stat.S_ISREG(metadata.st_mode)
+        and metadata.st_nlink == 1
+        and not (
+            getattr(metadata, "st_file_attributes", 0)
+            & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        )
+    )
+
+
+def _submission_file_identity(
+    metadata: os.stat_result,
+) -> tuple[int, int, int, int, int]:
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_nlink,
+    )
+
+
+def _bounded_file_sha256(path: Path) -> str:
+    digest = sha256()
+    try:
+        metadata = path.lstat()
+        if (
+            not _regular_submission_file(metadata)
+            or metadata.st_size > SUBMISSION_REQUEST_MAX_BYTES
+        ):
+            raise OSError
+        with path.open("rb") as stream:
+            opened = os.fstat(stream.fileno())
+            if not _regular_submission_file(opened) or _submission_file_identity(
+                opened
+            ) != _submission_file_identity(metadata):
+                raise OSError
+            total = 0
+            while chunk := stream.read(1024 * 1024):
+                total += len(chunk)
+                if total > SUBMISSION_REQUEST_MAX_BYTES:
+                    raise OSError
+                digest.update(chunk)
+        after = path.lstat()
+        if not _regular_submission_file(after) or _submission_file_identity(
+            after
+        ) != _submission_file_identity(metadata):
+            raise OSError
+    except OSError:
+        raise RuntimeError(
+            SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+        ) from None
+    return digest.hexdigest()
+
+
+def _write_submission_record(path: Path, payload: dict[str, object]) -> None:
+    encoded = (
+        json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+        + "\n"
+    ).encode()
+    if len(encoded) > SUBMISSION_RECORD_MAX_BYTES or _submission_exists(path):
+        raise RuntimeError(
+            SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+        )
+    descriptor = -1
+    try:
+        flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            flags |= os.O_NOFOLLOW
+        descriptor = os.open(path, flags, 0o600)
+        with os.fdopen(descriptor, "wb") as stream:
+            descriptor = -1
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+        if os.name == "posix":
+            directory = os.open(
+                path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0)
+            )
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+    except OSError:
+        raise RuntimeError(
+            SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+        ) from None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+
+def _read_submission_record(path: Path, *, completed: bool) -> dict[str, object] | None:
+    if not _submission_exists(path):
+        return None
+    descriptor = -1
+    try:
+        metadata = path.lstat()
+        if (
+            not _regular_submission_file(metadata)
+            or metadata.st_size > SUBMISSION_RECORD_MAX_BYTES
+        ):
+            raise ValueError
+        flags = os.O_RDONLY | (getattr(os, "O_NOFOLLOW", 0))
+        descriptor = os.open(path, flags)
+        with os.fdopen(descriptor, "rb") as stream:
+            descriptor = -1
+            opened = os.fstat(stream.fileno())
+            if not _regular_submission_file(opened) or _submission_file_identity(
+                opened
+            ) != _submission_file_identity(metadata):
+                raise ValueError
+            raw = stream.read(SUBMISSION_RECORD_MAX_BYTES + 1)
+        after = path.lstat()
+        if not _regular_submission_file(after) or _submission_file_identity(
+            after
+        ) != _submission_file_identity(metadata):
+            raise ValueError
+        if len(raw) > SUBMISSION_RECORD_MAX_BYTES or not raw.endswith(b"\n"):
+            raise ValueError
+
+        def reject_duplicates(pairs: list[tuple[str, object]]) -> dict[str, object]:
+            result: dict[str, object] = {}
+            for key, item in pairs:
+                if key in result:
+                    raise ValueError
+                result[key] = item
+            return result
+
+        value = json.loads(raw.decode("utf-8"), object_pairs_hook=reject_duplicates)
+        required = (
+            {"binding", "batch_id", "input_file_id", "status"}
+            if completed
+            else {"binding", "status"}
+        )
+        if not isinstance(value, dict) or set(value) != required:
+            raise ValueError
+        if not completed and value["status"] != "intent":
+            raise ValueError
+        if completed and not all(
+            isinstance(value[key], str)
+            and value[key]
+            and value[key].strip() == value[key]
+            for key in ("batch_id", "input_file_id", "status")
+        ):
+            raise ValueError
+        canonical = (
+            json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+            + "\n"
+        ).encode()
+        if canonical != raw or not isinstance(value["binding"], dict):
+            raise ValueError
+        binding = value["binding"]
+        if (
+            set(binding)
+            != {
+                "schema_version",
+                "request_sha256",
+                "run_id",
+                "stage",
+                "part",
+                "prompt_version",
+                "batch_endpoint",
+                "completion_window",
+            }
+            or type(binding["schema_version"]) is not int
+            or binding["schema_version"] != SUBMISSION_SCHEMA_VERSION
+            or type(binding["part"]) is not int
+            or binding["part"] < 1
+            or not all(
+                isinstance(binding[key], str) and binding[key]
+                for key in (
+                    "request_sha256",
+                    "run_id",
+                    "stage",
+                    "prompt_version",
+                    "batch_endpoint",
+                    "completion_window",
+                )
+            )
+            or binding["stage"] not in SUBMISSION_STAGES
+        ):
+            raise ValueError
+        return value
+    except (OSError, UnicodeError, json.JSONDecodeError, ValueError):
+        raise RuntimeError(
+            SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+        ) from None
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
 
 
 def _now() -> str:

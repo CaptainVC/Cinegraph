@@ -186,6 +186,11 @@ consensus, budget enforcement, immutable artifacts, and promotion policy. This
 keeps future corpora easy to start or resume without granting an LLM authority
 over source governance.
 
+Paid Batch submissions use an intent/completion journal so an interrupted state
+write can reuse the accepted submission. Ambiguous attempts require operator
+reconciliation and cannot be resubmitted automatically. Creation calls disable SDK
+retries; see the [submission recovery runbook](docs/operations/speaker-review-submission-recovery.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

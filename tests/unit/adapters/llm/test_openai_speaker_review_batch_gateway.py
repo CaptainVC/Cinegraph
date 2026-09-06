@@ -1,0 +1,105 @@
+import json
+from pathlib import Path
+
+import httpx
+import pytest
+from openai import APIConnectionError, InternalServerError, OpenAI
+
+from cinegraph.adapters.llm.openai_speaker_review_batch_gateway import (
+    OpenAISpeakerReviewBatchGateway,
+)
+from cinegraph.config import DEFAULT_SPEAKER_REVIEW_CONFIGURATION
+from cinegraph.config.speaker_review_transport import (
+    SPEAKER_REVIEW_SUBMISSION_TIMEOUT_SECONDS,
+)
+
+
+@pytest.mark.parametrize("failed_path", ["/v1/files", "/v1/batches"])
+@pytest.mark.parametrize("failure", ["timeout", "server"])
+def test_submission_does_not_retry_ambiguous_creation(
+    tmp_path: Path, failed_path: str, failure: str
+) -> None:
+    calls: list[str] = []
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        assert request.extensions["timeout"]["read"] == (SPEAKER_REVIEW_SUBMISSION_TIMEOUT_SECONDS)
+        if request.url.path == failed_path:
+            if failure == "timeout":
+                raise httpx.ReadTimeout("synthetic timeout", request=request)
+            return httpx.Response(500, json={"error": {"message": "synthetic"}})
+        return httpx.Response(
+            200,
+            json={
+                "id": "file-synthetic",
+                "object": "file",
+                "bytes": 3,
+                "created_at": 0,
+                "filename": "synthetic.jsonl",
+                "purpose": "batch",
+                "status": "processed",
+            },
+        )
+
+    request_path = tmp_path / "requests.jsonl"
+    request_path.write_text("{}\n", encoding="utf-8")
+    with OpenAI(
+        api_key="synthetic-key",
+        max_retries=3,
+        http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+    ) as client:
+        gateway = OpenAISpeakerReviewBatchGateway(client, DEFAULT_SPEAKER_REVIEW_CONFIGURATION)
+        error_type = APIConnectionError if failure == "timeout" else InternalServerError
+        with pytest.raises(error_type):
+            gateway.submit(request_path, "24h", {"stage": "synthetic"})
+        assert client.max_retries == 3
+
+    assert calls.count(failed_path) == 1
+    assert calls == (["/v1/files"] if failed_path == "/v1/files" else ["/v1/files", "/v1/batches"])
+
+
+def test_successful_submission_preserves_request_and_batch_identity(tmp_path: Path) -> None:
+    calls: list[str] = []
+    metadata = {"cinegraph_run_id": "synthetic-run", "part": "1"}
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        calls.append(request.url.path)
+        if request.url.path == "/v1/files":
+            assert b'{"custom_id":"synthetic"}' in request.content
+            return httpx.Response(
+                200,
+                json={
+                    "id": "file-synthetic",
+                    "object": "file",
+                    "bytes": 26,
+                    "created_at": 0,
+                    "filename": "requests.jsonl",
+                    "purpose": "batch",
+                },
+            )
+        assert json.loads(request.content) == {
+            "input_file_id": "file-synthetic",
+            "endpoint": DEFAULT_SPEAKER_REVIEW_CONFIGURATION.batch_endpoint,
+            "completion_window": "24h",
+            "metadata": metadata,
+        }
+        return httpx.Response(
+            200,
+            json={"id": "batch-synthetic", "object": "batch", "status": "validating"},
+        )
+
+    request_path = tmp_path / "requests.jsonl"
+    request_path.write_text('{"custom_id":"synthetic"}\n', encoding="utf-8")
+    with OpenAI(
+        api_key="synthetic-key",
+        http_client=httpx.Client(transport=httpx.MockTransport(handle)),
+    ) as client:
+        gateway = OpenAISpeakerReviewBatchGateway(client, DEFAULT_SPEAKER_REVIEW_CONFIGURATION)
+        result = gateway.submit(request_path, "24h", metadata)
+
+    assert (result.batch_id, result.input_file_id, result.status) == (
+        "batch-synthetic",
+        "file-synthetic",
+        "validating",
+    )
+    assert calls == ["/v1/files", "/v1/batches"]
