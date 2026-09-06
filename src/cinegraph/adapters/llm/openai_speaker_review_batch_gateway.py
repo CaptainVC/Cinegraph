@@ -4,6 +4,10 @@ from openai import AuthenticationError, OpenAI
 
 from cinegraph.common.error_messages import SpeakerReviewErrorMessages
 from cinegraph.config import SpeakerReviewConfiguration
+from cinegraph.config.speaker_review_transport import (
+    SPEAKER_REVIEW_SUBMISSION_MAX_RETRIES,
+    SPEAKER_REVIEW_SUBMISSION_TIMEOUT_SECONDS,
+)
 from cinegraph.ports.llm.speaker_review_batch_gateway import (
     BatchSnapshot,
     BatchSubmission,
@@ -25,22 +29,25 @@ class OpenAISpeakerReviewBatchGateway:
         completion_window: str,
         metadata: dict[str, str],
     ) -> BatchSubmission:
+        # A timeout may happen after acceptance; never retry a creation implicitly.
+        submission_client = self._client.with_options(
+            max_retries=SPEAKER_REVIEW_SUBMISSION_MAX_RETRIES,
+            timeout=SPEAKER_REVIEW_SUBMISSION_TIMEOUT_SECONDS,
+        )
         try:
             with request_path.open("rb") as request_file:
-                input_file = self._client.files.create(
+                input_file = submission_client.files.create(
                     file=request_file,
                     purpose="batch",
                 )
-            batch = self._client.batches.create(
+            batch = submission_client.batches.create(
                 input_file_id=input_file.id,
                 endpoint=self._configuration.batch_endpoint,
                 completion_window=completion_window,
                 metadata=metadata,
             )
         except AuthenticationError:
-            raise RuntimeError(
-                SpeakerReviewErrorMessages.OPENAI_AUTHENTICATION_FAILED
-            ) from None
+            raise RuntimeError(SpeakerReviewErrorMessages.OPENAI_AUTHENTICATION_FAILED) from None
         return BatchSubmission(
             batch_id=batch.id,
             input_file_id=input_file.id,
