@@ -40,6 +40,7 @@ _RECEIPT_PREFIX: Final = "sha256-"
 _RECEIPT_SUFFIX: Final = ".json"
 _RECEIPT_SCHEMA_VERSION: Final = 1
 _SOURCE_DIRECTORY_MODE: Final = 0o750
+_SOURCE_STAGING_FILE_MODE: Final = 0o600
 _SOURCE_FILE_MODE: Final = 0o440
 _RUN_PARENT_MODE: Final = 0o700
 _RUN_DIRECTORY_NAME: Final = "review-runs"
@@ -235,7 +236,7 @@ def _copy_source_file(
         output_descriptor = os.open(
             destination,
             os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-            _SOURCE_FILE_MODE,
+            _SOURCE_STAGING_FILE_MODE,
         )
         with (
             os.fdopen(input_descriptor, "rb", closefd=True) as input_stream,

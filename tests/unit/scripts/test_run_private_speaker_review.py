@@ -53,6 +53,31 @@ def test_source_file_contract_binds_install_receipt_content() -> None:
     assert expected[".install-receipt.json"] == descriptor
 
 
+def test_source_file_is_private_until_copy_is_complete(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "source.txt"
+    destination = tmp_path / "destination.txt"
+    source.write_bytes(b"private source")
+    observed_modes: list[int] = []
+    real_open = processor.os.open
+
+    def open_file(path: object, flags: int, mode: int | None = None) -> int:
+        if mode is not None:
+            observed_modes.append(mode)
+            return real_open(path, flags, mode)
+        return real_open(path, flags)
+
+    monkeypatch.setattr(processor.os, "open", open_file)
+    monkeypatch.setattr(processor, "_set_owner", lambda *_args: None)
+
+    processor._copy_source_file(source, destination, expected=None)
+
+    assert observed_modes == [processor._SOURCE_STAGING_FILE_MODE]
+    if os.name != "nt":
+        assert destination.stat().st_mode & 0o777 == processor._SOURCE_FILE_MODE
+
+
 def _aggregate(*, operation: str = "prepare", status: str = "prepared") -> dict[str, object]:
     return {
         "candidate_count": 4,
@@ -349,7 +374,11 @@ def test_receipt_binding_covers_release_catalogue_configuration_and_image(
 
 
 @pytest.mark.skipif(os.name == "nt", reason="POSIX ownership and mode contract")
-def test_persisted_run_binds_exact_prepared_artifact_inventory(tmp_path: Path) -> None:
+def test_persisted_run_binds_exact_prepared_artifact_inventory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(processor.host_contract, "SPEAKER_REVIEW_UID", os.getuid())
+    monkeypatch.setattr(processor.host_contract, "SPEAKER_REVIEW_GID", os.getgid())
     review_runs = tmp_path / "review-runs"
     run_id = "speaker-review-0123456789abcdef"
     run_directory = review_runs / run_id
@@ -428,6 +457,7 @@ def test_worker_uses_separate_read_only_source_and_writable_run_mounts(
         return Process()
 
     monkeypatch.setattr(processor.subprocess, "Popen", popen)
+    monkeypatch.setattr(processor, "_cleanup_compose_worker", lambda *_args: None)
     assert processor._run_worker(release, source, runs) == aggregate
     arguments = observed["arguments"]
     assert f"{source.as_posix()}:/private-corpus:ro" in arguments
@@ -530,6 +560,7 @@ def test_worker_rejects_malformed_oversize_stderr_secret_and_failure_output(
             return returncode
 
     monkeypatch.setattr(processor.subprocess, "Popen", lambda *args, **kwargs: Process())
+    monkeypatch.setattr(processor, "_cleanup_compose_worker", lambda *_args: None)
     with pytest.raises(processor.SpeakerReviewProcessingError, match="worker failed"):
         processor._run_worker(tmp_path, tmp_path / "source", tmp_path / "runs")
 
