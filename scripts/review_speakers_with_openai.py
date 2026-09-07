@@ -20,7 +20,7 @@ from cinegraph.config import (
 from cinegraph.domain.models.transcript import TERMINAL_SPEAKER_REVIEW_RUN_STATUSES
 from cinegraph.ingestion.speaker_review.workflow import (
     SpeakerReviewWorkflow,
-    load_run_state,
+    load_validated_run_state,
 )
 
 
@@ -47,9 +47,8 @@ def _workflow(env_file: Path) -> SpeakerReviewGraphWorkflow:
     return SpeakerReviewGraphWorkflow(review_workflow)
 
 
-def _summary(run_directory: Path, state) -> dict[str, object]:
+def _summary(state) -> dict[str, object]:
     return {
-        "run_directory": str(run_directory),
         "run_id": state.run_id,
         "status": state.status.value,
         "candidate_count": state.candidate_count,
@@ -88,7 +87,7 @@ def _run(arguments: argparse.Namespace) -> None:
         corpus_root=arguments.corpus_root,
         seasons=tuple(arguments.seasons),
     )
-    print(json.dumps(_summary(run_directory, state), sort_keys=True), flush=True)
+    print(json.dumps(_summary(state), sort_keys=True), flush=True)
     if not arguments.wait:
         return
 
@@ -100,61 +99,67 @@ def _run(arguments: argparse.Namespace) -> None:
         time.sleep(arguments.poll_interval_seconds)
         _, state = workflow.advance(run_directory)
         if state.status is not prior_status:
-            print(json.dumps(_summary(run_directory, state), sort_keys=True), flush=True)
+            print(json.dumps(_summary(state), sort_keys=True), flush=True)
             prior_status = state.status
-    print(json.dumps(_summary(run_directory, state), sort_keys=True), flush=True)
+    print(json.dumps(_summary(state), sort_keys=True), flush=True)
 
 
 def _advance(arguments: argparse.Namespace) -> None:
     workflow = _workflow(arguments.env_file)
     _, state = workflow.advance(arguments.run_directory)
-    print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+    print(json.dumps(_summary(state), sort_keys=True))
 
 
 def _submit(arguments: argparse.Namespace) -> None:
     workflow = _workflow(arguments.env_file)
     _, state = workflow.submit(arguments.run_directory)
-    print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+    print(json.dumps(_summary(state), sort_keys=True))
 
 
 def _status(arguments: argparse.Namespace) -> None:
-    state = load_run_state(arguments.run_directory / "run-state.json")
-    print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+    run_directory, state = load_validated_run_state(
+        arguments.run_directory,
+        DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
+    )
+    print(json.dumps(_summary(state), sort_keys=True))
 
 
 def _final_review(arguments: argparse.Namespace) -> None:
     workflow = _workflow(arguments.env_file)
     _, state = workflow.final_review(arguments.run_directory)
-    print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+    print(json.dumps(_summary(state), sort_keys=True))
 
 
 def _retry_incomplete(arguments: argparse.Namespace) -> None:
     workflow = _workflow(arguments.env_file)
     _, state = workflow.retry_incomplete(arguments.run_directory)
-    print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+    print(json.dumps(_summary(state), sort_keys=True))
 
 
 def _reconcile_costs(arguments: argparse.Namespace) -> None:
     workflow = _workflow(arguments.env_file)
     _, state = workflow.reconcile_costs(arguments.run_directory)
-    print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+    print(json.dumps(_summary(state), sort_keys=True))
 
 
 def _wait(arguments: argparse.Namespace) -> None:
     workflow = _workflow(arguments.env_file)
-    state = load_run_state(arguments.run_directory / "run-state.json")
-    print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+    run_directory, state = load_validated_run_state(
+        arguments.run_directory,
+        DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
+    )
+    print(json.dumps(_summary(state), sort_keys=True))
     started = time.monotonic()
     prior_status = state.status
     while state.status not in TERMINAL_SPEAKER_REVIEW_RUN_STATUSES:
         if time.monotonic() - started > arguments.maximum_wait_seconds:
             raise TimeoutError("Speaker review wait limit expired; the run is resumable.")
         time.sleep(arguments.poll_interval_seconds)
-        _, state = workflow.advance(arguments.run_directory)
+        _, state = workflow.advance(run_directory)
         if state.status is not prior_status:
-            print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+            print(json.dumps(_summary(state), sort_keys=True))
             prior_status = state.status
-    print(json.dumps(_summary(arguments.run_directory, state), sort_keys=True))
+    print(json.dumps(_summary(state), sort_keys=True))
 
 
 def main() -> None:

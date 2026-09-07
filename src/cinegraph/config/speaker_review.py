@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from cinegraph.common.private_corpus_policy import SCRIPT_PDF_FILENAME_TEMPLATE
+from cinegraph.config.speaker_review_filesystem import RUN_DIRECTORY_NAME
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,7 +98,7 @@ DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
     script_pdf_filename_template=SCRIPT_PDF_FILENAME_TEMPLATE,
     season_directory_glob_template="*season {season}.en",
     aligned_subtitle_glob="*.script-aligned.srt",
-    run_directory_name="review-runs",
+    run_directory_name=RUN_DIRECTORY_NAME,
     human_resolution_schema_version=1,
     human_review_workbench_filename="human-review-workbench.html",
     human_review_resolution_filename="human-review-resolution.json",

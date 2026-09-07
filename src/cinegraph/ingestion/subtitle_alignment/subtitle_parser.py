@@ -15,14 +15,20 @@ from cinegraph.ingestion.subtitle_alignment.text import normalize_text
 
 # Read subtitle text using supported encodings and report decode failure clearly.
 def read_subtitle_text(subtitle_path: Path) -> str:
+    return decode_subtitle_text(subtitle_path.read_bytes(), subtitle_path.name)
+
+
+# Decode an immutable subtitle snapshot without reopening its filesystem path.
+def decode_subtitle_text(content: bytes, subtitle_name: str) -> str:
     for encoding in SUBTITLE_ENCODINGS:
         try:
-            return subtitle_path.read_text(encoding=encoding)
+            decoded = content.decode(encoding)
+            return decoded.replace("\r\n", "\n").replace("\r", "\n")
         except UnicodeDecodeError:
             continue
     raise ValueError(
         SubtitleErrorMessages.SUBTITLE_FILE_DECODE_FAILED.format(
-            subtitle_path=subtitle_path
+            subtitle_path=subtitle_name
         )
     )
 
@@ -88,11 +94,11 @@ def remove_noise_cues(lines: list[str]) -> list[str]:
         if not cue:
             return
         retained_content = [
-            _clean_generated_dialogue_line(line)
+            cleaned
             for line in cue[2:]
             if line.strip()
+            and (cleaned := _clean_generated_dialogue_line(line)) is not None
         ]
-        retained_content = [line for line in retained_content if line is not None]
         if retained_content:
             filtered_lines.extend([*cue[:2], *retained_content])
 

@@ -29,6 +29,7 @@ from cinegraph.ingestion.speaker_review.workflow import (
 SOURCE_FILENAME = "Modern Family - 1x01.script-aligned.srt"
 SOURCE_TEXT = "1\n00:00:01,000 --> 00:00:02,000\nCLAIRE?: Hello there.\n"
 REVIEWED_AT = datetime(2026, 8, 16, 10, 0, tzinfo=UTC)
+RUN_ID = "speaker-review-0123456789abcdef"
 
 
 def _candidate() -> SpeakerReviewCandidate:
@@ -68,7 +69,7 @@ def _decision() -> SpeakerReviewDecision:
 def _state() -> SpeakerReviewRunState:
     return SpeakerReviewRunState(
         schema_version=2,
-        run_id="speaker-review-test",
+        run_id=RUN_ID,
         status=SpeakerReviewRunStatus.NEEDS_HUMAN,
         created_at="2026-08-16T09:00:00+00:00",
         updated_at="2026-08-16T09:30:00+00:00",
@@ -92,10 +93,11 @@ def _state() -> SpeakerReviewRunState:
 
 
 def _write_run(tmp_path: Path) -> tuple[Path, str]:
-    run_directory = tmp_path / "run"
-    run_directory.mkdir()
-    source_path = tmp_path / SOURCE_FILENAME
-    source_path.write_text(SOURCE_TEXT, encoding="utf-8")
+    corpus_root = tmp_path / "corpus"
+    run_directory = corpus_root / "review-runs" / RUN_ID
+    run_directory.mkdir(parents=True)
+    source_path = corpus_root / SOURCE_FILENAME
+    source_path.write_bytes(SOURCE_TEXT.encode("utf-8"))
     save_run_state(run_directory, _state())
     (run_directory / "candidates.jsonl").write_text(
         json.dumps(_candidate().to_dict()) + "\n",
@@ -106,7 +108,19 @@ def _write_run(tmp_path: Path) -> tuple[Path, str]:
         encoding="utf-8",
     )
     (run_directory / "source-manifest.json").write_text(
-        json.dumps({"sources": {SOURCE_FILENAME: str(source_path)}}) + "\n",
+        json.dumps(
+            {
+                "schema_version": 1,
+                "sources": {
+                    SOURCE_FILENAME: {
+                        "path": SOURCE_FILENAME,
+                        "sha256": sha256(SOURCE_TEXT.encode()).hexdigest(),
+                        "size": len(SOURCE_TEXT.encode()),
+                    }
+                },
+            }
+        )
+        + "\n",
         encoding="utf-8",
     )
     queue_text = (
@@ -120,7 +134,9 @@ def _write_run(tmp_path: Path) -> tuple[Path, str]:
         queue_text,
         encoding="utf-8",
     )
-    return run_directory, sha256(queue_text.encode()).hexdigest()
+    return run_directory, sha256(
+        (run_directory / "human-review-queue.json").read_bytes()
+    ).hexdigest()
 
 
 def _write_resolution(
@@ -135,7 +151,7 @@ def _write_resolution(
         json.dumps(
             {
                 "schema_version": 1,
-                "run_id": "speaker-review-test",
+                "run_id": RUN_ID,
                 "queue_sha256": queue_sha256,
                 "reviewer": "corpus-owner",
                 "reviewed_at": REVIEWED_AT.isoformat(),
@@ -166,7 +182,7 @@ def test_prepares_deterministic_offline_workbench(tmp_path: Path) -> None:
     assert first == second
     assert first.candidate_count == 1
     assert first.queue_sha256 == queue_hash
-    assert "speaker-review-test" in content
+    assert RUN_ID in content
     assert "Hello there." in content
     assert "http://" not in content
     assert "https://" not in content
@@ -226,7 +242,9 @@ def test_prepare_uses_latest_versioned_retry_queue(tmp_path: Path) -> None:
         DEFAULT_SPEAKER_REVIEW_CONFIGURATION
     ).prepare_workbench(run_directory)
 
-    assert result.queue_sha256 == sha256(retry_queue_text.encode()).hexdigest()
+    assert result.queue_sha256 == sha256(
+        (run_directory / "remaining-human-review-queue-retry-1.json").read_bytes()
+    ).hexdigest()
     assert "remaining-human-review-queue-retry-1.json" in result.path.read_text(
         encoding="utf-8"
     )
@@ -308,7 +326,9 @@ def test_applies_resolution_to_latest_retry_decisions(tmp_path: Path) -> None:
     )
     resolution_path = _write_resolution(
         tmp_path,
-        queue_sha256=sha256(queue_text.encode()).hexdigest(),
+        queue_sha256=sha256(
+            (run_directory / "remaining-human-review-queue-retry-1.json").read_bytes()
+        ).hexdigest(),
     )
 
     result = HumanSpeakerReviewWorkflow(

@@ -11,6 +11,10 @@ Each run/stage/part has a durable submission intent. The workflow writes the int
 before invoking the provider. The record binds the request content and submission
 configuration to that exact logical part. After a successful provider response, the
 workflow records the returned submission identifiers before advancing run state.
+The bounded request file is opened and verified once; its immutable in-memory bytes
+are both hashed for the journal and uploaded by the adapter. The adapter accepts a
+safe basename and bytes, never a filesystem path, so it cannot reopen changed content
+after the journal is committed.
 
 On resume:
 
@@ -59,7 +63,8 @@ polling path. New submission attempts use the journal. A pre-upgrade crash in th
 old unjournalled submit/save gap cannot be detected retrospectively: reconcile such
 a run before attempting a new submission.
 
-This change addresses the provider submission gap. It does not complete the broader
-source-path confinement, immutable resume-artifact verification, canonical reviewed
-output promotion, or Season 2 VPS review-worker work. A paid Season 2 run remains
-deferred until those boundaries are ready.
+Source and run-artifact confinement is specified by the
+[filesystem security runbook](speaker-review-filesystem-security.md). Automatic
+provider reconciliation and the Season 2 VPS review worker remain separate future
+work. A paid Season 2 run remains deferred until the worker and its operational
+acceptance gates are ready.

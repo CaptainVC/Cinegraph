@@ -1,9 +1,10 @@
-from pathlib import Path
+import unicodedata
 
 from openai import AuthenticationError, OpenAI
 
 from cinegraph.common.error_messages import SpeakerReviewErrorMessages
 from cinegraph.config import SpeakerReviewConfiguration
+from cinegraph.config.speaker_review_submission import SUBMISSION_REQUEST_MAX_BYTES
 from cinegraph.config.speaker_review_transport import (
     SPEAKER_REVIEW_SUBMISSION_MAX_RETRIES,
     SPEAKER_REVIEW_SUBMISSION_TIMEOUT_SECONDS,
@@ -25,21 +26,22 @@ class OpenAISpeakerReviewBatchGateway:
 
     def submit(
         self,
-        request_path: Path,
+        request_filename: str,
+        request_bytes: bytes,
         completion_window: str,
         metadata: dict[str, str],
     ) -> BatchSubmission:
+        _validate_submission_payload(request_filename, request_bytes)
         # A timeout may happen after acceptance; never retry a creation implicitly.
         submission_client = self._client.with_options(
             max_retries=SPEAKER_REVIEW_SUBMISSION_MAX_RETRIES,
             timeout=SPEAKER_REVIEW_SUBMISSION_TIMEOUT_SECONDS,
         )
         try:
-            with request_path.open("rb") as request_file:
-                input_file = submission_client.files.create(
-                    file=request_file,
-                    purpose="batch",
-                )
+            input_file = submission_client.files.create(
+                file=(request_filename, request_bytes, "application/jsonl"),
+                purpose="batch",
+            )
             batch = submission_client.batches.create(
                 input_file_id=input_file.id,
                 endpoint=self._configuration.batch_endpoint,
@@ -74,3 +76,22 @@ class OpenAISpeakerReviewBatchGateway:
 def _enum_value(value: object) -> str:
     raw_value = getattr(value, "value", value)
     return str(raw_value)
+
+
+def _validate_submission_payload(filename: str, content: bytes) -> None:
+    if (
+        not isinstance(filename, str)
+        or not filename
+        or filename != unicodedata.normalize("NFC", filename)
+        or filename in {".", ".."}
+        or "/" in filename
+        or "\\" in filename
+        or any(ord(character) < 32 or ord(character) == 127 for character in filename)
+    ):
+        raise ValueError(SpeakerReviewErrorMessages.BATCH_REQUEST_FILENAME_INVALID)
+    if (
+        not isinstance(content, bytes)
+        or not content
+        or len(content) > SUBMISSION_REQUEST_MAX_BYTES
+    ):
+        raise ValueError(SpeakerReviewErrorMessages.BATCH_REQUEST_CONTENT_INVALID)

@@ -1,3 +1,4 @@
+from io import BytesIO
 from pathlib import Path
 
 from pypdf import PdfReader
@@ -15,10 +16,22 @@ from cinegraph.ingestion.subtitle_alignment.text import normalize_speaker
 # Extract text from every PDF page and reject PDFs with no usable text.
 def extract_pdf_text(pdf_path: Path) -> str:
     reader = PdfReader(pdf_path)
+    return _extract_pdf_text(reader, str(pdf_path))
+
+
+# Extract PDF text from bytes already captured by the private-source boundary.
+def extract_pdf_text_content(content: bytes, source_name: str) -> str:
+    reader = PdfReader(BytesIO(content))
+    return _extract_pdf_text(reader, source_name)
+
+
+def _extract_pdf_text(reader: PdfReader, source_name: str) -> str:
     text = "\n".join(page.extract_text() or "" for page in reader.pages)
     if not text.strip():
         raise ValueError(
-            SubtitleErrorMessages.PDF_TEXT_EXTRACTION_FAILED.format(pdf_path=pdf_path)
+            SubtitleErrorMessages.PDF_TEXT_EXTRACTION_FAILED.format(
+                pdf_path=source_name
+            )
         )
     return text
 
@@ -27,6 +40,19 @@ def extract_pdf_text(pdf_path: Path) -> str:
 def extract_script_dialogue(
     pdf_path: Path,
 ) -> dict[EpisodeKey, tuple[ScriptDialogue, ...]]:
+    return _parse_script_dialogue(extract_pdf_text(pdf_path))
+
+
+def extract_script_dialogue_content(
+    content: bytes,
+    source_name: str,
+) -> dict[EpisodeKey, tuple[ScriptDialogue, ...]]:
+    return _parse_script_dialogue(extract_pdf_text_content(content, source_name))
+
+
+def _parse_script_dialogue(
+    content: str,
+) -> dict[EpisodeKey, tuple[ScriptDialogue, ...]]:
     # Walk script lines, switching episodes and accumulating ordered dialogue.
     dialogue_by_episode: dict[EpisodeKey, list[ScriptDialogue]] = {}
     current_episode: EpisodeKey | None = None
@@ -34,7 +60,7 @@ def extract_script_dialogue(
     order = 0
 
     # Classify each line as an episode header, speaker line, stage direction, or continuation.
-    for raw_line in extract_pdf_text(pdf_path).splitlines():
+    for raw_line in content.splitlines():
         line = raw_line.strip()
         header = EPISODE_HEADER_PATTERN.fullmatch(line)
         if header:

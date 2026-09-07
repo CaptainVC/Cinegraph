@@ -16,10 +16,12 @@ from cinegraph.ingestion.speaker_review.patterns import (
 )
 from cinegraph.ingestion.subtitle_alignment.matching import score_match
 from cinegraph.ingestion.subtitle_alignment.models import EpisodeKey, ScriptDialogue
-from cinegraph.ingestion.subtitle_alignment.script_parser import extract_script_dialogue
+from cinegraph.ingestion.subtitle_alignment.script_parser import (
+    extract_script_dialogue_content,
+)
 from cinegraph.ingestion.subtitle_alignment.subtitle_parser import (
+    decode_subtitle_text,
     episode_key_from_subtitle_path,
-    read_subtitle_text,
 )
 
 
@@ -33,13 +35,17 @@ class _LabelledSubtitleLine:
 
 def build_speaker_review_candidates(
     *,
-    source_pdf: Path,
-    aligned_subtitles: tuple[Path, ...],
+    source_pdf_name: str,
+    source_pdf_content: bytes,
+    aligned_subtitles: tuple[tuple[Path, bytes], ...],
     configuration: SpeakerReviewConfiguration,
 ) -> tuple[SpeakerReviewCandidate, ...]:
-    dialogue_by_episode = extract_script_dialogue(source_pdf)
+    dialogue_by_episode = extract_script_dialogue_content(
+        source_pdf_content,
+        source_pdf_name,
+    )
     candidates: list[SpeakerReviewCandidate] = []
-    for subtitle_path in aligned_subtitles:
+    for subtitle_path, subtitle_content in aligned_subtitles:
         episode_key = episode_key_from_subtitle_path(subtitle_path)
         script_dialogue = dialogue_by_episode.get(episode_key)
         if not script_dialogue:
@@ -52,6 +58,10 @@ def build_speaker_review_candidates(
         candidates.extend(
             _build_file_candidates(
                 subtitle_path=subtitle_path,
+                subtitle_text=decode_subtitle_text(
+                    subtitle_content,
+                    subtitle_path.name,
+                ),
                 episode_key=episode_key,
                 script_dialogue=script_dialogue,
                 configuration=configuration,
@@ -63,11 +73,11 @@ def build_speaker_review_candidates(
 def _build_file_candidates(
     *,
     subtitle_path: Path,
+    subtitle_text: str,
     episode_key: EpisodeKey,
     script_dialogue: tuple[ScriptDialogue, ...],
     configuration: SpeakerReviewConfiguration,
 ) -> tuple[SpeakerReviewCandidate, ...]:
-    subtitle_text = read_subtitle_text(subtitle_path)
     raw_lines = subtitle_text.splitlines()
     source_hash = sha256(subtitle_text.encode("utf-8")).hexdigest()
     labelled_lines = _labelled_subtitle_lines(subtitle_text)

@@ -1,6 +1,7 @@
 import json
 import threading
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 
 import pytest
@@ -32,11 +33,12 @@ class CompletingPartGateway:
 
     def submit(
         self,
-        request_path: Path,
+        request_filename: str,
+        request_bytes: bytes,
         completion_window: str,
         metadata: dict[str, str],
     ) -> BatchSubmission:
-        self.submitted_paths.append(request_path)
+        self.submitted_paths.append(Path(request_filename))
         return BatchSubmission("batch-2", "input-2", "validating")
 
     def retrieve(self, batch_id: str) -> BatchSnapshot:
@@ -62,7 +64,8 @@ class CompletedRetryGateway:
 
     def submit(
         self,
-        request_path: Path,
+        request_filename: str,
+        request_bytes: bytes,
         completion_window: str,
         metadata: dict[str, str],
     ) -> BatchSubmission:
@@ -89,11 +92,17 @@ class CountingSubmissionGateway:
     def __init__(self, fail: bool = False) -> None:
         self.calls = 0
         self.fail = fail
+        self.submissions: list[tuple[str, bytes]] = []
 
     def submit(
-        self, request_path: Path, completion_window: str, metadata: dict[str, str]
+        self,
+        request_filename: str,
+        request_bytes: bytes,
+        completion_window: str,
+        metadata: dict[str, str],
     ) -> BatchSubmission:
         self.calls += 1
+        self.submissions.append((request_filename, request_bytes))
         if self.fail:
             raise RuntimeError("ambiguous provider failure")
         return BatchSubmission("batch-safe", "input-safe", "validating")
@@ -181,7 +190,7 @@ def test_completed_part_submits_only_the_next_part(tmp_path: Path) -> None:
     assert updated.primary_completed_part_count == 1
     assert updated.primary_batch_ids == ("batch-1", "batch-2")
     assert updated.primary_input_file_ids == ("input-1", "input-2")
-    assert gateway.submitted_paths == [next_path]
+    assert gateway.submitted_paths == [Path(next_path.name)]
     assert (tmp_path / "primary-part-0001-output.jsonl").read_text() == "{}\n"
 
 
@@ -221,6 +230,41 @@ def test_submission_snapshot_is_reused_without_a_second_paid_submit(
     second = workflow.submit_primary(tmp_path, state)
     assert first.primary_batch_id == second.primary_batch_id == "batch-safe"
     assert gateway.calls == 1
+
+
+def test_submission_journal_and_gateway_share_one_immutable_request_snapshot(
+    tmp_path: Path,
+) -> None:
+    request = tmp_path / "primary-part-0001-requests.jsonl"
+    original = b'{"custom_id":"original"}\n'
+    request.write_bytes(original)
+
+    class MutatingGateway(CountingSubmissionGateway):
+        def submit(
+            self,
+            request_filename: str,
+            request_bytes: bytes,
+            completion_window: str,
+            metadata: dict[str, str],
+        ) -> BatchSubmission:
+            request.write_bytes(b'{"custom_id":"replacement"}\n')
+            return super().submit(
+                request_filename,
+                request_bytes,
+                completion_window,
+                metadata,
+            )
+
+    gateway = MutatingGateway()
+    _workflow(gateway).submit_primary(tmp_path, _prepared_state())
+
+    intent = json.loads(
+        _submission_path(tmp_path, "primary", 0, "intent").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert gateway.submissions == [(request.name, original)]
+    assert intent["binding"]["request_sha256"] == sha256(original).hexdigest()
 
 
 def test_ambiguous_submission_intent_blocks_automatic_resubmit(tmp_path: Path) -> None:
@@ -492,11 +536,14 @@ def test_terminal_run_retries_only_missing_final_verdict_once(tmp_path: Path) ->
     assert request["custom_id"].endswith("::final-review-retry-1")
     assert request["body"]["max_output_tokens"] == 2_400
     assert gateway.submitted_paths == [
-        tmp_path / "final-review-part-0002-requests.jsonl"
+        Path("final-review-part-0002-requests.jsonl")
     ]
 
 
 def test_completed_retry_versions_immutable_audit_artifacts(tmp_path: Path) -> None:
+    run_id = "speaker-review-0123456789abcdef"
+    run_directory = tmp_path / "corpus" / "review-runs" / run_id
+    run_directory.mkdir(parents=True)
     candidate = SpeakerReviewCandidate(
         candidate_id="S01E01-C0001-L00003-abcdef1234",
         source_filename="episode.script-aligned.srt",
@@ -577,38 +624,38 @@ def test_completed_retry_versions_immutable_audit_artifacts(tmp_path: Path) -> N
         adjudication_reasoning_effort="medium",
         final_review_reasoning_effort="high",
     )
-    (tmp_path / "candidates.jsonl").write_text(
+    (run_directory / "candidates.jsonl").write_text(
         json.dumps(candidate.to_dict()) + "\n",
         encoding="utf-8",
     )
-    (tmp_path / "final-decisions.jsonl").write_text(
+    (run_directory / "final-decisions.jsonl").write_text(
         json.dumps(decision.to_dict()) + "\n",
         encoding="utf-8",
     )
-    (tmp_path / "source-manifest.json").write_text(
+    (run_directory / "source-manifest.json").write_text(
         json.dumps({"sources": {}}) + "\n",
         encoding="utf-8",
     )
-    (tmp_path / "final-review-part-0001-output.jsonl").write_text(
+    (run_directory / "final-review-part-0001-output.jsonl").write_text(
         json.dumps(incomplete) + "\n",
         encoding="utf-8",
     )
-    (tmp_path / "final-review-verdicts.jsonl").write_text(
+    (run_directory / "final-review-verdicts.jsonl").write_text(
         "original-verdict-artifact\n",
         encoding="utf-8",
     )
-    (tmp_path / "post-final-decisions.jsonl").write_text(
+    (run_directory / "post-final-decisions.jsonl").write_text(
         "original-decision-artifact\n",
         encoding="utf-8",
     )
-    (tmp_path / "human-review-queue.json").write_text("[]\n", encoding="utf-8")
-    (tmp_path / "remaining-human-review-queue.json").write_text(
+    (run_directory / "human-review-queue.json").write_text("[]\n", encoding="utf-8")
+    (run_directory / "remaining-human-review-queue.json").write_text(
         "original-queue-artifact\n",
         encoding="utf-8",
     )
     state = SpeakerReviewRunState(
         schema_version=2,
-        run_id="run-1",
+        run_id=run_id,
         status=SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED,
         created_at="2026-08-15T00:00:00+00:00",
         updated_at="2026-08-15T00:00:00+00:00",
@@ -632,22 +679,22 @@ def test_completed_retry_versions_immutable_audit_artifacts(tmp_path: Path) -> N
         needs_human=1,
     )
 
-    updated = workflow.advance(tmp_path, state)
+    updated = workflow.advance(run_directory, state)
 
     assert updated.status is SpeakerReviewRunStatus.NEEDS_HUMAN
     assert updated.final_review_completed_part_count == 2
-    assert (tmp_path / "final-review-verdicts.jsonl").read_text() == (
+    assert (run_directory / "final-review-verdicts.jsonl").read_text() == (
         "original-verdict-artifact\n"
     )
-    assert (tmp_path / "post-final-decisions.jsonl").read_text() == (
+    assert (run_directory / "post-final-decisions.jsonl").read_text() == (
         "original-decision-artifact\n"
     )
-    assert (tmp_path / "remaining-human-review-queue.json").read_text() == (
+    assert (run_directory / "remaining-human-review-queue.json").read_text() == (
         "original-queue-artifact\n"
     )
-    assert (tmp_path / "final-review-verdicts-retry-1.jsonl").exists()
-    assert (tmp_path / "post-final-decisions-retry-1.jsonl").exists()
-    assert (tmp_path / "remaining-human-review-queue-retry-1.json").exists()
+    assert (run_directory / "final-review-verdicts-retry-1.jsonl").exists()
+    assert (run_directory / "post-final-decisions-retry-1.jsonl").exists()
+    assert (run_directory / "remaining-human-review-queue-retry-1.json").exists()
 
 
 def test_reconcile_costs_prices_usage_from_completed_raw_outputs(

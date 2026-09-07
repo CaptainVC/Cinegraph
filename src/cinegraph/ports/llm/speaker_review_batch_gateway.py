@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Protocol
 
 
@@ -24,7 +23,8 @@ class BatchSnapshot:
 class SpeakerReviewBatchGateway(Protocol):
     def submit(
         self,
-        request_path: Path,
+        request_filename: str,
+        request_bytes: bytes,
         completion_window: str,
         metadata: dict[str, str],
     ) -> BatchSubmission: ...

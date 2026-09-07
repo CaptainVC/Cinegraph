@@ -191,6 +191,19 @@ write can reuse the accepted submission. Ambiguous attempts require operator
 reconciliation and cannot be resubmitted automatically. Creation calls disable SDK
 retries; see the [submission recovery runbook](docs/operations/speaker-review-submission-recovery.md).
 
+Every review run is confined to the canonical
+`<corpus-root>/review-runs/speaker-review-<16 hex>` layout. Source manifests are
+versioned and store only root-relative POSIX locators plus the exact byte length and
+SHA-256 digest. Reads reject traversal, absolute or noncanonical locators,
+symlinks/junctions/reparse points, hardlinked files, case-colliding source names,
+oversized files, and files that change while being read. Run artifacts are written
+with enforced private POSIX permissions on the Linux worker and safe create-once or
+atomic-replace semantics. Windows private runs require separately administered,
+exclusive NTFS ACLs and are not the supported production execution target. The
+OpenAI adapter receives the same in-memory JSONL bytes that were hashed into the
+submission journal, so it never reopens a mutable request path. See the
+[speaker-review filesystem security runbook](docs/operations/speaker-review-filesystem-security.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
@@ -207,7 +220,8 @@ uv run python scripts/review_speakers_with_openai.py run \
 ```
 
 Without `--wait`, the command submits the primary Batch and returns immediately.
-Use the emitted run directory to inspect or advance it later:
+CLI summaries expose the non-sensitive run ID rather than an absolute private path.
+Use that ID in the canonical run layout to inspect or advance it later:
 
 ```zsh
 uv run python scripts/review_speakers_with_openai.py submit knowledge/review-runs/<run-id>

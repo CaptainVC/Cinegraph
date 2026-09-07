@@ -28,6 +28,33 @@ class SpeakerReviewErrorMessages:
     BATCH_SUBMISSION_RECONCILIATION_REQUIRED = (
         "A Batch submission is awaiting operator reconciliation; refusing to submit again."
     )
+    SPEAKER_REVIEW_CORPUS_PATH_INVALID = (
+        "The speaker-review corpus path is invalid or not a physical private path."
+    )
+    SPEAKER_REVIEW_RUN_DIRECTORY_INVALID = (
+        "The speaker-review run directory is invalid or not confined to the corpus."
+    )
+    SPEAKER_REVIEW_SOURCE_FILE_INVALID = (
+        "The speaker-review source file is invalid, linked, or changed while it was read."
+    )
+    SPEAKER_REVIEW_SOURCE_MANIFEST_INVALID = (
+        "The speaker-review source manifest is malformed or outside its corpus."
+    )
+    SPEAKER_REVIEW_ARTIFACT_INVALID = (
+        "The speaker-review run artifact is invalid or unsafe."
+    )
+    SPEAKER_REVIEW_ARTIFACT_CONFLICT = (
+        "The speaker-review run artifact already contains different content."
+    )
+    SPEAKER_REVIEW_FILESYSTEM_IO_FAILED = (
+        "The speaker-review private filesystem operation failed."
+    )
+    BATCH_REQUEST_FILENAME_INVALID = (
+        "Speaker-review request filename must be a safe basename."
+    )
+    BATCH_REQUEST_CONTENT_INVALID = (
+        "Speaker-review request bytes exceed the configured limit."
+    )
     OPENAI_KEY_NOT_FOUND = "No labelled OPENAI_API_KEY was found in the source file."
     OPENAI_KEY_DUPLICATED = "More than one OPENAI_API_KEY was found in the source file."
     SECRET_DESTINATION_NOT_PRIVATE = "Secret destination permissions are not private."

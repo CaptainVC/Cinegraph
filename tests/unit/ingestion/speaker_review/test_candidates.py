@@ -5,6 +5,13 @@ from cinegraph.ingestion.speaker_review.candidates import (
     build_speaker_review_candidates,
 )
 from cinegraph.ingestion.subtitle_alignment.models import EpisodeKey, ScriptDialogue
+from cinegraph.ingestion.subtitle_alignment.subtitle_parser import decode_subtitle_text
+
+
+def test_immutable_subtitle_decoder_normalizes_platform_newlines() -> None:
+    assert decode_subtitle_text(b"one\r\ntwo\rthree\n", "episode.srt") == (
+        "one\ntwo\nthree\n"
+    )
 
 
 def test_builds_stable_candidate_with_subtitle_and_script_evidence(
@@ -13,8 +20,8 @@ def test_builds_stable_candidate_with_subtitle_and_script_evidence(
 ) -> None:
     episode_key = EpisodeKey(1, 1)
     monkeypatch.setattr(
-        "cinegraph.ingestion.speaker_review.candidates.extract_script_dialogue",
-        lambda _: {
+        "cinegraph.ingestion.speaker_review.candidates.extract_script_dialogue_content",
+        lambda *_: {
             episode_key: (
                 ScriptDialogue(episode_key, "CLAIRE", "Kids, breakfast!", 0),
                 ScriptDialogue(episode_key, "PHIL", "Yeah, just a sec.", 1),
@@ -29,8 +36,9 @@ def test_builds_stable_candidate_with_subtitle_and_script_evidence(
     )
 
     candidates = build_speaker_review_candidates(
-        source_pdf=tmp_path / "script.pdf",
-        aligned_subtitles=(subtitle_path,),
+        source_pdf_name="script.pdf",
+        source_pdf_content=b"synthetic-pdf",
+        aligned_subtitles=((subtitle_path, subtitle_path.read_bytes()),),
         configuration=DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
     )
 

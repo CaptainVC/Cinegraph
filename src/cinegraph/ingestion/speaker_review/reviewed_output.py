@@ -11,6 +11,7 @@ from cinegraph.common.error_messages import (
     SubtitleErrorMessages,
 )
 from cinegraph.config import SpeakerReviewConfiguration
+from cinegraph.config.speaker_review_filesystem import PRIVATE_ARTIFACT_MAX_BYTES
 from cinegraph.domain.enums.enum import (
     SourceReviewStatus,
     SpeakerReviewDisposition,
@@ -21,6 +22,10 @@ from cinegraph.domain.models.transcript import (
 )
 from cinegraph.ingestion.speaker_review.patterns import (
     UNCERTAIN_SPEAKER_LABEL_PATTERN,
+)
+from cinegraph.ingestion.speaker_review.private_io import (
+    stable_file_snapshot,
+    write_private_file_once,
 )
 from cinegraph.ingestion.subtitle_alignment.subtitle_parser import (
     episode_key_from_subtitle_path,
@@ -48,7 +53,7 @@ class ReviewedOutputRecord:
 def write_reviewed_outputs(
     *,
     run_directory: Path,
-    source_paths: dict[str, Path],
+    source_texts: dict[str, str],
     candidates: tuple[SpeakerReviewCandidate, ...],
     decisions: tuple[SpeakerReviewDecision, ...],
     reviewer_models: tuple[str, ...],
@@ -99,24 +104,22 @@ def write_reviewed_outputs(
 
     output_root = run_directory / configuration.reviewed_directory_name
     records: list[ReviewedOutputRecord] = []
-    for source_filename, source_path in sorted(source_paths.items()):
+    for source_filename, source_text in sorted(source_texts.items()):
         file_candidates = candidate_by_file.get(source_filename, [])
-        source_text = source_path.read_text(encoding="utf-8")
         reviewed_text, removed_lines, removed_cues = render_reviewed_subtitle(
             source_text=source_text,
             candidates=tuple(file_candidates),
             decisions=decision_by_id,
             configuration=configuration,
         )
-        season_number = episode_key_from_subtitle_path(source_path).season
+        season_number = episode_key_from_subtitle_path(Path(source_filename)).season
         output_directory = output_root / f"season-{season_number:02d}"
-        output_directory.mkdir(parents=True, exist_ok=True)
         output_filename = source_filename.replace(
             ".script-aligned.srt",
             output_suffix,
         )
         output_path = output_directory / output_filename
-        _write_if_new_or_unchanged(output_path, reviewed_text)
+        _write_if_new_or_unchanged(run_directory, output_path, reviewed_text)
         file_decisions = [decision_by_id[item.candidate_id] for item in file_candidates]
         records.append(
             ReviewedOutputRecord(
@@ -155,7 +158,12 @@ def write_reviewed_outputs(
     ledger_path = run_directory / "review-ledger.json"
     resolved_reviewed_at = reviewed_at or datetime.now(UTC).isoformat()
     if ledger_path.exists():
-        prior_ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        prior_ledger = json.loads(
+            stable_file_snapshot(
+                ledger_path,
+                max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+            ).content.decode("utf-8")
+        )
         resolved_reviewed_at = str(prior_ledger["reviewed_at"])
     ledger = {
         "schema_version": configuration.ledger_schema_version,
@@ -168,6 +176,7 @@ def write_reviewed_outputs(
         "decisions": [item.to_dict() for item in decisions],
     }
     _write_if_new_or_unchanged(
+        run_directory,
         ledger_path,
         json.dumps(ledger, indent=2, ensure_ascii=False) + "\n",
     )
@@ -277,6 +286,7 @@ def _write_human_queue(
         for item in unresolved
     ]
     _write_if_new_or_unchanged(
+        run_directory,
         run_directory / filename,
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
     )
@@ -310,19 +320,28 @@ def _write_calibration_sample(
         for item in selected
     ]
     _write_if_new_or_unchanged(
+        run_directory,
         run_directory / "calibration-sample.json",
         json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
     )
 
 
-def _write_if_new_or_unchanged(path: Path, content: str) -> None:
-    if path.exists() and path.read_text(encoding="utf-8") != content:
+def _write_if_new_or_unchanged(
+    run_directory: Path,
+    path: Path,
+    content: str,
+) -> None:
+    try:
+        locator = path.relative_to(run_directory).as_posix()
+    except ValueError:
         raise FileExistsError(
-            SpeakerReviewErrorMessages.REVIEWED_OUTPUT_CONFLICT.format(path=path)
-        )
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
+            SpeakerReviewErrorMessages.REVIEWED_OUTPUT_CONFLICT.format(path="private")
+        ) from None
+    write_private_file_once(
+        run_directory,
+        locator,
+        content.encode("utf-8"),
+    )
 
 
 def _sha256(value: str) -> str:
