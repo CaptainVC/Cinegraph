@@ -30,10 +30,17 @@ def test_corpus_host_contract_is_distinct_and_root_private() -> None:
     assert "cinegraph-deploy-dev" not in contract.CORPUS_SUDOERS_CONTENT
     assert contract.CORPUS_HELPER_PATH.as_posix() in contract.CORPUS_SUDOERS_CONTENT
     assert contract.PROCESS_HELPER_PATH.as_posix() in contract.CORPUS_SUDOERS_CONTENT
+    assert contract.SPEAKER_REVIEW_HELPER_PATH.as_posix() in contract.CORPUS_SUDOERS_CONTENT
     assert contract.PROCESS_COMMAND == "process-v1"
     assert contract.PROCESSING_ROOT.parent == contract.DEV_PRIVATE_CORPUS_ROOT
     assert contract.PROCESSING_RECEIPTS_ROOT.parent == contract.PROCESSING_ROOT
     assert contract.PROCESSING_LOCK.parent == contract.DEV_PRIVATE_CORPUS_ROOT
+    assert contract.SPEAKER_REVIEW_COMMAND == "speaker-review-v1"
+    assert contract.SPEAKER_REVIEW_UID == 10002
+    assert contract.SPEAKER_REVIEW_GID == 10002
+    assert contract.SPEAKER_REVIEW_SOURCE_ROOT.parent == contract.SPEAKER_REVIEW_ROOT
+    assert contract.SPEAKER_REVIEW_RECEIPTS_ROOT.parent == contract.SPEAKER_REVIEW_ROOT
+    assert contract.SPEAKER_REVIEW_RUNS_ROOT == contract.DEV_PRIVATE_CORPUS_ROOT / "review-runs"
     assert contract.PROCESSOR_REQUIRED_COMMANDS == ("docker",)
     assert '""' in contract.CORPUS_SUDOERS_CONTENT
 
@@ -148,6 +155,7 @@ def test_bootstrap_contract_manages_only_corpus_paths() -> None:
     assert contract.CORPUS_DISPATCH_PATH in paths
     assert contract.CORPUS_HELPER_PATH in paths
     assert contract.PROCESS_HELPER_PATH in paths
+    assert contract.SPEAKER_REVIEW_HELPER_PATH in paths
     assert contract.CORPUS_SUDOERS_PATH in paths
     assert contract.CORPUS_AUTHORIZED_KEYS in paths
     assert Path("/usr/local/libexec/cinegraph-deploy-dispatch") not in paths
@@ -179,8 +187,17 @@ def test_existing_deployment_boundary_was_not_given_a_corpus_command() -> None:
     assert "cinegraph-corpus" not in bootstrap
 
 
-def test_refresh_upgrades_transfer_only_boundary_in_fail_closed_order(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+@pytest.mark.parametrize(
+    "legacy_sudoers",
+    [
+        contract.LEGACY_TRANSFER_ONLY_SUDOERS_CONTENT,
+        contract.LEGACY_PROCESSING_SUDOERS_CONTENT,
+    ],
+)
+def test_refresh_upgrades_supported_legacy_boundary_in_fail_closed_order(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    legacy_sudoers: str,
 ) -> None:
     dispatch = tmp_path / "dispatch"
     receive_helper = tmp_path / "receive"
@@ -197,7 +214,7 @@ def test_refresh_upgrades_transfer_only_boundary_in_fail_closed_order(
     for path, content in (
         (dispatch, b"old-dispatch"),
         (receive_helper, b"old-receive"),
-        (sudoers, contract.LEGACY_TRANSFER_ONLY_SUDOERS_CONTENT.encode("utf-8")),
+        (sudoers, legacy_sudoers.encode("utf-8")),
         (authorized_keys, b"reviewed-key"),
     ):
         path.write_bytes(content)

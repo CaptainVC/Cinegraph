@@ -204,6 +204,13 @@ OpenAI adapter receives the same in-memory JSONL bytes that were hashed into the
 submission journal, so it never reopens a mutable request path. See the
 [speaker-review filesystem security runbook](docs/operations/speaker-review-filesystem-security.md).
 
+The VPS exposes preparation through a separate offline `speaker-review-v1`
+forced-command boundary. Its isolated container can validate and prepare only the
+private Season 2 corpus; it has no network or OpenAI secret, and the source mount is
+read-only while `review-runs` is mounted separately for confined writes. Paid Batch
+submission remains a later, explicit operation. See the
+[private speaker-review preparation runbook](docs/operations/private-speaker-review-preparation.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

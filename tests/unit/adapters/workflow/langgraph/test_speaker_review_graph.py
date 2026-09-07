@@ -124,6 +124,20 @@ def test_start_graph_prepares_and_submits_new_corpus(tmp_path: Path) -> None:
     ]
 
 
+def test_prepare_graph_stops_before_provider_submission(tmp_path: Path) -> None:
+    workflow = RecordingSpeakerReviewWorkflow(tmp_path / "run")
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    run_directory, state = graph.prepare(
+        corpus_root=tmp_path / "corpus",
+        seasons=(2,),
+    )
+
+    assert run_directory == tmp_path / "run"
+    assert state.status is SpeakerReviewRunStatus.PREPARED
+    assert workflow.calls == [f"prepare:{tmp_path / 'corpus'}:(2,)"]
+
+
 def test_advance_graph_loads_persisted_state_and_advances_once(
     tmp_path: Path,
 ) -> None:

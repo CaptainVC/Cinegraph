@@ -685,6 +685,9 @@ def test_static_forced_command_and_helper_are_separate_and_bounded() -> None:
     process_helper = Path("deploy/remote/process-private-corpus.sh").read_text(
         encoding="utf-8"
     )
+    speaker_review_helper = Path(
+        "deploy/remote/prepare-private-speaker-review.sh"
+    ).read_text(encoding="utf-8")
     deployment = Path("deploy/remote/deploy-dispatch.sh").read_text(encoding="utf-8")
     quality = Path(".github/workflows/quality.yml").read_text(encoding="utf-8")
 
@@ -692,6 +695,11 @@ def test_static_forced_command_and_helper_are_separate_and_bounded() -> None:
     assert "process-v1)" in dispatcher
     assert "sudo -n /usr/local/sbin/cinegraph-receive-private-corpus" in dispatcher
     assert "sudo -n /usr/local/sbin/cinegraph-process-private-corpus" in dispatcher
+    assert "speaker-review-v1)" in dispatcher
+    assert (
+        "sudo -n /usr/local/sbin/cinegraph-prepare-private-speaker-review"
+        in dispatcher
+    )
     assert "eval" not in dispatcher
     assert "bash -c" not in dispatcher
     assert "scp" not in dispatcher.lower()
@@ -717,6 +725,12 @@ def test_static_forced_command_and_helper_are_separate_and_bounded() -> None:
     assert "corpus-dispatch.sh" in quality
     assert "receive-private-corpus.sh" in quality
     assert "process-private-corpus.sh" in quality
+    assert "prepare-private-speaker-review.sh" in quality
+    assert speaker_review_helper.index('exec 8>"$TRANSFER_LOCK"') < speaker_review_helper.index(
+        'exec 9>"$DEPLOYMENT_LOCK"'
+    ) < speaker_review_helper.index('exec 7>"$SPEAKER_REVIEW_LOCK"')
+    assert 'python3 -I -S -B "$processor"' in speaker_review_helper
+    assert "OPENAI_API_KEY" not in speaker_review_helper
 
 
 def test_shell_boundaries_parse_when_bash_is_available() -> None:
@@ -730,6 +744,7 @@ def test_shell_boundaries_parse_when_bash_is_available() -> None:
             "deploy/remote/corpus-dispatch.sh",
             "deploy/remote/receive-private-corpus.sh",
             "deploy/remote/process-private-corpus.sh",
+            "deploy/remote/prepare-private-speaker-review.sh",
         ],
         capture_output=True,
         check=False,

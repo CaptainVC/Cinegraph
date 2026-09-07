@@ -28,6 +28,9 @@ CORPUS_PASSWORD_FIELD: Final = "*NP*"
 CORPUS_DISPATCH_PATH: Final = Path("/usr/local/libexec/cinegraph-corpus-dispatch")
 CORPUS_HELPER_PATH: Final = Path("/usr/local/sbin/cinegraph-receive-private-corpus")
 PROCESS_HELPER_PATH: Final = Path("/usr/local/sbin/cinegraph-process-private-corpus")
+SPEAKER_REVIEW_HELPER_PATH: Final = Path(
+    "/usr/local/sbin/cinegraph-prepare-private-speaker-review"
+)
 CORPUS_SUDOERS_PATH: Final = Path("/etc/sudoers.d/cinegraph-corpus")
 CORPUS_AUTHORIZED_KEYS: Final = CORPUS_HOME / ".ssh/authorized_keys"
 DEPLOY_AUTHORIZED_KEYS: Final = Path("/home/cinegraph-deploy/.ssh/authorized_keys")
@@ -39,9 +42,17 @@ OBJECTS_ROOT: Final = DEV_PRIVATE_CORPUS_ROOT / "objects"
 QUARANTINE_ROOT: Final = DEV_PRIVATE_CORPUS_ROOT / "quarantine"
 PROCESSING_ROOT: Final = DEV_PRIVATE_CORPUS_ROOT / "processing"
 PROCESSING_RECEIPTS_ROOT: Final = PROCESSING_ROOT / "receipts"
+SPEAKER_REVIEW_ROOT: Final = DEV_PRIVATE_CORPUS_ROOT / "speaker-review"
+# These roots are deliberately separate from the reviewed-ingestion workspace.
+# The root helper creates per-run children with the ownership needed by the
+# unprivileged container; the bootstrap itself remains root-only and private.
+SPEAKER_REVIEW_SOURCE_ROOT: Final = SPEAKER_REVIEW_ROOT / "source"
+SPEAKER_REVIEW_RECEIPTS_ROOT: Final = SPEAKER_REVIEW_ROOT / "receipts"
+SPEAKER_REVIEW_RUNS_ROOT: Final = DEV_PRIVATE_CORPUS_ROOT / "review-runs"
 TRANSFER_LOCK: Final = DEV_PRIVATE_CORPUS_ROOT / ".transfer.lock"
 DEPLOYMENT_LOCK: Final = DEPLOY_ROOT / ".deploy.lock"
 PROCESSING_LOCK: Final = DEV_PRIVATE_CORPUS_ROOT / ".processing.lock"
+SPEAKER_REVIEW_LOCK: Final = DEV_PRIVATE_CORPUS_ROOT / ".speaker-review.lock"
 CURRENT_LINK: Final = DEPLOY_ROOT / "current"
 DEV_ENV_FILE: Final = Path("/etc/cinegraph/dev.env")
 DEV_ENV_MAX_BYTES: Final = 64 * 1024
@@ -54,6 +65,7 @@ CINEGRAPH_IMAGE_VERSION_LABEL: Final = "org.opencontainers.image.version"
 
 RECEIVE_COMMAND: Final = "receive-v1"
 PROCESS_COMMAND: Final = "process-v1"
+SPEAKER_REVIEW_COMMAND: Final = "speaker-review-v1"
 TRANSFER_PROTOCOL_VERSION: Final = 1
 INSTALL_RECEIPT_SCHEMA_VERSION: Final = 1
 INSTALL_RECEIPT_FILENAME: Final = ".install-receipt.json"
@@ -65,7 +77,13 @@ TRANSFER_TIMEOUT_SECONDS: Final = 300
 TRANSFER_KILL_AFTER_SECONDS: Final = 5
 PROCESSING_TIMEOUT_SECONDS: Final = 1800
 PROCESSING_KILL_AFTER_SECONDS: Final = 10
+SPEAKER_REVIEW_TIMEOUT_SECONDS: Final = 1800
+SPEAKER_REVIEW_KILL_AFTER_SECONDS: Final = 10
+SPEAKER_REVIEW_CONTAINER_NAME: Final = "cinegraph-speaker-review-prepare"
+SPEAKER_REVIEW_UID: Final = 10002
+SPEAKER_REVIEW_GID: Final = 10002
 PROCESSING_OUTPUT_MAX_BYTES: Final = 16 * 1024
+SPEAKER_REVIEW_OUTPUT_MAX_BYTES: Final = 16 * 1024
 MINIMUM_PYTHON_VERSION: Final = (3, 12)
 MIN_FREE_BYTES_AFTER_TRANSFER: Final = 1024 * 1024 * 1024
 MIN_FREE_INODES_AFTER_TRANSFER: Final = 1024
@@ -80,10 +98,16 @@ CORPUS_SUDOERS_CONTENT: Final = (
     f"Defaults:{CORPUS_USER} env_reset,secure_path={SAFE_PATH}\n"
     f'{CORPUS_USER} ALL=(root) NOPASSWD: {CORPUS_HELPER_PATH.as_posix()} ""\n'
     f'{CORPUS_USER} ALL=(root) NOPASSWD: {PROCESS_HELPER_PATH.as_posix()} ""\n'
+    f'{CORPUS_USER} ALL=(root) NOPASSWD: {SPEAKER_REVIEW_HELPER_PATH.as_posix()} ""\n'
 )
 LEGACY_TRANSFER_ONLY_SUDOERS_CONTENT: Final = (
     f"Defaults:{CORPUS_USER} env_reset,secure_path={SAFE_PATH}\n"
     f'{CORPUS_USER} ALL=(root) NOPASSWD: {CORPUS_HELPER_PATH.as_posix()} ""\n'
+)
+LEGACY_PROCESSING_SUDOERS_CONTENT: Final = (
+    f"Defaults:{CORPUS_USER} env_reset,secure_path={SAFE_PATH}\n"
+    f'{CORPUS_USER} ALL=(root) NOPASSWD: {CORPUS_HELPER_PATH.as_posix()} ""\n'
+    f'{CORPUS_USER} ALL=(root) NOPASSWD: {PROCESS_HELPER_PATH.as_posix()} ""\n'
 )
 
 RECEIVER_REQUIRED_COMMANDS: Final = (
@@ -99,6 +123,7 @@ RECEIVER_REQUIRED_COMMANDS: Final = (
     "uname",
 )
 PROCESSOR_REQUIRED_COMMANDS: Final = ("docker",)
+SPEAKER_REVIEW_REQUIRED_COMMANDS: Final = ("docker",)
 
 
 def canonical_json(value: Mapping[str, object]) -> bytes:
