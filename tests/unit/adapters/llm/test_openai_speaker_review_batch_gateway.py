@@ -41,8 +41,8 @@ def test_submission_does_not_retry_ambiguous_creation(
             },
         )
 
-    request_path = tmp_path / "requests.jsonl"
-    request_path.write_text("{}\n", encoding="utf-8")
+    request_filename = "requests.jsonl"
+    request_bytes = b"{}\n"
     with OpenAI(
         api_key="synthetic-key",
         max_retries=3,
@@ -51,7 +51,7 @@ def test_submission_does_not_retry_ambiguous_creation(
         gateway = OpenAISpeakerReviewBatchGateway(client, DEFAULT_SPEAKER_REVIEW_CONFIGURATION)
         error_type = APIConnectionError if failure == "timeout" else InternalServerError
         with pytest.raises(error_type):
-            gateway.submit(request_path, "24h", {"stage": "synthetic"})
+            gateway.submit(request_filename, request_bytes, "24h", {"stage": "synthetic"})
         assert client.max_retries == 3
 
     assert calls.count(failed_path) == 1
@@ -66,6 +66,7 @@ def test_successful_submission_preserves_request_and_batch_identity(tmp_path: Pa
         calls.append(request.url.path)
         if request.url.path == "/v1/files":
             assert b'{"custom_id":"synthetic"}' in request.content
+            assert b'filename="requests.jsonl"' in request.content
             return httpx.Response(
                 200,
                 json={
@@ -88,14 +89,14 @@ def test_successful_submission_preserves_request_and_batch_identity(tmp_path: Pa
             json={"id": "batch-synthetic", "object": "batch", "status": "validating"},
         )
 
-    request_path = tmp_path / "requests.jsonl"
-    request_path.write_text('{"custom_id":"synthetic"}\n', encoding="utf-8")
+    request_filename = "requests.jsonl"
+    request_bytes = b'{"custom_id":"synthetic"}\n'
     with OpenAI(
         api_key="synthetic-key",
         http_client=httpx.Client(transport=httpx.MockTransport(handle)),
     ) as client:
         gateway = OpenAISpeakerReviewBatchGateway(client, DEFAULT_SPEAKER_REVIEW_CONFIGURATION)
-        result = gateway.submit(request_path, "24h", metadata)
+        result = gateway.submit(request_filename, request_bytes, "24h", metadata)
 
     assert (result.batch_id, result.input_file_id, result.status) == (
         "batch-synthetic",
@@ -103,3 +104,19 @@ def test_successful_submission_preserves_request_and_batch_identity(tmp_path: Pa
         "validating",
     )
     assert calls == ["/v1/files", "/v1/batches"]
+
+
+@pytest.mark.parametrize("filename", ["", ".", "..", "nested/requests.jsonl", "nested\\requests.jsonl", "requests\n.jsonl"])
+def test_submission_rejects_unsafe_filename(filename: str) -> None:
+    gateway = OpenAISpeakerReviewBatchGateway(object(), DEFAULT_SPEAKER_REVIEW_CONFIGURATION)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="safe basename"):
+        gateway.submit(filename, b"{}\n", "24h", {})
+
+
+def test_submission_rejects_unbounded_or_empty_bytes() -> None:
+    from cinegraph.config.speaker_review_submission import SUBMISSION_REQUEST_MAX_BYTES
+
+    gateway = OpenAISpeakerReviewBatchGateway(object(), DEFAULT_SPEAKER_REVIEW_CONFIGURATION)  # type: ignore[arg-type]
+    for content in (b"", b"x" * (SUBMISSION_REQUEST_MAX_BYTES + 1)):
+        with pytest.raises(ValueError, match="configured limit"):
+            gateway.submit("requests.jsonl", content, "24h", {})

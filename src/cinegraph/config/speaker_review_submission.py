@@ -1,7 +1,12 @@
 from typing import Final
 
-SUBMISSION_RECORD_MAX_BYTES: Final = 4096
-SUBMISSION_REQUEST_MAX_BYTES: Final = 32 * 1024 * 1024
+from cinegraph.config.speaker_review_filesystem import (
+    PRIVATE_RECORD_MAX_BYTES,
+    PRIVATE_REQUEST_MAX_BYTES,
+)
+
+SUBMISSION_RECORD_MAX_BYTES: Final = PRIVATE_RECORD_MAX_BYTES
+SUBMISSION_REQUEST_MAX_BYTES: Final = PRIVATE_REQUEST_MAX_BYTES
 SUBMISSION_STAGES: Final = frozenset({"primary", "adjudication", "final-review"})
 SUBMISSION_KINDS: Final = frozenset({"intent", "completed"})
 SUBMISSION_SCHEMA_VERSION: Final = 1

@@ -8,7 +8,7 @@ from cinegraph.config import DEFAULT_SPEAKER_REVIEW_CONFIGURATION
 from cinegraph.ingestion.speaker_review.human_review import (
     HumanSpeakerReviewWorkflow,
 )
-from cinegraph.ingestion.speaker_review.workflow import load_run_state
+from cinegraph.ingestion.speaker_review.workflow import load_validated_run_state
 
 
 def _workflow() -> HumanSpeakerReviewWorkflow:
@@ -22,7 +22,7 @@ def _prepare(arguments: argparse.Namespace) -> None:
             {
                 "candidate_count": result.candidate_count,
                 "queue_sha256": result.queue_sha256,
-                "workbench": str(result.path),
+                "workbench": result.path.name,
             },
             sort_keys=True,
         )
@@ -49,7 +49,10 @@ def _apply(arguments: argparse.Namespace) -> None:
 
 
 def _status(arguments: argparse.Namespace) -> None:
-    state = load_run_state(arguments.run_directory / "run-state.json")
+    _, state = load_validated_run_state(
+        arguments.run_directory,
+        DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
+    )
     print(
         json.dumps(
             {

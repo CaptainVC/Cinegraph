@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -9,6 +8,7 @@ from pathlib import Path
 
 from cinegraph.common.error_messages import SpeakerReviewErrorMessages
 from cinegraph.config import SpeakerReviewConfiguration
+from cinegraph.config.speaker_review_filesystem import PRIVATE_ARTIFACT_MAX_BYTES
 from cinegraph.domain.enums.enum import (
     SpeakerReviewDisposition,
     SpeakerReviewRunStatus,
@@ -18,15 +18,20 @@ from cinegraph.domain.models.transcript import (
     SpeakerReviewCandidate,
     SpeakerReviewDecision,
 )
+from cinegraph.ingestion.speaker_review.private_io import (
+    stable_file_snapshot,
+    write_private_file_once,
+)
 from cinegraph.ingestion.speaker_review.reviewed_output import (
     ReviewedOutputRecord,
     write_reviewed_outputs,
 )
+from cinegraph.ingestion.speaker_review.source_manifest import load_source_texts
 from cinegraph.ingestion.speaker_review.workflow import (
     SpeakerReviewRunState,
     load_candidates,
     load_decisions,
-    load_run_state,
+    load_validated_run_state,
     save_run_state,
 )
 
@@ -52,7 +57,10 @@ class HumanSpeakerReviewWorkflow:
         self._configuration = configuration
 
     def prepare_workbench(self, run_directory: Path) -> HumanReviewWorkbenchResult:
-        state = load_run_state(run_directory / "run-state.json")
+        run_directory, state = load_validated_run_state(
+            run_directory,
+            self._configuration,
+        )
         self._require_human_review_state(state)
         queue_path, queue_payload, queue_hash = self._load_current_queue(
             run_directory,
@@ -82,7 +90,10 @@ class HumanSpeakerReviewWorkflow:
         run_directory: Path,
         resolution_path: Path,
     ) -> HumanReviewApplicationResult:
-        state = load_run_state(run_directory / "run-state.json")
+        run_directory, state = load_validated_run_state(
+            run_directory,
+            self._configuration,
+        )
         if state.status is SpeakerReviewRunStatus.COMPLETED:
             return self._load_completed_result(run_directory, state, resolution_path)
         self._require_human_review_state(state)
@@ -255,7 +266,10 @@ class HumanSpeakerReviewWorkflow:
             raise FileNotFoundError(
                 SpeakerReviewErrorMessages.HUMAN_REVIEW_QUEUE_MISSING
             )
-        content = queue_path.read_text(encoding="utf-8")
+        content = stable_file_snapshot(
+            queue_path,
+            max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+        ).content.decode("utf-8")
         try:
             payload = json.loads(content)
         except json.JSONDecodeError as error:
@@ -318,15 +332,11 @@ class HumanSpeakerReviewWorkflow:
         reviewer: str,
         reviewed_at: datetime,
     ) -> tuple[ReviewedOutputRecord, ...]:
-        source_manifest = _load_json_object(run_directory / "source-manifest.json")
-        raw_sources = source_manifest.get("sources")
-        if not isinstance(raw_sources, dict):
-            raise TypeError(
-                SpeakerReviewErrorMessages.HUMAN_REVIEW_RESOLUTION_MALFORMED
-            )
-        source_paths = {
-            str(filename): Path(str(path)) for filename, path in raw_sources.items()
-        }
+        source_texts = load_source_texts(
+            run_directory,
+            state.run_id,
+            self._configuration,
+        )
         reviewers = [state.primary_model]
         if state.adjudication_part_count:
             reviewers.append(state.adjudication_model)
@@ -335,7 +345,7 @@ class HumanSpeakerReviewWorkflow:
         reviewers.append(reviewer)
         return write_reviewed_outputs(
             run_directory=run_directory,
-            source_paths=source_paths,
+            source_texts=source_texts,
             candidates=load_candidates(run_directory),
             decisions=decisions,
             reviewer_models=tuple(reviewers),
@@ -500,8 +510,13 @@ def _comparable_resolution_text(payload: dict[str, object]) -> str:
 
 def _load_json_object(path: Path) -> dict[str, object]:
     try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as error:
+        payload = json.loads(
+            stable_file_snapshot(
+                path,
+                max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+            ).content.decode("utf-8")
+        )
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ValueError(
             SpeakerReviewErrorMessages.HUMAN_REVIEW_RESOLUTION_MALFORMED
         ) from error
@@ -521,14 +536,11 @@ def _write_jsonl_if_new_or_unchanged(
 
 
 def _write_if_new_or_unchanged(path: Path, content: str) -> None:
-    if path.exists() and path.read_text(encoding="utf-8") != content:
-        raise FileExistsError(
-            SpeakerReviewErrorMessages.REVIEWED_OUTPUT_CONFLICT.format(path=path)
-        )
-    if not path.exists():
-        path.write_text(content, encoding="utf-8")
-    if os.name != "nt":
-        path.chmod(0o600)
+    write_private_file_once(
+        path.parent,
+        path.name,
+        content.encode("utf-8"),
+    )
 
 
 def _json_text(payload: object) -> str:

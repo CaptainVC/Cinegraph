@@ -9,7 +9,15 @@ from hashlib import sha256
 from pathlib import Path
 
 from cinegraph.common.error_messages import SpeakerReviewErrorMessages
+from cinegraph.common.private_corpus_policy import ALIGNED_DIRECTORY_NAME
 from cinegraph.config import SpeakerReviewConfiguration
+from cinegraph.config.speaker_review_filesystem import (
+    CANDIDATES_FILENAME,
+    PRIVATE_ARTIFACT_MAX_BYTES,
+    PRIVATE_SOURCE_MAX_BYTES,
+    RUN_STATE_FILENAME,
+    SOURCE_MANIFEST_FILENAME,
+)
 from cinegraph.config.speaker_review_submission import (
     SUBMISSION_KINDS,
     SUBMISSION_RECORD_MAX_BYTES,
@@ -50,7 +58,28 @@ from cinegraph.ingestion.speaker_review.decisions import (
     apply_final_review,
     decide_primary_consensus,
 )
+from cinegraph.ingestion.speaker_review.private_io import (
+    PrivateFileSnapshot,
+    SpeakerReviewArtifactConflictError,
+    SpeakerReviewFilesystemError,
+    canonical_corpus_root,
+    canonical_relative_locator,
+    canonical_run_directory,
+    create_run_directory,
+    private_artifact_path,
+    replace_private_file,
+    resolve_relative_directory,
+    stable_file_snapshot,
+    stable_relative_file_snapshot,
+    write_private_file_once,
+)
 from cinegraph.ingestion.speaker_review.reviewed_output import write_reviewed_outputs
+from cinegraph.ingestion.speaker_review.source_manifest import (
+    load_source_texts,
+    source_manifest_payload,
+    speaker_review_filesystem_configuration,
+    validate_run_directory,
+)
 from cinegraph.ports.llm.speaker_review_batch_gateway import (
     BatchSnapshot,
     BatchSubmission,
@@ -136,6 +165,15 @@ class SpeakerReviewWorkflow:
         self._primary_reasoning_effort = primary_reasoning_effort
         self._adjudication_reasoning_effort = adjudication_reasoning_effort
         self._final_review_reasoning_effort = final_review_reasoning_effort
+        self._filesystem_configuration = speaker_review_filesystem_configuration(
+            configuration
+        )
+
+    def load(
+        self,
+        run_directory: Path,
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        return load_validated_run_state(run_directory, self._configuration)
 
     def prepare(
         self,
@@ -143,39 +181,83 @@ class SpeakerReviewWorkflow:
         corpus_root: Path,
         seasons: tuple[int, ...],
     ) -> tuple[Path, SpeakerReviewRunState]:
-        source_paths: dict[str, Path] = {}
+        root = canonical_corpus_root(
+            corpus_root,
+            configuration=self._filesystem_configuration,
+        )
+        source_snapshots: dict[str, PrivateFileSnapshot] = {}
+        seen_source_names: set[str] = set()
         candidates: list[SpeakerReviewCandidate] = []
         for season in seasons:
-            source_pdf = corpus_root / self._configuration.script_pdf_filename_template.format(
-                season=season
+            source_pdf_locator = canonical_relative_locator(
+                self._configuration.script_pdf_filename_template.format(
+                    season=season
+                ),
+                configuration=self._filesystem_configuration,
+            ).as_posix()
+            source_pdf = stable_relative_file_snapshot(
+                root,
+                source_pdf_locator,
+                max_bytes=PRIVATE_SOURCE_MAX_BYTES,
+                configuration=self._filesystem_configuration,
             )
-            season_directories = tuple(
-                corpus_root.glob(
+            discovered_directories = tuple(
+                root.glob(
                     self._configuration.season_directory_glob_template.format(
                         season=season
                     )
                 )
             )
+            season_directories: list[Path] = []
+            for directory in discovered_directories:
+                try:
+                    locator = directory.relative_to(root).as_posix()
+                except ValueError:
+                    raise SpeakerReviewFilesystemError(
+                        SpeakerReviewErrorMessages.SPEAKER_REVIEW_CORPUS_PATH_INVALID
+                    ) from None
+                season_directories.append(
+                    resolve_relative_directory(
+                        root,
+                        locator,
+                        configuration=self._filesystem_configuration,
+                    )
+                )
             if len(season_directories) != 1:
                 raise ValueError(
                     f"Expected one corpus directory for season {season}, found "
                     f"{len(season_directories)}."
                 )
-            aligned_paths = tuple(
-                sorted(
-                    (season_directories[0] / "script-aligned").glob(
-                        self._configuration.aligned_subtitle_glob
-                    )
-                )
+            season_locator = season_directories[0].relative_to(root).as_posix()
+            aligned_directory = resolve_relative_directory(
+                root,
+                f"{season_locator}/{ALIGNED_DIRECTORY_NAME}",
+                configuration=self._filesystem_configuration,
             )
-            for path in aligned_paths:
-                if path.name in source_paths:
-                    raise ValueError(f"Duplicate aligned subtitle filename: {path.name}")
-                source_paths[path.name] = path.resolve()
+            aligned_sources: list[tuple[Path, bytes]] = []
+            for path in sorted(
+                aligned_directory.glob(self._configuration.aligned_subtitle_glob)
+            ):
+                locator = path.relative_to(root).as_posix()
+                snapshot = stable_relative_file_snapshot(
+                    root,
+                    locator,
+                    max_bytes=PRIVATE_SOURCE_MAX_BYTES,
+                    configuration=self._filesystem_configuration,
+                )
+                folded_name = path.name.casefold()
+                if folded_name in seen_source_names:
+                    raise ValueError(
+                        f"Duplicate aligned subtitle filename: {path.name}"
+                    )
+                seen_source_names.add(folded_name)
+                source_snapshots[path.name] = snapshot
+                aligned_sources.append((Path(locator), snapshot.content))
             candidates.extend(
                 build_speaker_review_candidates(
-                    source_pdf=source_pdf,
-                    aligned_subtitles=aligned_paths,
+                    source_pdf_name=Path(source_pdf_locator).name,
+                    source_pdf_content=source_pdf.content,
+                    aligned_subtitles=tuple(aligned_sources),
                     configuration=self._configuration,
                 )
             )
@@ -200,16 +282,34 @@ class SpeakerReviewWorkflow:
             configuration=self._configuration,
         )
         run_id = self._run_id(candidate_tuple)
-        run_directory = (
-            corpus_root / self._configuration.run_directory_name / run_id
+        expected_run_directory = (
+            root / self._configuration.run_directory_name / run_id
         )
-        state_path = run_directory / "run-state.json"
-        if state_path.exists():
-            return run_directory, load_run_state(state_path)
+        if os.path.lexists(expected_run_directory):
+            run_directory = canonical_run_directory(
+                root,
+                run_id,
+                configuration=self._filesystem_configuration,
+            )
+            state = load_run_state(run_directory / RUN_STATE_FILENAME)
+            if state.run_id != run_id:
+                raise SpeakerReviewFilesystemError(
+                    SpeakerReviewErrorMessages.SPEAKER_REVIEW_RUN_DIRECTORY_INVALID
+                )
+            load_source_texts(
+                run_directory,
+                run_id,
+                self._configuration,
+            )
+            return run_directory, state
 
-        run_directory.mkdir(parents=True, exist_ok=False)
+        run_directory = create_run_directory(
+            root,
+            run_id,
+            configuration=self._filesystem_configuration,
+        )
         _write_jsonl(
-            run_directory / "candidates.jsonl",
+            run_directory / CANDIDATES_FILENAME,
             tuple(item.to_dict() for item in candidate_tuple),
         )
         primary_parts = partition_batch_requests(
@@ -218,12 +318,12 @@ class SpeakerReviewWorkflow:
         )
         _write_request_parts(run_directory, "primary", primary_parts)
         _write_json(
-            run_directory / "source-manifest.json",
-            {
-                "sources": {
-                    filename: str(path) for filename, path in sorted(source_paths.items())
-                }
-            },
+            run_directory / SOURCE_MANIFEST_FILENAME,
+            source_manifest_payload(
+                root,
+                source_snapshots,
+                self._configuration,
+            ),
         )
         timestamp = _now()
         state = SpeakerReviewRunState(
@@ -978,13 +1078,11 @@ class SpeakerReviewWorkflow:
         decisions: tuple[SpeakerReviewDecision, ...],
     ) -> SpeakerReviewRunState:
         candidates = load_candidates(run_directory)
-        source_manifest = json.loads(
-            (run_directory / "source-manifest.json").read_text(encoding="utf-8")
+        source_texts = load_source_texts(
+            run_directory,
+            state.run_id,
+            self._configuration,
         )
-        source_paths = {
-            filename: Path(path)
-            for filename, path in source_manifest["sources"].items()
-        }
         reviewer_models = [state.primary_model]
         if state.adjudication_batch_ids or state.adjudication_batch_id is not None:
             reviewer_models.append(state.adjudication_model)
@@ -992,7 +1090,7 @@ class SpeakerReviewWorkflow:
             reviewer_models.append(state.final_review_model)
         records = write_reviewed_outputs(
             run_directory=run_directory,
-            source_paths=source_paths,
+            source_texts=source_texts,
             candidates=candidates,
             decisions=decisions,
             reviewer_models=tuple(reviewer_models),
@@ -1031,7 +1129,8 @@ class SpeakerReviewWorkflow:
             "part": str(part_index + 1),
             "prompt_version": state.prompt_version,
         }
-        request_hash = _bounded_file_sha256(request_path)
+        request_bytes = _bounded_file_bytes(request_path)
+        request_hash = sha256(request_bytes).hexdigest()
         binding = {
             "schema_version": SUBMISSION_SCHEMA_VERSION,
             "request_sha256": request_hash,
@@ -1067,7 +1166,8 @@ class SpeakerReviewWorkflow:
         _write_submission_record(intent_path, {"binding": binding, "status": "intent"})
         try:
             submission = self._gateway.submit(
-                request_path,
+                request_path.name,
+                request_bytes,
                 self._configuration.batch_completion_window,
                 metadata,
             )
@@ -1081,7 +1181,6 @@ class SpeakerReviewWorkflow:
                         submission.status,
                     )
                 )
-                or _bounded_file_sha256(request_path) != request_hash
             ):
                 raise ValueError
         except Exception:
@@ -1192,7 +1291,12 @@ class SpeakerReviewWorkflow:
 
 
 def load_run_state(path: Path) -> SpeakerReviewRunState:
-    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload = json.loads(
+        stable_file_snapshot(
+            path,
+            max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+        ).content.decode("utf-8")
+    )
     payload.pop("actual_total_cost_usd", None)
     payload["status"] = SpeakerReviewRunStatus(payload["status"])
     for field_name in (
@@ -1208,15 +1312,36 @@ def load_run_state(path: Path) -> SpeakerReviewRunState:
     return SpeakerReviewRunState(**payload)
 
 
+def load_validated_run_state(
+    run_directory: Path,
+    configuration: SpeakerReviewConfiguration,
+) -> tuple[Path, SpeakerReviewRunState]:
+    expected_run_id = Path(os.path.abspath(run_directory)).name
+    canonical, _ = validate_run_directory(
+        run_directory,
+        expected_run_id,
+        configuration,
+    )
+    state = load_run_state(canonical / RUN_STATE_FILENAME)
+    if state.run_id != expected_run_id:
+        raise SpeakerReviewFilesystemError(
+            SpeakerReviewErrorMessages.SPEAKER_REVIEW_RUN_DIRECTORY_INVALID
+        )
+    return canonical, state
+
+
 def save_run_state(run_directory: Path, state: SpeakerReviewRunState) -> None:
-    _write_json_atomic(run_directory / "run-state.json", state.to_dict())
+    _write_json_atomic(run_directory / RUN_STATE_FILENAME, state.to_dict())
 
 
 def load_candidates(run_directory: Path) -> tuple[SpeakerReviewCandidate, ...]:
     return tuple(
         candidate_from_dict(json.loads(line))
-        for line in (run_directory / "candidates.jsonl")
-        .read_text(encoding="utf-8")
+        for line in stable_file_snapshot(
+            run_directory / CANDIDATES_FILENAME,
+            max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+        )
+        .content.decode("utf-8")
         .splitlines()
         if line.strip()
     )
@@ -1225,7 +1350,12 @@ def load_candidates(run_directory: Path) -> tuple[SpeakerReviewCandidate, ...]:
 def load_decisions(path: Path) -> tuple[SpeakerReviewDecision, ...]:
     return tuple(
         decision_from_dict(json.loads(line))
-        for line in path.read_text(encoding="utf-8").splitlines()
+        for line in stable_file_snapshot(
+            path,
+            max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+        )
+        .content.decode("utf-8")
+        .splitlines()
         if line.strip()
     )
 
@@ -1329,10 +1459,13 @@ def _combined_stage_output(
     part_count: int,
 ) -> str:
     contents = [
-        (
+        stable_file_snapshot(
             run_directory
-            / f"{_part_stage_name(stage, part_index)}-output.jsonl"
-        ).read_text(encoding="utf-8").rstrip("\n")
+            / f"{_part_stage_name(stage, part_index)}-output.jsonl",
+            max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+        )
+        .content.decode("utf-8")
+        .rstrip("\n")
         for part_index in range(part_count)
     ]
     return "\n".join(contents) + "\n"
@@ -1346,19 +1479,25 @@ def _write_json(path: Path, payload: object) -> None:
 
 
 def _write_json_atomic(path: Path, payload: object) -> None:
-    temporary_path = path.with_suffix(path.suffix + ".tmp")
-    temporary_path.write_text(
-        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
-        encoding="utf-8",
+    replace_private_file(
+        path.parent,
+        path.name,
+        (
+            json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True)
+            + "\n"
+        ).encode("utf-8"),
     )
-    temporary_path.replace(path)
 
 
 def _write_text_if_new_or_unchanged(path: Path, content: str) -> None:
-    if path.exists() and path.read_text(encoding="utf-8") != content:
-        raise FileExistsError(f"Refusing to overwrite different run artifact: {path}")
-    if not path.exists():
-        path.write_text(content, encoding="utf-8")
+    try:
+        write_private_file_once(
+            path.parent,
+            path.name,
+            content.encode("utf-8"),
+        )
+    except SpeakerReviewArtifactConflictError as error:
+        raise FileExistsError("Refusing to overwrite a different run artifact.") from error
 
 
 def _submission_path(
@@ -1368,7 +1507,10 @@ def _submission_path(
         raise RuntimeError(
             SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
         )
-    return run_directory / submission_filename(stage, part_index + 1, kind)
+    return private_artifact_path(
+        run_directory,
+        submission_filename(stage, part_index + 1, kind),
+    )
 
 
 def _submission_exists(path: Path) -> bool:
@@ -1410,12 +1552,12 @@ def _submission_file_identity(
     )
 
 
-def _bounded_file_sha256(path: Path) -> str:
-    digest = sha256()
+def _bounded_file_bytes(path: Path) -> bytes:
     try:
         metadata = path.lstat()
         if (
             not _regular_submission_file(metadata)
+            or metadata.st_size <= 0
             or metadata.st_size > SUBMISSION_REQUEST_MAX_BYTES
         ):
             raise OSError
@@ -1425,22 +1567,21 @@ def _bounded_file_sha256(path: Path) -> str:
                 opened
             ) != _submission_file_identity(metadata):
                 raise OSError
-            total = 0
-            while chunk := stream.read(1024 * 1024):
-                total += len(chunk)
-                if total > SUBMISSION_REQUEST_MAX_BYTES:
-                    raise OSError
-                digest.update(chunk)
+            content = stream.read(SUBMISSION_REQUEST_MAX_BYTES + 1)
         after = path.lstat()
-        if not _regular_submission_file(after) or _submission_file_identity(
-            after
-        ) != _submission_file_identity(metadata):
+        if (
+            not _regular_submission_file(after)
+            or _submission_file_identity(after)
+            != _submission_file_identity(metadata)
+            or len(content) != opened.st_size
+            or len(content) > SUBMISSION_REQUEST_MAX_BYTES
+        ):
             raise OSError
     except OSError:
         raise RuntimeError(
             SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
         ) from None
-    return digest.hexdigest()
+    return content
 
 
 def _write_submission_record(path: Path, payload: dict[str, object]) -> None:

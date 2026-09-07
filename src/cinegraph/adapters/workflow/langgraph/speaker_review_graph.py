@@ -8,7 +8,6 @@ from cinegraph.domain.enums.enum import SpeakerReviewRunStatus
 from cinegraph.ingestion.speaker_review.workflow import (
     SpeakerReviewRunState,
     SpeakerReviewWorkflow,
-    load_run_state,
 )
 
 SpeakerReviewGraphOperation = Literal[
@@ -202,7 +201,8 @@ class SpeakerReviewGraphWorkflow:
             raise RuntimeError(
                 WorkflowErrorMessages.SPEAKER_REVIEW_RUN_DIRECTORY_REQUIRED
             )
-        return {"run_state": load_run_state(run_directory / "run-state.json")}
+        canonical, run_state = self._workflow.load(run_directory)
+        return {"run_directory": canonical, "run_state": run_state}
 
     def _route_after_state(self, state: SpeakerReviewGraphState) -> str:
         run_state = state["run_state"]

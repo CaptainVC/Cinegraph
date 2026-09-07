@@ -7,6 +7,7 @@ from cinegraph.adapters.workflow.langgraph.speaker_review_graph import (
 from cinegraph.domain.enums.enum import SpeakerReviewRunStatus
 from cinegraph.ingestion.speaker_review.workflow import (
     SpeakerReviewRunState,
+    load_run_state,
     save_run_state,
 )
 
@@ -34,6 +35,13 @@ class RecordingSpeakerReviewWorkflow:
     def __init__(self, run_directory: Path) -> None:
         self.run_directory = run_directory
         self.calls: list[str] = []
+
+    def load(
+        self,
+        run_directory: Path,
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        self.calls.append("load")
+        return run_directory, load_run_state(run_directory / "run-state.json")
 
     def prepare(
         self,
@@ -131,7 +139,7 @@ def test_advance_graph_loads_persisted_state_and_advances_once(
     _, state = graph.advance(run_directory)
 
     assert state.status is SpeakerReviewRunStatus.COMPLETED
-    assert workflow.calls == ["advance"]
+    assert workflow.calls == ["load", "advance"]
 
 
 def test_terminal_run_ends_without_reinvoking_review_workflow(tmp_path: Path) -> None:
@@ -147,7 +155,7 @@ def test_terminal_run_ends_without_reinvoking_review_workflow(tmp_path: Path) ->
     _, state = graph.advance(run_directory)
 
     assert state.status is SpeakerReviewRunStatus.NEEDS_HUMAN
-    assert workflow.calls == []
+    assert workflow.calls == ["load"]
 
 
 def test_final_review_graph_resumes_needs_human_run(tmp_path: Path) -> None:
@@ -163,7 +171,7 @@ def test_final_review_graph_resumes_needs_human_run(tmp_path: Path) -> None:
     _, state = graph.final_review(run_directory)
 
     assert state.status is SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED
-    assert workflow.calls == ["submit_final_review"]
+    assert workflow.calls == ["load", "submit_final_review"]
 
 
 def test_retry_graph_targets_incomplete_final_verdicts(tmp_path: Path) -> None:
@@ -180,7 +188,7 @@ def test_retry_graph_targets_incomplete_final_verdicts(tmp_path: Path) -> None:
 
     assert state.status is SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED
     assert state.final_review_retry_count == 1
-    assert workflow.calls == ["retry_incomplete_final_review"]
+    assert workflow.calls == ["load", "retry_incomplete_final_review"]
 
 
 def test_reconcile_graph_reprices_completed_raw_outputs(tmp_path: Path) -> None:
@@ -196,4 +204,4 @@ def test_reconcile_graph_reprices_completed_raw_outputs(tmp_path: Path) -> None:
     _, state = graph.reconcile_costs(run_directory)
 
     assert state.actual_primary_cost_usd == 0.25
-    assert workflow.calls == ["reconcile_completed_costs"]
+    assert workflow.calls == ["load", "reconcile_completed_costs"]
