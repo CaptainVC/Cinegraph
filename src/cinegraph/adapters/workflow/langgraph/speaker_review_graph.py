@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal, TypedDict, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -12,6 +12,7 @@ from cinegraph.ingestion.speaker_review.workflow import (
 
 SpeakerReviewGraphOperation = Literal[
     "start",
+    "prepare",
     "submit",
     "advance",
     "final-review",
@@ -43,6 +44,21 @@ class SpeakerReviewGraphWorkflow:
     ) -> tuple[Path, SpeakerReviewRunState]:
         return self._invoke(
             operation="start",
+            corpus_root=corpus_root,
+            seasons=seasons,
+            run_directory=None,
+        )
+
+    def prepare(
+        self,
+        *,
+        corpus_root: Path,
+        seasons: tuple[int, ...],
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        """Prepare a resumable run without crossing the provider boundary."""
+
+        return self._invoke(
+            operation="prepare",
             corpus_root=corpus_root,
             seasons=seasons,
             run_directory=None,
@@ -111,21 +127,22 @@ class SpeakerReviewGraphWorkflow:
         seasons: tuple[int, ...],
         run_directory: Path | None,
     ) -> tuple[Path, SpeakerReviewRunState]:
-        final_state = self._graph.invoke(
-            SpeakerReviewGraphState(
-                operation=operation,
-                corpus_root=corpus_root,
-                seasons=seasons,
-                run_directory=run_directory,
-                run_state=None,
-            )
+        final_state = cast(
+            SpeakerReviewGraphState,
+            self._graph.invoke(
+                SpeakerReviewGraphState(
+                    operation=operation,
+                    corpus_root=corpus_root,
+                    seasons=seasons,
+                    run_directory=run_directory,
+                    run_state=None,
+                ),  # type: ignore[arg-type]
+            ),
         )
         final_directory = final_state["run_directory"]
         final_run_state = final_state["run_state"]
         if final_directory is None or final_run_state is None:
-            raise RuntimeError(
-                WorkflowErrorMessages.SPEAKER_REVIEW_GRAPH_RESULT_REQUIRED
-            )
+            raise RuntimeError(WorkflowErrorMessages.SPEAKER_REVIEW_GRAPH_RESULT_REQUIRED)
         return final_directory, final_run_state
 
     def _build_graph(self) -> StateGraph:
@@ -175,7 +192,7 @@ class SpeakerReviewGraphWorkflow:
         return graph
 
     def _route_from_start(self, state: SpeakerReviewGraphState) -> str:
-        return "prepare" if state["operation"] == "start" else "load"
+        return "prepare" if state["operation"] in {"start", "prepare"} else "load"
 
     def _prepare(
         self,
@@ -183,9 +200,7 @@ class SpeakerReviewGraphWorkflow:
     ) -> dict[str, object]:
         corpus_root = state["corpus_root"]
         if corpus_root is None:
-            raise RuntimeError(
-                WorkflowErrorMessages.SPEAKER_REVIEW_CORPUS_ROOT_REQUIRED
-            )
+            raise RuntimeError(WorkflowErrorMessages.SPEAKER_REVIEW_CORPUS_ROOT_REQUIRED)
         run_directory, run_state = self._workflow.prepare(
             corpus_root=corpus_root,
             seasons=state["seasons"],
@@ -195,12 +210,10 @@ class SpeakerReviewGraphWorkflow:
     def _load(
         self,
         state: SpeakerReviewGraphState,
-    ) -> dict[str, SpeakerReviewRunState]:
+    ) -> dict[str, object]:
         run_directory = state["run_directory"]
         if run_directory is None:
-            raise RuntimeError(
-                WorkflowErrorMessages.SPEAKER_REVIEW_RUN_DIRECTORY_REQUIRED
-            )
+            raise RuntimeError(WorkflowErrorMessages.SPEAKER_REVIEW_RUN_DIRECTORY_REQUIRED)
         canonical, run_state = self._workflow.load(run_directory)
         return {"run_directory": canonical, "run_state": run_state}
 
@@ -208,20 +221,18 @@ class SpeakerReviewGraphWorkflow:
         run_state = state["run_state"]
         if run_state is None:
             return "end"
+        if state["operation"] == "prepare":
+            return "end"
         if (
             state["operation"] in {"start", "submit"}
             and run_state.status is SpeakerReviewRunStatus.PREPARED
         ):
             return "submit"
-        if (
-            state["operation"] == "advance"
-            and run_state.status
-            in {
-                SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
-                SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
-                SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED,
-            }
-        ):
+        if state["operation"] == "advance" and run_state.status in {
+            SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
+            SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
+            SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED,
+        }:
             return "advance"
         if (
             state["operation"] == "final-review"
@@ -304,7 +315,5 @@ class SpeakerReviewGraphWorkflow:
         run_directory = state["run_directory"]
         run_state = state["run_state"]
         if run_directory is None or run_state is None:
-            raise RuntimeError(
-                WorkflowErrorMessages.SPEAKER_REVIEW_GRAPH_RESULT_REQUIRED
-            )
+            raise RuntimeError(WorkflowErrorMessages.SPEAKER_REVIEW_GRAPH_RESULT_REQUIRED)
         return run_directory, run_state

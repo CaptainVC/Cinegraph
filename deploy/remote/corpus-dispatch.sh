@@ -36,6 +36,7 @@ check_root_path /usr/local/sbin directory 755
 check_root_path /usr/local/libexec/cinegraph-corpus-dispatch file 755
 check_root_path /usr/local/sbin/cinegraph-receive-private-corpus file 755
 check_root_path /usr/local/sbin/cinegraph-process-private-corpus file 755
+check_root_path /usr/local/sbin/cinegraph-prepare-private-speaker-review file 755
 
 case "${SSH_ORIGINAL_COMMAND-}" in
     receive-v1)
@@ -43,6 +44,9 @@ case "${SSH_ORIGINAL_COMMAND-}" in
         ;;
     process-v1)
         exec sudo -n /usr/local/sbin/cinegraph-process-private-corpus
+        ;;
+    speaker-review-v1)
+        exec sudo -n /usr/local/sbin/cinegraph-prepare-private-speaker-review
         ;;
     *)
         fail

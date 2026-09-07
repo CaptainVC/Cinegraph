@@ -172,6 +172,37 @@ services:
     restart: "no"
     command: ["python", "scripts/ingest_private_corpus_workspace.py"]
 
+  # Offline, resumable speaker-review preparation. The root host helper adds
+  # the immutable source workspace and the writable per-run review-runs mount
+  # for each invocation; no static private volume is exposed here.
+  corpus-speaker-review-prepare:
+    profiles: [corpus-speaker-review]
+    image: *cinegraph-image
+    user: "10002:10002"
+    environment:
+      <<: *model-cache-environment
+      HF_HUB_OFFLINE: "1"
+      CINEGRAPH_ENVIRONMENT: development
+      CINEGRAPH_KNOWLEDGE_ROOT: /private-corpus
+      CINEGRAPH_SPEAKER_REVIEW_SOURCE_ROOT: /private-corpus
+      CINEGRAPH_SPEAKER_REVIEW_RUNS_ROOT: /private-corpus/review-runs
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: ${CINEGRAPH_SPEAKER_REVIEW_MEMORY_LIMIT:-1024m}
+    cpus: ${CINEGRAPH_SPEAKER_REVIEW_CPU_LIMIT:-1.0}
+    restart: "no"
+    command: ["python", "scripts/prepare_private_speaker_review_workspace.py"]
+
   postgres:
     image: postgres:16.15-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
     environment:

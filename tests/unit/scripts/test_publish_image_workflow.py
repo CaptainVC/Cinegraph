@@ -115,7 +115,9 @@ def test_reviewed_corpus_ingestion_job_is_unprivileged_offline_and_bounded() -> 
         text.index("x-corpus-ingestion-environment:") : text.index("services:")
     ]
     service_start = text.index("  corpus-reviewed-ingestion:")
-    service = text[service_start : text.index("  postgres:", service_start)]
+    service = text[
+        service_start : text.index("  corpus-speaker-review-prepare:", service_start)
+    ]
 
     assert "profiles: [corpus-processing]" in service
     assert "image: *cinegraph-image" in service

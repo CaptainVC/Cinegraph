@@ -41,6 +41,7 @@ from scripts.private_corpus_host_contract import (  # noqa: E402
     CORPUS_UID,
     CORPUS_USER,
     DEV_PRIVATE_CORPUS_ROOT,
+    LEGACY_PROCESSING_SUDOERS_CONTENT,
     LEGACY_TRANSFER_ONLY_SUDOERS_CONTENT,
     MINIMUM_PYTHON_VERSION,
     OBJECTS_ROOT,
@@ -51,6 +52,12 @@ from scripts.private_corpus_host_contract import (  # noqa: E402
     PROCESSOR_REQUIRED_COMMANDS,
     QUARANTINE_ROOT,
     RECEIVER_REQUIRED_COMMANDS,
+    SPEAKER_REVIEW_HELPER_PATH,
+    SPEAKER_REVIEW_RECEIPTS_ROOT,
+    SPEAKER_REVIEW_REQUIRED_COMMANDS,
+    SPEAKER_REVIEW_ROOT,
+    SPEAKER_REVIEW_RUNS_ROOT,
+    SPEAKER_REVIEW_SOURCE_ROOT,
     TRANSACTIONS_ROOT,
     corpus_authorized_key_entry,
 )
@@ -61,6 +68,9 @@ REPOSITORY_ROOT: Final = Path(__file__).resolve().parents[1]
 SOURCE_DISPATCH: Final = REPOSITORY_ROOT / "deploy/remote/corpus-dispatch.sh"
 SOURCE_HELPER: Final = REPOSITORY_ROOT / "deploy/remote/receive-private-corpus.sh"
 SOURCE_PROCESS_HELPER: Final = REPOSITORY_ROOT / "deploy/remote/process-private-corpus.sh"
+SOURCE_SPEAKER_REVIEW_HELPER: Final = (
+    REPOSITORY_ROOT / "deploy/remote/prepare-private-speaker-review.sh"
+)
 DEPLOY_AUTHORIZED_KEYS: Final = DEPLOY_HOME / ".ssh/authorized_keys"
 FORBIDDEN_GROUP_NAMES: Final = frozenset(
     {"adm", "admin", "docker", "sudo", "wheel", "cinegraph-deploy"}
@@ -95,17 +105,29 @@ DIRECTORY_CONTRACT: Final = (
     ExpectedPath(QUARANTINE_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(PROCESSING_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(PROCESSING_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(SPEAKER_REVIEW_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(SPEAKER_REVIEW_SOURCE_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(SPEAKER_REVIEW_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(SPEAKER_REVIEW_RUNS_ROOT, "directory", 0, 0, 0o700),
 )
 FILE_CONTRACT: Final = (
     ExpectedPath(CORPUS_DISPATCH_PATH, "file", 0, 0, 0o755),
     ExpectedPath(CORPUS_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(PROCESS_HELPER_PATH, "file", 0, 0, 0o755),
+    ExpectedPath(SPEAKER_REVIEW_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(CORPUS_SUDOERS_PATH, "file", 0, 0, 0o440),
     ExpectedPath(CORPUS_AUTHORIZED_KEYS, "file", 0, 0, 0o644),
     ExpectedPath(DEPLOY_AUTHORIZED_KEYS, "file", 0, 0, 0o644),
 )
 REFRESH_ADDED_DIRECTORIES: Final = frozenset(
-    {PROCESSING_ROOT, PROCESSING_RECEIPTS_ROOT}
+    {
+        PROCESSING_ROOT,
+        PROCESSING_RECEIPTS_ROOT,
+        SPEAKER_REVIEW_ROOT,
+        SPEAKER_REVIEW_SOURCE_ROOT,
+        SPEAKER_REVIEW_RECEIPTS_ROOT,
+        SPEAKER_REVIEW_RUNS_ROOT,
+    }
 )
 
 
@@ -116,7 +138,11 @@ def _validate_platform_and_tools() -> None:
         raise BootstrapError("corpus host Python is below the supported version")
     if not hasattr(os, "geteuid") or os.geteuid() != 0:
         raise BootstrapError("corpus bootstrap/check must run as root")
-    required_runtime_commands = RECEIVER_REQUIRED_COMMANDS + PROCESSOR_REQUIRED_COMMANDS
+    required_runtime_commands = (
+        RECEIVER_REQUIRED_COMMANDS
+        + PROCESSOR_REQUIRED_COMMANDS
+        + SPEAKER_REVIEW_REQUIRED_COMMANDS
+    )
     if any(shutil.which(item, path=SAFE_PATH) is None for item in required_runtime_commands):
         raise BootstrapError("a required corpus host command is missing")
     for command in ("getent", "groupadd", "install", "ssh-keygen", "useradd", "visudo"):
@@ -263,6 +289,7 @@ def _managed_content(corpus_public_key: str) -> dict[Path, bytes]:
         CORPUS_DISPATCH_PATH: _read_source(SOURCE_DISPATCH),
         CORPUS_HELPER_PATH: _read_source(SOURCE_HELPER),
         PROCESS_HELPER_PATH: _read_source(SOURCE_PROCESS_HELPER),
+        SPEAKER_REVIEW_HELPER_PATH: _read_source(SOURCE_SPEAKER_REVIEW_HELPER),
         CORPUS_SUDOERS_PATH: CORPUS_SUDOERS_CONTENT.encode("utf-8"),
         CORPUS_AUTHORIZED_KEYS: corpus_authorized_key_entry(corpus_public_key).encode("utf-8"),
     }
@@ -275,7 +302,7 @@ def _preflight_refresh_host_files(
     by_path = {item.path: item for item in FILE_CONTRACT}
     installed: dict[Path, bytes] = {}
     for path, content in managed.items():
-        if path == PROCESS_HELPER_PATH and not path.exists() and not path.is_symlink():
+        if path in {PROCESS_HELPER_PATH, SPEAKER_REVIEW_HELPER_PATH} and not path.exists() and not path.is_symlink():
             continue
         bootstrap_dev_host._verify_path(by_path[path])
         installed[path] = path.read_bytes()
@@ -283,6 +310,7 @@ def _preflight_refresh_host_files(
             raise BootstrapError("corpus authorization differs from the reviewed key")
         if path == CORPUS_SUDOERS_PATH and installed[path] not in {
             content,
+            LEGACY_PROCESSING_SUDOERS_CONTENT.encode("utf-8"),
             LEGACY_TRANSFER_ONLY_SUDOERS_CONTENT.encode("utf-8"),
         }:
             raise BootstrapError("corpus sudoers differs from a supported contract")
@@ -299,11 +327,16 @@ def _ensure_host_files(corpus_public_key: str, *, apply: bool, refresh_corpus_co
         for path in (
             CORPUS_HELPER_PATH,
             PROCESS_HELPER_PATH,
+            SPEAKER_REVIEW_HELPER_PATH,
             CORPUS_SUDOERS_PATH,
             CORPUS_DISPATCH_PATH,
         ):
+            if path not in managed or path not in by_path:
+                continue
             if path not in installed:
-                bootstrap_dev_host._ensure_exact_file(by_path[path], managed[path], apply=True)
+                bootstrap_dev_host._ensure_exact_file(
+                    by_path[path], managed[path], apply=True
+                )
             elif installed[path] != managed[path]:
                 bootstrap_dev_host._replace_exact_file(by_path[path], managed[path])
     else:
