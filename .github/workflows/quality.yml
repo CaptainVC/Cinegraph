@@ -218,6 +218,7 @@ jobs:
           deploy/remote/prepare-private-speaker-review.sh
           deploy/remote/review-dispatch.sh
           deploy/remote/submit-private-speaker-review.sh
+          deploy/remote/observe-private-speaker-review.sh
       - name: Render and build Dev/Prod runtime
         shell: bash
         run: |

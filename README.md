@@ -231,6 +231,15 @@ only the private run mount and a secret file and emits an aggregate allowlist. S
 [ADR-0022](docs/adr/0022-bounded-primary-observation-transition.md) and the
 [primary-observation runbook](docs/operations/private-speaker-review-primary-observation.md).
 
+Phase 63 exposes first-part observation through a second exact command on the
+dedicated review SSH identity. A standard-library-only root coordinator binds the request
+to its root authorization, preparation/submission receipts, active immutable
+release and image, configuration, digest-selected run directory, and complete
+pre/post artifact evidence. Pending results remain safely repeatable; completed or
+failed transitions receive create-once receipts, and receipt repair never reopens
+the provider boundary. See [ADR-0023](docs/adr/0023-private-speaker-review-observation-boundary.md)
+and the [VPS observation runbook](docs/operations/private-speaker-review-observation.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
