@@ -6,7 +6,7 @@ PATH=/usr/sbin:/usr/bin
 export PATH
 
 fail() {
-    printf '%s\n' "speaker-review submission request rejected" >&2
+    printf '%s\n' "speaker-review request rejected" >&2
     exit 1
 }
 
@@ -35,10 +35,14 @@ check_root_path /usr/local/libexec directory 755
 check_root_path /usr/local/sbin directory 755
 check_root_path /usr/local/libexec/cinegraph-review-dispatch file 755
 check_root_path /usr/local/sbin/cinegraph-submit-private-speaker-review file 755
+check_root_path /usr/local/sbin/cinegraph-observe-private-speaker-review file 755
 
 case "${SSH_ORIGINAL_COMMAND-}" in
     speaker-review-submit-primary-v1)
         exec sudo -n /usr/local/sbin/cinegraph-submit-private-speaker-review
+        ;;
+    speaker-review-observe-primary-v1)
+        exec sudo -n /usr/local/sbin/cinegraph-observe-private-speaker-review
         ;;
     *)
         fail

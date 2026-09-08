@@ -16,6 +16,9 @@ from scripts.private_corpus_host_contract import (
     SPEAKER_REVIEW_RUNS_ROOT,
     TRANSFER_LOCK,
 )
+from scripts.private_speaker_review_observation_contract import (
+    COMMAND as REVIEW_OBSERVATION_COMMAND,
+)
 
 REVIEW_USER: Final = "cinegraph-review"
 REVIEW_GROUP: Final = "cinegraph-review"
@@ -27,6 +30,9 @@ REVIEW_PASSWORD_FIELD: Final = "*NP*"
 
 REVIEW_DISPATCH_PATH: Final = Path("/usr/local/libexec/cinegraph-review-dispatch")
 REVIEW_HELPER_PATH: Final = Path("/usr/local/sbin/cinegraph-submit-private-speaker-review")
+REVIEW_OBSERVATION_HELPER_PATH: Final = Path(
+    "/usr/local/sbin/cinegraph-observe-private-speaker-review"
+)
 REVIEW_SUDOERS_PATH: Final = Path("/etc/sudoers.d/cinegraph-review")
 REVIEW_AUTHORIZED_KEYS: Final = REVIEW_HOME / ".ssh/authorized_keys"
 REVIEW_AUTHORIZATION_ROOT: Final = SPEAKER_REVIEW_ROOT / "authorization"
@@ -46,9 +52,13 @@ CLIENT_TIMEOUT_MARGIN_SECONDS: Final = 30
 UID_IN_CONTAINER: Final = 10002
 GID_IN_CONTAINER: Final = 10002
 
-SUDOERS_CONTENT: Final = (
+LEGACY_SUDOERS_CONTENT: Final = (
     f"Defaults:{REVIEW_USER} env_reset,secure_path={SAFE_PATH}\n"
     f'{REVIEW_USER} ALL=(root) NOPASSWD: {REVIEW_HELPER_PATH.as_posix()} ""\n'
+)
+SUDOERS_CONTENT: Final = (
+    LEGACY_SUDOERS_CONTENT
+    + f'{REVIEW_USER} ALL=(root) NOPASSWD: {REVIEW_OBSERVATION_HELPER_PATH.as_posix()} ""\n'
 )
 
 REQUIRED_COMMANDS: Final = (
@@ -103,6 +113,8 @@ __all__ = [
     "REVIEW_DISPATCH_PATH",
     "REVIEW_GROUP",
     "REVIEW_HELPER_PATH",
+    "REVIEW_OBSERVATION_COMMAND",
+    "REVIEW_OBSERVATION_HELPER_PATH",
     "REVIEW_HOME",
     "REVIEW_PASSWORD_FIELD",
     "REVIEW_SHELL",
@@ -116,6 +128,7 @@ __all__ = [
     "SPEAKER_REVIEW_ROOT",
     "SPEAKER_REVIEW_RUNS_ROOT",
     "SUDOERS_CONTENT",
+    "LEGACY_SUDOERS_CONTENT",
     "TIMEOUT_SECONDS",
     "TRANSFER_LOCK",
     "UID_IN_CONTAINER",
