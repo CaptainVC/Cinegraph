@@ -88,9 +88,20 @@ def _fixture(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> dict[str, Path]
     submissions = root / "submission-receipts"
     observations = root / "observation-receipts"
     runs = root.parent / "review-runs"
-    review_runs = runs / f"sha256-{DIGEST}" / "review-runs"
+    object_root = runs / f"sha256-{DIGEST}"
+    review_runs = object_root / "review-runs"
     run = review_runs / RUN_ID
-    for directory in (root, prep, auth, submissions, observations, runs, review_runs, run):
+    for directory in (
+        root,
+        prep,
+        auth,
+        submissions,
+        observations,
+        runs,
+        object_root,
+        review_runs,
+        run,
+    ):
         directory.mkdir(parents=True, exist_ok=True)
         if os.name == "posix":
             directory.chmod(0o700)
