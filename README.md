@@ -211,6 +211,17 @@ read-only while `review-runs` is mounted separately for confined writes. Paid Ba
 submission remains a later, explicit operation. See the
 [private speaker-review preparation runbook](docs/operations/private-speaker-review-preparation.md).
 
+Phase 61 adds the separately authorized primary submission boundary. A root-owned
+authorization file binds the exact prepared receipt, run, cost ceiling, and
+authorization UUID. The standard-library-only root coordinator mounts only
+`review-runs` read-write into the egress-only submit worker and keeps provider
+credentials out of its request and process environment. Create-once root intent
+and completion receipts, together with the workflow's intent/completed journals,
+make retries safe: matching receipts do not start a worker, completed journals
+repair state without another provider call, and unresolved intents require
+operator reconciliation. See [ADR-0021](docs/adr/0021-private-speaker-review-primary-submission-boundary.md)
+and the [primary-submission runbook](docs/operations/private-speaker-review-primary-submission.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
