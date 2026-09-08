@@ -21,4 +21,5 @@
 - [ADR-0019: Private-corpus VPS processing boundary](0019-private-corpus-processing-boundary.md)
 - [ADR-0020: Private speaker-review preparation boundary](0020-private-speaker-review-preparation-boundary.md)
 - [ADR-0021: Private speaker-review primary submission boundary](0021-private-speaker-review-primary-submission-boundary.md)
+- [ADR-0022: Bounded primary-review observation transition](0022-bounded-primary-observation-transition.md)
 - [ADR template](template.md)

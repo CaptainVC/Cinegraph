@@ -20,6 +20,7 @@ from cinegraph.ingestion.speaker_review.workflow import (
     SpeakerReviewRunState,
     SpeakerReviewWorkflow,
     _submission_path,
+    load_run_state,
 )
 from cinegraph.ports.llm.speaker_review_batch_gateway import (
     BatchSnapshot,
@@ -114,6 +115,41 @@ class CountingSubmissionGateway:
         raise AssertionError("not used")
 
 
+class PrimaryObservationGateway:
+    def __init__(self, status: str, snapshot_batch_id: str | None = None) -> None:
+        self.status = status
+        self.snapshot_batch_id = snapshot_batch_id
+        self.retrieve_calls: list[str] = []
+        self.download_calls: list[str] = []
+        self.submit_calls = 0
+
+    def submit(
+        self,
+        request_filename: str,
+        request_bytes: bytes,
+        completion_window: str,
+        metadata: dict[str, str],
+    ) -> BatchSubmission:
+        self.submit_calls += 1
+        raise AssertionError("observe_primary_part must never submit")
+
+    def retrieve(self, batch_id: str) -> BatchSnapshot:
+        self.retrieve_calls.append(batch_id)
+        return BatchSnapshot(
+            batch_id=self.snapshot_batch_id or batch_id,
+            status=self.status,
+            output_file_id="output-1" if self.status == "completed" else None,
+            error_file_id="error-1" if self.status == "failed" else None,
+            total_requests=2,
+            completed_requests=2 if self.status == "completed" else 0,
+            failed_requests=2 if self.status == "failed" else 0,
+        )
+
+    def download_file(self, file_id: str) -> str:
+        self.download_calls.append(file_id)
+        return "provider error\n" if file_id == "error-1" else "{}\n"
+
+
 def _prepared_state(run_id: str = "run-safe") -> SpeakerReviewRunState:
     return SpeakerReviewRunState(
         schema_version=2,
@@ -192,6 +228,159 @@ def test_completed_part_submits_only_the_next_part(tmp_path: Path) -> None:
     assert updated.primary_input_file_ids == ("input-1", "input-2")
     assert gateway.submitted_paths == [Path(next_path.name)]
     assert (tmp_path / "primary-part-0001-output.jsonl").read_text() == "{}\n"
+
+
+def _submitted_state(
+    *,
+    status: SpeakerReviewRunStatus = SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
+    primary_completed_part_count: int = 0,
+) -> SpeakerReviewRunState:
+    return SpeakerReviewRunState(
+        schema_version=2,
+        run_id="run-observe",
+        status=status,
+        created_at="2026-08-15T00:00:00+00:00",
+        updated_at="2026-08-15T00:00:00+00:00",
+        candidate_count=1,
+        primary_model="gpt-5.6-luna",
+        adjudication_model="gpt-5.6-terra",
+        prompt_version="speaker-review-v1",
+        maximum_cost_usd=5.0,
+        estimated_primary_cost_usd=1.0,
+        actual_primary_cost_usd=0.0,
+        actual_adjudication_cost_usd=0.0,
+        primary_batch_id="batch-1",
+        primary_input_file_id="input-1",
+        primary_part_count=2,
+        primary_completed_part_count=primary_completed_part_count,
+        primary_batch_ids=("batch-1",),
+        primary_input_file_ids=("input-1",),
+    )
+
+
+def test_observe_primary_returns_pending_without_download_or_submit(
+    tmp_path: Path,
+) -> None:
+    gateway = PrimaryObservationGateway("validating")
+    workflow = _workflow(gateway)  # type: ignore[arg-type]
+    state = _submitted_state()
+
+    updated = workflow.observe_primary_part(tmp_path, state)
+
+    assert updated is state
+    assert gateway.retrieve_calls == ["batch-1"]
+    assert gateway.download_calls == []
+    assert gateway.submit_calls == 0
+    assert not (tmp_path / "primary-part-0001-output.jsonl").exists()
+
+
+def test_observe_primary_completes_only_active_part_of_multi_part_run(
+    tmp_path: Path,
+) -> None:
+    gateway = PrimaryObservationGateway("completed")
+    workflow = _workflow(gateway)  # type: ignore[arg-type]
+    state = _submitted_state()
+
+    updated = workflow.observe_primary_part(tmp_path, state)
+
+    assert updated.status is SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED
+    assert updated.primary_completed_part_count == 1
+    assert gateway.retrieve_calls == ["batch-1"]
+    assert gateway.download_calls == ["output-1"]
+    assert gateway.submit_calls == 0
+    assert (tmp_path / "primary-part-0001-output.jsonl").read_text() == "{}\n"
+    assert (load_run_state(tmp_path / "run-state.json")).status is (
+        SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED
+    )
+    assert not (tmp_path / "primary-part-0002-output.jsonl").exists()
+    assert not (tmp_path / "primary-verdicts.jsonl").exists()
+
+
+def test_observe_primary_persists_failure_and_downloads_only_error(
+    tmp_path: Path,
+) -> None:
+    gateway = PrimaryObservationGateway("failed")
+    workflow = _workflow(gateway)  # type: ignore[arg-type]
+
+    updated = workflow.observe_primary_part(tmp_path, _submitted_state())
+
+    assert updated.status is SpeakerReviewRunStatus.FAILED
+    assert gateway.retrieve_calls == ["batch-1"]
+    assert gateway.download_calls == ["error-1"]
+    assert gateway.submit_calls == 0
+    assert (load_run_state(tmp_path / "run-state.json")).status is (
+        SpeakerReviewRunStatus.FAILED
+    )
+
+
+def test_observe_primary_rejects_corrupt_active_batch_shape_before_provider_call(
+    tmp_path: Path,
+) -> None:
+    gateway = PrimaryObservationGateway("completed")
+    workflow = _workflow(gateway)  # type: ignore[arg-type]
+    corrupt_state = replace(
+        _submitted_state(),
+        primary_batch_ids=("batch-1", "unexpected-batch"),
+    )
+
+    with pytest.raises(RuntimeError, match="reconciliation"):
+        workflow.observe_primary_part(tmp_path, corrupt_state)
+
+    assert gateway.retrieve_calls == []
+    assert gateway.download_calls == []
+    assert gateway.submit_calls == 0
+
+
+def test_observe_primary_rejects_mismatched_provider_snapshot_before_download(
+    tmp_path: Path,
+) -> None:
+    gateway = PrimaryObservationGateway("completed", snapshot_batch_id="batch-other")
+    workflow = _workflow(gateway)  # type: ignore[arg-type]
+
+    with pytest.raises(RuntimeError, match="reconciliation"):
+        workflow.observe_primary_part(tmp_path, _submitted_state())
+
+    assert gateway.retrieve_calls == ["batch-1"]
+    assert gateway.download_calls == []
+    assert gateway.submit_calls == 0
+    assert not (tmp_path / "run-state.json").exists()
+
+
+def test_observe_primary_maps_conflicting_output_to_reconciliation(
+    tmp_path: Path,
+) -> None:
+    gateway = PrimaryObservationGateway("completed")
+    workflow = _workflow(gateway)  # type: ignore[arg-type]
+    (tmp_path / "primary-part-0001-output.jsonl").write_text(
+        '{"different":true}\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RuntimeError, match="reconciliation"):
+        workflow.observe_primary_part(tmp_path, _submitted_state())
+
+    assert gateway.retrieve_calls == ["batch-1"]
+    assert gateway.download_calls == ["output-1"]
+    assert gateway.submit_calls == 0
+    assert not (tmp_path / "run-state.json").exists()
+
+
+@pytest.mark.parametrize(
+    "status",
+    [SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED, SpeakerReviewRunStatus.FAILED],
+)
+def test_observe_primary_terminal_states_are_idempotent_without_provider_calls(
+    tmp_path: Path,
+    status: SpeakerReviewRunStatus,
+) -> None:
+    gateway = PrimaryObservationGateway("completed")
+    workflow = _workflow(gateway)  # type: ignore[arg-type]
+    state = _submitted_state(status=status, primary_completed_part_count=1)
+
+    assert workflow.observe_primary_part(tmp_path, state) is state
+    assert gateway.retrieve_calls == []
+    assert gateway.download_calls == []
+    assert gateway.submit_calls == 0
 
 
 def test_submission_snapshot_is_reused_without_a_second_paid_submit(

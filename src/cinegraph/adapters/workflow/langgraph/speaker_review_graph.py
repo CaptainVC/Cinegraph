@@ -14,6 +14,7 @@ SpeakerReviewGraphOperation = Literal[
     "start",
     "prepare",
     "submit",
+    "observe-primary",
     "advance",
     "final-review",
     "retry-incomplete",
@@ -70,6 +71,17 @@ class SpeakerReviewGraphWorkflow:
     ) -> tuple[Path, SpeakerReviewRunState]:
         return self._invoke(
             operation="submit",
+            corpus_root=None,
+            seasons=(),
+            run_directory=run_directory,
+        )
+
+    def observe_primary(
+        self,
+        run_directory: Path,
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        return self._invoke(
+            operation="observe-primary",
             corpus_root=None,
             seasons=(),
             run_directory=run_directory,
@@ -150,6 +162,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_node("prepare", self._prepare)
         graph.add_node("load", self._load)
         graph.add_node("submit", self._submit)
+        graph.add_node("observe_primary", self._observe_primary)
         graph.add_node("advance", self._advance)
         graph.add_node("final_review", self._final_review)
         graph.add_node("retry_incomplete", self._retry_incomplete)
@@ -165,6 +178,7 @@ class SpeakerReviewGraphWorkflow:
             self._route_after_state,
             {
                 "submit": "submit",
+                "observe_primary": "observe_primary",
                 "advance": "advance",
                 "final_review": "final_review",
                 "retry_incomplete": "retry_incomplete",
@@ -177,6 +191,7 @@ class SpeakerReviewGraphWorkflow:
             self._route_after_state,
             {
                 "submit": "submit",
+                "observe_primary": "observe_primary",
                 "advance": "advance",
                 "final_review": "final_review",
                 "retry_incomplete": "retry_incomplete",
@@ -185,6 +200,7 @@ class SpeakerReviewGraphWorkflow:
             },
         )
         graph.add_edge("submit", END)
+        graph.add_edge("observe_primary", END)
         graph.add_edge("advance", END)
         graph.add_edge("final_review", END)
         graph.add_edge("retry_incomplete", END)
@@ -228,6 +244,11 @@ class SpeakerReviewGraphWorkflow:
             and run_state.status is SpeakerReviewRunStatus.PREPARED
         ):
             return "submit"
+        if (
+            state["operation"] == "observe-primary"
+            and run_state.status is SpeakerReviewRunStatus.PRIMARY_SUBMITTED
+        ):
+            return "observe_primary"
         if state["operation"] == "advance" and run_state.status in {
             SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
             SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
@@ -267,6 +288,18 @@ class SpeakerReviewGraphWorkflow:
         run_directory, run_state = self._required_run_context(state)
         return {
             "run_state": self._workflow.advance(
+                run_directory,
+                run_state,
+            )
+        }
+
+    def _observe_primary(
+        self,
+        state: SpeakerReviewGraphState,
+    ) -> dict[str, SpeakerReviewRunState]:
+        run_directory, run_state = self._required_run_context(state)
+        return {
+            "run_state": self._workflow.observe_primary_part(
                 run_directory,
                 run_state,
             )

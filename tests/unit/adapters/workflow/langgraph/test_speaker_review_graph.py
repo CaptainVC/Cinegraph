@@ -73,6 +73,18 @@ class RecordingSpeakerReviewWorkflow:
         self.calls.append("advance")
         return replace(state, status=SpeakerReviewRunStatus.COMPLETED)
 
+    def observe_primary_part(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        self.calls.append("observe_primary_part")
+        return replace(
+            state,
+            status=SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED,
+            primary_completed_part_count=state.primary_completed_part_count + 1,
+        )
+
     def submit_final_review(
         self,
         run_directory: Path,
@@ -167,6 +179,42 @@ def test_advance_graph_loads_persisted_state_and_advances_once(
 
     assert state.status is SpeakerReviewRunStatus.COMPLETED
     assert workflow.calls == ["load", "advance"]
+
+
+def test_observe_primary_graph_loads_and_observes_without_advancing(
+    tmp_path: Path,
+) -> None:
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    save_run_state(
+        run_directory,
+        run_state(SpeakerReviewRunStatus.PRIMARY_SUBMITTED),
+    )
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.observe_primary(run_directory)
+
+    assert state.status is SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED
+    assert workflow.calls == ["load", "observe_primary_part"]
+
+
+def test_observe_primary_graph_stops_for_completed_part_without_workflow_call(
+    tmp_path: Path,
+) -> None:
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    save_run_state(
+        run_directory,
+        run_state(SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED),
+    )
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.observe_primary(run_directory)
+
+    assert state.status is SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED
+    assert workflow.calls == ["load"]
 
 
 def test_terminal_run_ends_without_reinvoking_review_workflow(tmp_path: Path) -> None:

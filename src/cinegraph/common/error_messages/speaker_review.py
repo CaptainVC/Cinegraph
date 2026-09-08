@@ -28,6 +28,9 @@ class SpeakerReviewErrorMessages:
     BATCH_SUBMISSION_RECONCILIATION_REQUIRED = (
         "A Batch submission is awaiting operator reconciliation; refusing to submit again."
     )
+    PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED = (
+        "Primary-part observation requires operator reconciliation before retrying."
+    )
     SPEAKER_REVIEW_CORPUS_PATH_INVALID = (
         "The speaker-review corpus path is invalid or not a physical private path."
     )
