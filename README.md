@@ -222,6 +222,15 @@ repair state without another provider call, and unresolved intents require
 operator reconciliation. See [ADR-0021](docs/adr/0021-private-speaker-review-primary-submission-boundary.md)
 and the [primary-submission runbook](docs/operations/private-speaker-review-primary-submission.md).
 
+Phase 62 separates provider observation from lifecycle advancement. The dedicated
+LangGraph operation retrieves at most one active primary Batch, then either waits,
+records a terminal failure, or persists that part's output at an explicit
+`primary_part_completed` checkpoint. It has no route to another submission,
+adjudication, finalization, or ingestion. Its egress-only Compose worker receives
+only the private run mount and a secret file and emits an aggregate allowlist. See
+[ADR-0022](docs/adr/0022-bounded-primary-observation-transition.md) and the
+[primary-observation runbook](docs/operations/private-speaker-review-primary-observation.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

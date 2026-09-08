@@ -390,6 +390,120 @@ class SpeakerReviewWorkflow:
             return self._advance_final_review(run_directory, state)
         return state
 
+    def observe_primary_part(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Observe the active primary part without advancing the workflow.
+
+        This deliberately keeps observation separate from :meth:`advance`.
+        A completed part is persisted as an explicit intermediate state, so a
+        worker can safely retry observation without submitting the next paid
+        part or parsing/adjudicating/finalizing the review.
+        """
+
+        if state.status in {
+            SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED,
+            SpeakerReviewRunStatus.FAILED,
+        }:
+            return state
+        if state.status is not SpeakerReviewRunStatus.PRIMARY_SUBMITTED:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+
+        active_batch_id = self._active_primary_observation_batch_id(state)
+        part_index = state.primary_completed_part_count
+
+        # Exactly one provider read for the active part.  In particular, do
+        # not call advance(), which may submit subsequent parts or perform
+        # verdict parsing and downstream stages.
+        snapshot = self._required_snapshot(active_batch_id)
+        if snapshot.batch_id != active_batch_id:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        try:
+            if snapshot.status in self._configuration.terminal_batch_failure_statuses:
+                return self._persist_failed_batch(run_directory, state, snapshot)
+            if snapshot.status != self._configuration.successful_batch_status:
+                return state
+
+            self._download_completed_batch(
+                run_directory,
+                _part_stage_name("primary", part_index),
+                snapshot,
+            )
+            updated = replace(
+                state,
+                status=SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED,
+                primary_completed_part_count=part_index + 1,
+                updated_at=_now(),
+            )
+            save_run_state(run_directory, updated)
+            return updated
+        except (FileExistsError, SpeakerReviewArtifactConflictError) as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+
+    def _active_primary_observation_batch_id(
+        self,
+        state: SpeakerReviewRunState,
+    ) -> str:
+        """Return the sole currently active primary batch, fail-closed.
+
+        Observation must never guess which provider batch is active from a
+        corrupted or partially written state file.  A submitted run has one
+        recorded batch per completed part plus exactly one active batch, and
+        the legacy singleton IDs must agree with the tuple representation.
+        """
+
+        part_count = state.primary_part_count
+        completed_count = state.primary_completed_part_count
+        batch_ids = state.primary_batch_ids
+        input_file_ids = state.primary_input_file_ids
+        valid_batch_ids = (
+            isinstance(batch_ids, tuple)
+            and all(
+                isinstance(batch_id, str)
+                and bool(batch_id)
+                and batch_id == batch_id.strip()
+                for batch_id in batch_ids
+            )
+            and len(set(batch_ids)) == len(batch_ids)
+        )
+        valid_input_file_ids = (
+            isinstance(input_file_ids, tuple)
+            and all(
+                isinstance(file_id, str)
+                and bool(file_id)
+                and file_id == file_id.strip()
+                for file_id in input_file_ids
+            )
+            and len(set(input_file_ids)) == len(input_file_ids)
+        )
+        if (
+            isinstance(part_count, bool)
+            or not isinstance(part_count, int)
+            or isinstance(completed_count, bool)
+            or not isinstance(completed_count, int)
+            or part_count <= completed_count
+            or completed_count < 0
+            or not valid_batch_ids
+            or not valid_input_file_ids
+            or len(batch_ids) != completed_count + 1
+            or len(input_file_ids) != completed_count + 1
+            or not batch_ids
+            or state.primary_batch_id != batch_ids[-1]
+            or state.primary_input_file_id != input_file_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        return batch_ids[completed_count]
+
     def _advance_primary(
         self,
         run_directory: Path,
@@ -1231,6 +1345,20 @@ class SpeakerReviewWorkflow:
         state: SpeakerReviewRunState,
         snapshot: BatchSnapshot,
     ) -> SpeakerReviewRunState:
+        self._persist_failed_batch(run_directory, state, snapshot)
+        raise RuntimeError(
+            SpeakerReviewErrorMessages.BATCH_TERMINAL_FAILURE.format(
+                batch_id=snapshot.batch_id,
+                status=snapshot.status,
+            )
+        )
+
+    def _persist_failed_batch(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+        snapshot: BatchSnapshot,
+    ) -> SpeakerReviewRunState:
         if snapshot.error_file_id is not None:
             _write_text_if_new_or_unchanged(
                 run_directory / "terminal-api-errors.jsonl",
@@ -1242,12 +1370,7 @@ class SpeakerReviewWorkflow:
             updated_at=_now(),
         )
         save_run_state(run_directory, updated)
-        raise RuntimeError(
-            SpeakerReviewErrorMessages.BATCH_TERMINAL_FAILURE.format(
-                batch_id=snapshot.batch_id,
-                status=snapshot.status,
-            )
-        )
+        return updated
 
     def _run_id(self, candidates: tuple[SpeakerReviewCandidate, ...]) -> str:
         fingerprint = {
