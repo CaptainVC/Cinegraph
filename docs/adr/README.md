@@ -18,4 +18,7 @@
 - [ADR-0016: Activation-gated Dev promotion over pinned SSH](0016-dev-deployment-over-pinned-ssh.md)
 - [ADR-0017: Forced-command Dev host bootstrap and evidence](0017-forced-command-dev-host-bootstrap.md)
 - [ADR-0018: Isolated private-corpus VPS handoff](0018-private-corpus-vps-handoff.md)
+- [ADR-0019: Private-corpus VPS processing boundary](0019-private-corpus-processing-boundary.md)
+- [ADR-0020: Private speaker-review preparation boundary](0020-private-speaker-review-preparation-boundary.md)
+- [ADR-0021: Private speaker-review primary submission boundary](0021-private-speaker-review-primary-submission-boundary.md)
 - [ADR template](template.md)

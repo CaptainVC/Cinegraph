@@ -138,6 +138,19 @@ def test_prepare_graph_stops_before_provider_submission(tmp_path: Path) -> None:
     assert workflow.calls == [f"prepare:{tmp_path / 'corpus'}:(2,)"]
 
 
+def test_submit_graph_loads_and_invokes_only_primary_submission(tmp_path: Path) -> None:
+    run_directory = tmp_path / "review-workspace" / "review-runs" / "speaker-review-test"
+    run_directory.mkdir(parents=True)
+    save_run_state(run_directory, run_state(SpeakerReviewRunStatus.PREPARED))
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.submit(run_directory)
+
+    assert state.status is SpeakerReviewRunStatus.PRIMARY_SUBMITTED
+    assert workflow.calls == ["load", "submit_primary"]
+
+
 def test_advance_graph_loads_persisted_state_and_advances_once(
     tmp_path: Path,
 ) -> None:

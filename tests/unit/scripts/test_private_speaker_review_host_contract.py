@@ -8,7 +8,7 @@ from scripts import private_corpus_host_contract as host_contract
 def test_speaker_review_service_is_offline_and_unprivileged() -> None:
     compose = Path("deploy/compose.yaml").read_text(encoding="utf-8")
     service = compose.split("  corpus-speaker-review-prepare:", 1)[1].split(
-        "\n  postgres:", 1
+        "\n  corpus-speaker-review-submit-primary:", 1
     )[0]
 
     assert "profiles: [corpus-speaker-review]" in service
@@ -22,10 +22,7 @@ def test_speaker_review_service_is_offline_and_unprivileged() -> None:
     assert "no-new-privileges:true" in service
     assert "cap_drop:" in service and "      - ALL" in service
     assert 'restart: "no"' in service
-    assert (
-        'command: ["python", "scripts/prepare_private_speaker_review_workspace.py"]'
-        in service
-    )
+    assert 'command: ["python", "scripts/prepare_private_speaker_review_workspace.py"]' in service
     assert 'HF_HUB_OFFLINE: "1"' in service
     assert "OPENAI_API_KEY" not in service
     assert "CINEGRAPH_QDRANT_URL" not in service
