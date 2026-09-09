@@ -15,6 +15,7 @@ SpeakerReviewGraphOperation = Literal[
     "prepare",
     "submit",
     "observe-primary",
+    "submit-next-primary",
     "advance",
     "final-review",
     "retry-incomplete",
@@ -82,6 +83,19 @@ class SpeakerReviewGraphWorkflow:
     ) -> tuple[Path, SpeakerReviewRunState]:
         return self._invoke(
             operation="observe-primary",
+            corpus_root=None,
+            seasons=(),
+            run_directory=run_directory,
+        )
+
+    def submit_next_primary(
+        self,
+        run_directory: Path,
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        """Submit at most one next primary part from a completed checkpoint."""
+
+        return self._invoke(
+            operation="submit-next-primary",
             corpus_root=None,
             seasons=(),
             run_directory=run_directory,
@@ -163,6 +177,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_node("load", self._load)
         graph.add_node("submit", self._submit)
         graph.add_node("observe_primary", self._observe_primary)
+        graph.add_node("submit_next_primary", self._submit_next_primary)
         graph.add_node("advance", self._advance)
         graph.add_node("final_review", self._final_review)
         graph.add_node("retry_incomplete", self._retry_incomplete)
@@ -179,6 +194,7 @@ class SpeakerReviewGraphWorkflow:
             {
                 "submit": "submit",
                 "observe_primary": "observe_primary",
+                "submit_next_primary": "submit_next_primary",
                 "advance": "advance",
                 "final_review": "final_review",
                 "retry_incomplete": "retry_incomplete",
@@ -192,6 +208,7 @@ class SpeakerReviewGraphWorkflow:
             {
                 "submit": "submit",
                 "observe_primary": "observe_primary",
+                "submit_next_primary": "submit_next_primary",
                 "advance": "advance",
                 "final_review": "final_review",
                 "retry_incomplete": "retry_incomplete",
@@ -201,6 +218,7 @@ class SpeakerReviewGraphWorkflow:
         )
         graph.add_edge("submit", END)
         graph.add_edge("observe_primary", END)
+        graph.add_edge("submit_next_primary", END)
         graph.add_edge("advance", END)
         graph.add_edge("final_review", END)
         graph.add_edge("retry_incomplete", END)
@@ -249,6 +267,18 @@ class SpeakerReviewGraphWorkflow:
             and run_state.status is SpeakerReviewRunStatus.PRIMARY_SUBMITTED
         ):
             return "observe_primary"
+        if (
+            state["operation"] == "submit-next-primary"
+            and run_state.status
+            in {
+                SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED,
+                # A Phase 61 first-submission state is intentionally routed
+                # into the operation so the checkpoint validator rejects it;
+                # silently ending would hide an unsafe replay.
+                SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
+            }
+        ):
+            return "submit_next_primary"
         if state["operation"] == "advance" and run_state.status in {
             SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
             SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
@@ -300,6 +330,18 @@ class SpeakerReviewGraphWorkflow:
         run_directory, run_state = self._required_run_context(state)
         return {
             "run_state": self._workflow.observe_primary_part(
+                run_directory,
+                run_state,
+            )
+        }
+
+    def _submit_next_primary(
+        self,
+        state: SpeakerReviewGraphState,
+    ) -> dict[str, SpeakerReviewRunState]:
+        run_directory, run_state = self._required_run_context(state)
+        return {
+            "run_state": self._workflow.submit_next_primary_part(
                 run_directory,
                 run_state,
             )
