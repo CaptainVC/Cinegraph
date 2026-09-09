@@ -240,6 +240,16 @@ failed transitions receive create-once receipts, and receipt repair never reopen
 the provider boundary. See [ADR-0023](docs/adr/0023-private-speaker-review-observation-boundary.md)
 and the [VPS observation runbook](docs/operations/private-speaker-review-observation.md).
 
+Phase 64 adds a bounded next-primary LangGraph transition and isolated Compose
+worker. It accepts only an explicit completed-part checkpoint, validates the
+completed output and immutable submission journals before opening the secret,
+and creates at most one subsequent primary Batch. It cannot observe, parse,
+adjudicate, finalize, or ingest. Fully observed primary runs are a provider-free
+no-op, and post-checkpoint submission replays reject the Phase 61 first-part
+shape. The root VPS authorization/receipt boundary remains a separate next phase.
+See [ADR-0024](docs/adr/0024-bounded-next-primary-submission-transition.md) and
+the [next-primary transition runbook](docs/operations/private-speaker-review-next-primary-submission.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

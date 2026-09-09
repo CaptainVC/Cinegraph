@@ -85,6 +85,14 @@ class RecordingSpeakerReviewWorkflow:
             primary_completed_part_count=state.primary_completed_part_count + 1,
         )
 
+    def submit_next_primary_part(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        self.calls.append("submit_next_primary_part")
+        return replace(state, status=SpeakerReviewRunStatus.PRIMARY_SUBMITTED)
+
     def submit_final_review(
         self,
         run_directory: Path,
@@ -214,6 +222,44 @@ def test_observe_primary_graph_stops_for_completed_part_without_workflow_call(
     _, state = graph.observe_primary(run_directory)
 
     assert state.status is SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED
+    assert workflow.calls == ["load"]
+
+
+def test_submit_next_primary_graph_loads_checkpoint_and_stops_after_one_node(
+    tmp_path: Path,
+) -> None:
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    checkpoint = replace(
+        run_state(SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED),
+        primary_completed_part_count=1,
+        primary_batch_id="batch-1",
+        primary_input_file_id="file-1",
+        primary_batch_ids=("batch-1",),
+        primary_input_file_ids=("file-1",),
+    )
+    save_run_state(run_directory, checkpoint)
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.submit_next_primary(run_directory)
+
+    assert state.status is SpeakerReviewRunStatus.PRIMARY_SUBMITTED
+    assert workflow.calls == ["load", "submit_next_primary_part"]
+
+
+def test_submit_next_primary_graph_ignores_unrelated_terminal_state(
+    tmp_path: Path,
+) -> None:
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    save_run_state(run_directory, run_state(SpeakerReviewRunStatus.COMPLETED))
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.submit_next_primary(run_directory)
+
+    assert state.status is SpeakerReviewRunStatus.COMPLETED
     assert workflow.calls == ["load"]
 
 

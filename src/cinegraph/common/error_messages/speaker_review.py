@@ -31,6 +31,9 @@ class SpeakerReviewErrorMessages:
     PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED = (
         "Primary-part observation requires operator reconciliation before retrying."
     )
+    NEXT_PRIMARY_SUBMISSION_RECONCILIATION_REQUIRED = (
+        "Next primary-part submission requires a valid completed-part checkpoint."
+    )
     SPEAKER_REVIEW_CORPUS_PATH_INVALID = (
         "The speaker-review corpus path is invalid or not a physical private path."
     )

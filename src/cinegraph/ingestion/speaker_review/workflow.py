@@ -650,6 +650,126 @@ class SpeakerReviewWorkflow:
         save_run_state(run_directory, updated)
         return updated
 
+    def submit_next_primary_part(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Submit exactly one primary part after an explicit completed checkpoint.
+
+        This is deliberately narrower than :meth:`advance`: it never retrieves
+        a provider batch, downloads output, parses verdicts, submits
+        adjudication, or finalizes the run.  The checkpoint must describe all
+        completed primary parts and no active part.  ``_submit_part`` provides
+        the create-once intent/completed journal semantics, so a matching
+        completed journal is replayed without a second provider request while
+        an ambiguous intent remains a reconciliation error.
+        """
+
+        if state.status is SpeakerReviewRunStatus.PRIMARY_SUBMITTED:
+            self._validate_next_primary_replay(state)
+            return state
+        self._validate_next_primary_checkpoint(state)
+        completed_count = state.primary_completed_part_count
+        if completed_count >= state.primary_part_count:
+            # A one-part run (or a run whose final part was already completed)
+            # is an explicit safe no-op.  Do not touch the gateway or run files.
+            return state
+
+        submission = self._submit_part(
+            run_directory=run_directory,
+            state=state,
+            stage="primary",
+            part_index=completed_count,
+        )
+        batch_ids = state.primary_batch_ids
+        input_file_ids = state.primary_input_file_ids
+        updated = replace(
+            state,
+            status=SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
+            updated_at=_now(),
+            primary_batch_id=submission.batch_id,
+            primary_input_file_id=submission.input_file_id,
+            primary_batch_ids=(*batch_ids, submission.batch_id),
+            primary_input_file_ids=(*input_file_ids, submission.input_file_id),
+        )
+        save_run_state(run_directory, updated)
+        return updated
+
+    @staticmethod
+    def _validate_next_primary_checkpoint(state: SpeakerReviewRunState) -> None:
+        """Validate the exact state shape required before provider access."""
+
+        ids = state.primary_batch_ids
+        input_ids = state.primary_input_file_ids
+        valid_ids = (
+            isinstance(ids, tuple)
+            and all(isinstance(value, str) and value and value == value.strip() for value in ids)
+            and len(set(ids)) == len(ids)
+        )
+        valid_input_ids = (
+            isinstance(input_ids, tuple)
+            and all(
+                isinstance(value, str) and value and value == value.strip()
+                for value in input_ids
+            )
+            and len(set(input_ids)) == len(input_ids)
+        )
+        part_count = state.primary_part_count
+        completed_count = state.primary_completed_part_count
+        if (
+            state.status is not SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED
+            or type(part_count) is not int
+            or part_count <= 0
+            or type(completed_count) is not int
+            or completed_count <= 0
+            or completed_count > part_count
+            or not valid_ids
+            or not valid_input_ids
+            or len(ids) != completed_count
+            or len(input_ids) != completed_count
+            or state.primary_batch_id != ids[-1]
+            or state.primary_input_file_id != input_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_PRIMARY_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+
+    @staticmethod
+    def _validate_next_primary_replay(state: SpeakerReviewRunState) -> None:
+        """Accept only a submitted state created after a completed checkpoint."""
+
+        ids = state.primary_batch_ids
+        input_ids = state.primary_input_file_ids
+        part_count = state.primary_part_count
+        completed_count = state.primary_completed_part_count
+        if (
+            state.status is not SpeakerReviewRunStatus.PRIMARY_SUBMITTED
+            or type(part_count) is not int
+            or type(completed_count) is not int
+            or completed_count <= 0
+            or completed_count >= part_count
+            or not isinstance(ids, tuple)
+            or not isinstance(input_ids, tuple)
+            or len(ids) != completed_count + 1
+            or len(input_ids) != completed_count + 1
+            or len(set(ids)) != len(ids)
+            or len(set(input_ids)) != len(input_ids)
+            or not all(
+                isinstance(value, str) and value and value == value.strip()
+                for value in ids
+            )
+            or not all(
+                isinstance(value, str) and value and value == value.strip()
+                for value in input_ids
+            )
+            or state.primary_batch_id != ids[-1]
+            or state.primary_input_file_id != input_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_PRIMARY_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+
     def _advance_adjudication(
         self,
         run_directory: Path,
