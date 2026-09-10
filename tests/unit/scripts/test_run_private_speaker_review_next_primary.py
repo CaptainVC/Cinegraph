@@ -149,6 +149,7 @@ def _install_process_fixture(
     run.mkdir(parents=True)
     receipts = tmp_path / "next-primary-receipts"
     receipts.mkdir()
+    receipts.chmod(0o700)
     sequence = iter(inventories)
     monkeypatch.setattr(processor, "NEXT_RECEIPTS_ROOT", receipts)
     monkeypatch.setattr(processor, "ROOT_UID", getattr(os, "getuid", lambda: 0)())
