@@ -1464,7 +1464,7 @@ def _container_identity_is_exact(review_runs: Path) -> bool:
 
 
 def _worker_arguments(request: Mapping[str, object], review_runs: Path) -> list[str]:
-    return [
+    arguments = [
         "docker",
         "compose",
         "--progress",
@@ -1495,8 +1495,25 @@ def _worker_arguments(request: Mapping[str, object], review_runs: Path) -> list[
         f"{contract.ENV_AUTHORIZATION_ID}={request['authorization_id']}",
         "--env",
         f"{contract.ENV_MAXIMUM_AUTHORIZED_COST_MICROUSD}={request['maximum_authorized_cost_microusd']}",
-        COMPOSE_SERVICE,
     ]
+    expected = (
+        (contract.ENV_EXPECTED_PRIMARY_PART_NUMBER, request.get("_expected_primary_part_number")),
+        (contract.ENV_EXPECTED_PRE_RUN_STATE_SHA256, request.get("_expected_pre_run_state_sha256")),
+        (
+            contract.ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256,
+            request.get("_expected_pre_artifact_set_sha256"),
+        ),
+        (
+            contract.ENV_EXPECTED_PRE_JOURNAL_SET_SHA256,
+            request.get("_expected_pre_journal_set_sha256"),
+        ),
+        (contract.ENV_EXPECTED_REQUEST_SHA256, request.get("_expected_request_sha256")),
+    )
+    for name, value in expected:
+        if value is not None:
+            arguments.extend(["--env", f"{name}={value}"])
+    arguments.append(COMPOSE_SERVICE)
+    return arguments
 
 
 def _cleanup_compose_worker(review_runs: Path) -> None:
@@ -1663,7 +1680,27 @@ def process_request(request: Mapping[str, object]) -> dict[str, object]:
     else:
         if before.state["status"] != "primary_submitted":
             raise SpeakerReviewObservationProcessingError("observation pre-state invalid")
-        worker_result = _run_worker(request, before.run_directory.parent)
+        worker_request = {
+            **request,
+            "_expected_primary_part_number": str(intent["primary_part_number"]),
+            "_expected_pre_run_state_sha256": intent["pre_observation_run_state_sha256"],
+            "_expected_pre_artifact_set_sha256": _set_digest(
+                {
+                    name: raw
+                    for name, raw in before.all_contents.items()
+                    if not name.startswith(".primary-part-")
+                }
+            ),
+            "_expected_pre_journal_set_sha256": before.journal_set_sha256,
+            "_expected_request_sha256": _sha256(
+                before.base_contents[
+                    _PRIMARY_REQUEST_FILENAME_TEMPLATE.format(
+                        part_number=int(intent["primary_part_number"])
+                    )
+                ]
+            ),
+        }
+        worker_result = _run_worker(worker_request, before.run_directory.parent)
         if (
             worker_result["run_id"] != request["run_id"]
             or worker_result["estimated_primary_cost_microusd"]

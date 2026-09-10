@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import replace
 from pathlib import Path
 
@@ -64,6 +65,51 @@ def _configure(
     monkeypatch.setattr(worker, "load_validated_run_state", lambda *_: (run, state))
     monkeypatch.setattr(worker, "read_stable_openai_secret", lambda *_: "sk-test")
     return run
+
+
+def _configure_bound_part_two(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> tuple[Path, SpeakerReviewRunState, dict[str, str]]:
+    state = replace(
+        _state(completed=1),
+        primary_batch_id="private-batch-2",
+        primary_input_file_id="private-input-2",
+        primary_batch_ids=("private-batch-1", "private-batch-2"),
+        primary_input_file_ids=("private-input-1", "private-input-2"),
+    )
+    run = _configure(monkeypatch, tmp_path, state)
+    contents = {
+        "candidates.jsonl": b"{}\n",
+        "source-manifest.json": b"{}\n",
+        "run-state.json": (
+            json.dumps(state.to_dict(), sort_keys=True, separators=(",", ":")) + "\n"
+        ).encode(),
+        "primary-part-0001-requests.jsonl": b'{"custom_id":"one"}\n',
+        "primary-part-0002-requests.jsonl": b'{"custom_id":"two"}\n',
+        ".primary-part-0001-submission-intent.json": b"{}\n",
+        ".primary-part-0001-submission-completed.json": b"{}\n",
+        ".primary-part-0002-submission-intent.json": b"{}\n",
+        ".primary-part-0002-submission-completed.json": b"{}\n",
+        "primary-part-0001-output.jsonl": b'{"response":"one"}\n',
+    }
+    for name, raw in contents.items():
+        path = run / name
+        path.write_bytes(raw)
+        path.chmod(0o600)
+    artifacts = {name: raw for name, raw in contents.items() if not name.startswith(".")}
+    journals = {name: raw for name, raw in contents.items() if name.startswith(".")}
+    environment = {
+        **_environment(),
+        contract.ENV_EXPECTED_PRIMARY_PART_NUMBER: "2",
+        contract.ENV_EXPECTED_PRE_RUN_STATE_SHA256: worker._sha256(contents["run-state.json"]),
+        contract.ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256: worker._set_digest(artifacts),
+        contract.ENV_EXPECTED_PRE_JOURNAL_SET_SHA256: worker._set_digest(journals),
+        contract.ENV_EXPECTED_REQUEST_SHA256: worker._sha256(
+            contents["primary-part-0002-requests.jsonl"]
+        ),
+    }
+    return run, state, environment
 
 
 def test_contract_is_canonical_and_rejects_wrong_operation_or_shape() -> None:
@@ -149,6 +195,47 @@ def test_pending_observation_invokes_only_one_retrieve_and_no_submit(
     assert result["status"] == "waiting"
     assert result["run_status"] == "primary_submitted"
     assert calls == ["retrieve:private-batch"]
+
+
+def test_bound_part_two_uses_verified_state_without_reloading(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run, state, environment = _configure_bound_part_two(monkeypatch, tmp_path)
+    captured: dict[str, object] = {}
+
+    class Graph:
+        def observe_primary(
+            self,
+            path: Path,
+            *,
+            verified_run_state: SpeakerReviewRunState,
+        ) -> tuple[Path, SpeakerReviewRunState]:
+            captured["state"] = verified_run_state
+            return path, verified_run_state
+
+    monkeypatch.setattr(worker, "_workflow", lambda _: Graph())
+
+    result = worker.observe_primary(environment=environment)
+
+    assert result["status"] == "waiting"
+    assert captured == {"state": state}
+    assert run.is_dir()
+
+
+def test_bound_checkpoint_drift_rejects_before_secret_or_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run, _, environment = _configure_bound_part_two(monkeypatch, tmp_path)
+    (run / "primary-part-0002-requests.jsonl").write_bytes(b'{"tampered":true}\n')
+    monkeypatch.setattr(
+        worker,
+        "read_stable_openai_secret",
+        lambda *_: pytest.fail("secret must not be read"),
+    )
+    monkeypatch.setattr(worker, "_workflow", lambda *_: pytest.fail("provider must not exist"))
+
+    with pytest.raises(worker.ObservationWorkerError, match="checkpoint changed"):
+        worker.observe_primary(environment=environment)
 
 
 def test_completed_observation_downloads_once_and_returns_safe_aggregate(
