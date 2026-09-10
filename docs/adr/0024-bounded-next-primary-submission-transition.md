@@ -65,11 +65,9 @@ submit final review, finalize, promote, or ingest. A multi-part run alternates
 between separately bounded observation and next-part submission checkpoints.
 
 This phase deliberately provides only the application/LangGraph/container
-primitive. It does not add a root coordinator, SSH command, scheduler, or VPS
-authorization/receipt store. A later phase must bind the first use of this worker
-to the Phase 63 observation receipt, immutable release/image/configuration, and a
-fresh operation-specific authorization before it becomes remotely invocable.
-Primary-result processing remains a separate zero-new-spend transition after all
-parts are observed.
+primitive. [ADR-0025](0025-private-speaker-review-next-primary-boundary.md) adds
+the root coordinator, forced SSH command, and authorization/receipt store for
+the first part-one-to-part-two use. Primary-result processing remains a separate
+zero-new-spend transition after all parts are observed.
 
 See the [next-primary transition runbook](../operations/private-speaker-review-next-primary-submission.md).

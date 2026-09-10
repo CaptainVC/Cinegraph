@@ -22,6 +22,13 @@ if os.fspath(_ROOT) not in sys.path:
 from scripts import bootstrap_corpus_host, bootstrap_dev_host  # noqa: E402
 from scripts.bootstrap_dev_host import BootstrapError, ExpectedPath  # noqa: E402
 from scripts.dev_host_contract import DEPLOY_HOME, SAFE_PATH, validate_fingerprint  # noqa: E402
+from scripts.private_speaker_review_next_primary_host_contract import (  # noqa: E402
+    REVIEW_NEXT_PRIMARY_HELPER_PATH,
+    REVIEW_NEXT_PRIMARY_RECEIPTS_ROOT,
+)
+from scripts.private_speaker_review_next_primary_host_contract import (  # noqa: E402
+    SUDOERS_CONTENT as NEXT_PRIMARY_SUDOERS_CONTENT,
+)
 from scripts.private_speaker_review_observation_host_contract import (  # noqa: E402
     REVIEW_OBSERVATION_RECEIPTS_ROOT,
 )
@@ -48,8 +55,10 @@ from scripts.private_speaker_review_submission_host_contract import (  # noqa: E
     SHARED_ROOT,
     SPEAKER_REVIEW_ROOT,
     SPEAKER_REVIEW_RUNS_ROOT,
-    SUDOERS_CONTENT,
     authorized_key_entry,
+)
+from scripts.private_speaker_review_submission_host_contract import (  # noqa: E402
+    SUDOERS_CONTENT as OBSERVATION_SUDOERS_CONTENT,
 )
 
 REPOSITORY_ROOT: Final = _ROOT
@@ -57,6 +66,9 @@ SOURCE_DISPATCH: Final = REPOSITORY_ROOT / "deploy/remote/review-dispatch.sh"
 SOURCE_HELPER: Final = REPOSITORY_ROOT / "deploy/remote/submit-private-speaker-review.sh"
 SOURCE_OBSERVATION_HELPER: Final = (
     REPOSITORY_ROOT / "deploy/remote/observe-private-speaker-review.sh"
+)
+SOURCE_NEXT_PRIMARY_HELPER: Final = (
+    REPOSITORY_ROOT / "deploy/remote/submit-next-private-speaker-review.sh"
 )
 FORBIDDEN_GROUP_NAMES: Final = frozenset(
     {"adm", "admin", "docker", "sudo", "wheel", "cinegraph-deploy", "cinegraph-corpus"}
@@ -80,12 +92,14 @@ DIRECTORY_CONTRACT: Final = (
     ExpectedPath(REVIEW_AUTHORIZATION_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(REVIEW_SUBMISSION_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(REVIEW_OBSERVATION_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(REVIEW_NEXT_PRIMARY_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(SPEAKER_REVIEW_RUNS_ROOT, "directory", 0, 0, 0o700),
 )
 FILE_CONTRACT: Final = (
     ExpectedPath(REVIEW_DISPATCH_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_OBSERVATION_HELPER_PATH, "file", 0, 0, 0o755),
+    ExpectedPath(REVIEW_NEXT_PRIMARY_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_SUDOERS_PATH, "file", 0, 0, 0o440),
     ExpectedPath(REVIEW_AUTHORIZED_KEYS, "file", 0, 0, 0o644),
 )
@@ -220,7 +234,8 @@ def _managed_content(public_key: str) -> dict[Path, bytes]:
     return {
         REVIEW_HELPER_PATH: _read_source(SOURCE_HELPER),
         REVIEW_OBSERVATION_HELPER_PATH: _read_source(SOURCE_OBSERVATION_HELPER),
-        REVIEW_SUDOERS_PATH: SUDOERS_CONTENT.encode("utf-8"),
+        REVIEW_NEXT_PRIMARY_HELPER_PATH: _read_source(SOURCE_NEXT_PRIMARY_HELPER),
+        REVIEW_SUDOERS_PATH: NEXT_PRIMARY_SUDOERS_CONTENT.encode("utf-8"),
         REVIEW_AUTHORIZED_KEYS: authorized_key_entry(public_key).encode("utf-8"),
         REVIEW_DISPATCH_PATH: _read_source(SOURCE_DISPATCH),
     }
@@ -236,7 +251,11 @@ def _preflight_refresh_host_files(
     installed: dict[Path, bytes] = {}
     for path, content in managed.items():
         expected = by_path[path]
-        if path == REVIEW_OBSERVATION_HELPER_PATH and not path.exists() and not path.is_symlink():
+        if (
+            path in {REVIEW_OBSERVATION_HELPER_PATH, REVIEW_NEXT_PRIMARY_HELPER_PATH}
+            and not path.exists()
+            and not path.is_symlink()
+        ):
             continue
         bootstrap_dev_host._verify_path(expected)
         try:
@@ -247,6 +266,7 @@ def _preflight_refresh_host_files(
             raise BootstrapError("review authorization differs from the reviewed key")
         if path == REVIEW_SUDOERS_PATH and installed[path] not in {
             content,
+            OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
             LEGACY_SUDOERS_CONTENT.encode("utf-8"),
         }:
             raise BootstrapError("review sudoers differs from the reviewed contract")
@@ -287,12 +307,13 @@ def _ensure_host_files(public_key: str, *, apply: bool, refresh_review_code: boo
     by_path = {item.path: item for item in FILE_CONTRACT}
     if refresh_review_code:
         managed, installed = _preflight_refresh_host_files(public_key)
-        # Keep the account authorization unchanged. Install both reviewed
-        # helpers before expanding the exact sudo policy, then replace the
-        # dispatcher last so its second command is never reachable early.
+        # Keep the account authorization unchanged. Install every reviewed
+        # helper before expanding the exact sudo policy, then replace the
+        # dispatcher last so a new command is never reachable early.
         for path in (
             REVIEW_HELPER_PATH,
             REVIEW_OBSERVATION_HELPER_PATH,
+            REVIEW_NEXT_PRIMARY_HELPER_PATH,
         ):
             if path not in installed:
                 bootstrap_dev_host._ensure_exact_file(by_path[path], managed[path], apply=True)

@@ -248,6 +248,31 @@ def test_submit_next_primary_graph_loads_checkpoint_and_stops_after_one_node(
     assert workflow.calls == ["load", "submit_next_primary_part"]
 
 
+def test_submit_next_primary_graph_uses_root_verified_checkpoint_without_reload(
+    tmp_path: Path,
+) -> None:
+    run_directory = tmp_path / "run"
+    checkpoint = replace(
+        run_state(SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED),
+        primary_part_count=2,
+        primary_completed_part_count=1,
+        primary_batch_id="batch-1",
+        primary_input_file_id="file-1",
+        primary_batch_ids=("batch-1",),
+        primary_input_file_ids=("file-1",),
+    )
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.submit_next_primary(
+        run_directory,
+        verified_run_state=checkpoint,
+    )
+
+    assert state.status is SpeakerReviewRunStatus.PRIMARY_SUBMITTED
+    assert workflow.calls == ["submit_next_primary_part"]
+
+
 def test_submit_next_primary_graph_ignores_unrelated_terminal_state(
     tmp_path: Path,
 ) -> None:

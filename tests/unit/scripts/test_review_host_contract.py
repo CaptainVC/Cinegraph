@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 from scripts import bootstrap_review_host
+from scripts import private_speaker_review_next_primary_host_contract as next_contract
 from scripts import private_speaker_review_observation_host_contract as observation_contract
 from scripts import private_speaker_review_submission_host_contract as contract
 from scripts.bootstrap_dev_host import BootstrapError
@@ -16,6 +17,7 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     assert (contract.REVIEW_UID, contract.REVIEW_GID) == (20003, 20003)
     assert contract.REVIEW_COMMAND == "speaker-review-submit-primary-v1"
     assert observation_contract.REVIEW_OBSERVATION_COMMAND == "speaker-review-observe-primary-v1"
+    assert next_contract.REVIEW_NEXT_PRIMARY_COMMAND == ("speaker-review-submit-next-primary-v1")
     assert contract.REVIEW_USER != contract.CORPUS_USER
     assert "cinegraph-corpus" not in contract.SUDOERS_CONTENT
     assert "cinegraph-deploy" not in contract.SUDOERS_CONTENT
@@ -25,6 +27,7 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     )
     assert contract.REVIEW_AUTHORIZATION_ROOT.parent == contract.SPEAKER_REVIEW_ROOT
     assert contract.REVIEW_SUBMISSION_RECEIPTS_ROOT.parent == contract.SPEAKER_REVIEW_ROOT
+    assert next_contract.REVIEW_NEXT_PRIMARY_RECEIPTS_ROOT.parent == contract.SPEAKER_REVIEW_ROOT
     assert contract.MINIMUM_PYTHON_VERSION >= (3, 12)
 
 
@@ -46,9 +49,11 @@ def test_review_bootstrap_contract_covers_dedicated_paths_and_has_no_broad_sudo(
     assert contract.REVIEW_AUTHORIZATION_ROOT in directories
     assert contract.REVIEW_SUBMISSION_RECEIPTS_ROOT in directories
     assert observation_contract.REVIEW_OBSERVATION_RECEIPTS_ROOT in directories
+    assert next_contract.REVIEW_NEXT_PRIMARY_RECEIPTS_ROOT in directories
     assert contract.REVIEW_DISPATCH_PATH in files
     assert contract.REVIEW_HELPER_PATH in files
     assert contract.REVIEW_OBSERVATION_HELPER_PATH in files
+    assert next_contract.REVIEW_NEXT_PRIMARY_HELPER_PATH in files
     assert contract.REVIEW_SUDOERS_PATH in files
     assert contract.REVIEW_AUTHORIZED_KEYS in files
     assert "NOPASSWD: ALL" not in contract.SUDOERS_CONTENT
@@ -61,12 +66,17 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
     observation_helper = Path("deploy/remote/observe-private-speaker-review.sh").read_text(
         encoding="utf-8"
     )
+    next_helper = Path("deploy/remote/submit-next-private-speaker-review.sh").read_text(
+        encoding="utf-8"
+    )
     assert "[[ $# -eq 0 ]]" in dispatch
     assert '[[ "$(id -un)" == "cinegraph-review" ]]' in dispatch
     assert "speaker-review-submit-primary-v1)" in dispatch
     assert "speaker-review-observe-primary-v1)" in dispatch
+    assert "speaker-review-submit-next-primary-v1)" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-submit-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-observe-private-speaker-review" in dispatch
+    assert "sudo -n /usr/local/sbin/cinegraph-submit-next-private-speaker-review" in dispatch
     assert "eval" not in dispatch
     assert "bash -c" not in dispatch
     assert "scp" not in dispatch.lower()
@@ -125,6 +135,34 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
     assert "com.docker.compose.oneoff" in observation_helper
     assert "com.docker.compose.project.config_files" in observation_helper
     assert "timeout --signal=TERM" in observation_helper
+    assert '[[ "${SUDO_USER-}" == "cinegraph-review" ]]' in next_helper
+    assert "speaker-review-submit-next-primary-v1" not in next_helper
+    assert 'python3 -I -S -B "$processor"' in next_helper
+    assert "${OPENAI_API_KEY" not in next_helper
+    assert "--env OPENAI_API_KEY" not in next_helper
+    assert "eval" not in next_helper
+    assert "bash -c" not in next_helper
+    assert (
+        next_helper.index('exec 8>"$TRANSFER_LOCK"')
+        < next_helper.index('exec 9>"$DEPLOYMENT_LOCK"')
+        < next_helper.index('exec 7>"$SPEAKER_REVIEW_LOCK"')
+    )
+    for trusted_path in (
+        "scripts/run_private_speaker_review_next_primary.py",
+        "scripts/submit_next_private_speaker_review_workspace.py",
+        "scripts/private_speaker_review_next_primary_submission_contract.py",
+        "scripts/private_speaker_review_next_primary_host_contract.py",
+        "scripts/run_private_speaker_review_observation.py",
+        "scripts/private_speaker_review_observation_contract.py",
+        "scripts/private_speaker_review_observation_host_contract.py",
+        "scripts/run_private_speaker_review_submission.py",
+        "scripts/private_speaker_review_submission_contract.py",
+        "scripts/private_speaker_review_submission_host_contract.py",
+        "scripts/private_corpus_host_contract.py",
+        "scripts/dev_host_contract.py",
+        "deploy/compose.yaml",
+    ):
+        assert trusted_path in next_helper
 
 
 def test_compose_primary_submission_is_egress_only_and_secret_file_based() -> None:
@@ -185,6 +223,7 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         bootstrap_review_host.REVIEW_DISPATCH_PATH: b"new-dispatch",
         bootstrap_review_host.REVIEW_HELPER_PATH: b"new-helper",
         bootstrap_review_host.REVIEW_OBSERVATION_HELPER_PATH: b"new-observation-helper",
+        bootstrap_review_host.REVIEW_NEXT_PRIMARY_HELPER_PATH: b"new-next-helper",
         bootstrap_review_host.REVIEW_SUDOERS_PATH: b"sudoers",
         bootstrap_review_host.REVIEW_AUTHORIZED_KEYS: b"authorized",
     }
@@ -225,7 +264,82 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
 
     assert events == [
         ("ensure", bootstrap_review_host.REVIEW_OBSERVATION_HELPER_PATH, True),
+        ("ensure", bootstrap_review_host.REVIEW_NEXT_PRIMARY_HELPER_PATH, True),
         ("replace", bootstrap_review_host.REVIEW_SUDOERS_PATH, None),
         ("replace", bootstrap_review_host.REVIEW_DISPATCH_PATH, None),
     ]
     assert verified == list(managed)
+
+
+@pytest.mark.parametrize(
+    ("installed_sudoers", "accepted"),
+    [
+        (contract.LEGACY_SUDOERS_CONTENT.encode("utf-8"), True),
+        (contract.SUDOERS_CONTENT.encode("utf-8"), True),
+        (next_contract.SUDOERS_CONTENT.encode("utf-8"), True),
+        (b"cinegraph-review ALL=(root) NOPASSWD: ALL\n", False),
+    ],
+)
+def test_review_refresh_accepts_only_finite_sudoers_upgrade_states(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    installed_sudoers: bytes,
+    accepted: bool,
+) -> None:
+    paths = {
+        "dispatch": tmp_path / "dispatch",
+        "helper": tmp_path / "helper",
+        "observation": tmp_path / "observation",
+        "next": tmp_path / "next",
+        "sudoers": tmp_path / "sudoers",
+        "authorized": tmp_path / "authorized_keys",
+    }
+    managed = {
+        paths["dispatch"]: b"new-dispatch",
+        paths["helper"]: b"new-helper",
+        paths["observation"]: b"new-observation",
+        paths["next"]: b"new-next",
+        paths["sudoers"]: next_contract.SUDOERS_CONTENT.encode("utf-8"),
+        paths["authorized"]: b"review-key",
+    }
+    for name, path in paths.items():
+        content = installed_sudoers if name == "sudoers" else managed[path]
+        path.write_bytes(content)
+    monkeypatch.setattr(bootstrap_review_host, "REVIEW_DISPATCH_PATH", paths["dispatch"])
+    monkeypatch.setattr(bootstrap_review_host, "REVIEW_HELPER_PATH", paths["helper"])
+    monkeypatch.setattr(
+        bootstrap_review_host,
+        "REVIEW_OBSERVATION_HELPER_PATH",
+        paths["observation"],
+    )
+    monkeypatch.setattr(
+        bootstrap_review_host,
+        "REVIEW_NEXT_PRIMARY_HELPER_PATH",
+        paths["next"],
+    )
+    monkeypatch.setattr(bootstrap_review_host, "REVIEW_SUDOERS_PATH", paths["sudoers"])
+    monkeypatch.setattr(
+        bootstrap_review_host,
+        "REVIEW_AUTHORIZED_KEYS",
+        paths["authorized"],
+    )
+    monkeypatch.setattr(
+        bootstrap_review_host,
+        "FILE_CONTRACT",
+        tuple(bootstrap_review_host.ExpectedPath(path, "file", 0, 0, 0o600) for path in managed),
+    )
+    monkeypatch.setattr(bootstrap_review_host, "_managed_content", lambda _: managed)
+    monkeypatch.setattr(bootstrap_review_host.bootstrap_dev_host, "_verify_path", lambda _: None)
+    monkeypatch.setattr(bootstrap_review_host, "_validate_sudoers_candidate", lambda _: None)
+    monkeypatch.setattr(
+        bootstrap_review_host.bootstrap_dev_host,
+        "_require_success",
+        lambda _: None,
+    )
+
+    if accepted:
+        _, installed = bootstrap_review_host._preflight_refresh_host_files("review-key")
+        assert installed[paths["sudoers"]] == installed_sudoers
+    else:
+        with pytest.raises(BootstrapError, match="sudoers"):
+            bootstrap_review_host._preflight_refresh_host_files("review-key")
