@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 from hashlib import sha256
 from pathlib import Path
@@ -150,6 +151,8 @@ def _install_process_fixture(
     receipts.mkdir()
     sequence = iter(inventories)
     monkeypatch.setattr(processor, "NEXT_RECEIPTS_ROOT", receipts)
+    monkeypatch.setattr(processor, "ROOT_UID", getattr(os, "getuid", lambda: 0)())
+    monkeypatch.setattr(processor, "ROOT_GID", getattr(os, "getgid", lambda: 0)())
     monkeypatch.setattr(processor, "_validate_authorization", lambda _: "1" * 64)
     monkeypatch.setattr(
         processor,

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -71,6 +72,8 @@ def test_write_once_is_idempotent_but_rejects_tampered_record(
     receipts.mkdir()
     receipts.chmod(0o700)
     monkeypatch.setattr(coordinator, "NEXT_RECEIPTS_ROOT", receipts)
+    monkeypatch.setattr(coordinator, "ROOT_UID", getattr(os, "getuid", lambda: 0)())
+    monkeypatch.setattr(coordinator, "ROOT_GID", getattr(os, "getgid", lambda: 0)())
     target = receipts / "run.json"
     payload = {"status": "intent", "request_sha256": hashlib.sha256(b"x").hexdigest()}
     coordinator._write_once(target, payload)
