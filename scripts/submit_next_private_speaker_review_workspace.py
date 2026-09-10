@@ -8,6 +8,7 @@ checkpoint and cost checks have passed.
 
 from __future__ import annotations
 
+import json
 import math
 import os
 import stat
@@ -58,6 +59,10 @@ from scripts import (  # noqa: E402
 PRIVATE_REVIEW_RUNS_ROOT = Path("/review-workspace/review-runs")
 OPENAI_SECRET_PATH = Path("/run/secrets/openai_api_key")
 SECRET_MAX_BYTES = 4_096
+CHECKPOINT_TOTAL_MAX_BYTES = 256 * 1024 * 1024
+_STATE_FILENAME = "run-state.json"
+_CANDIDATES_FILENAME = "candidates.jsonl"
+_MANIFEST_FILENAME = "source-manifest.json"
 
 
 class NextPrimarySubmissionWorkerError(RuntimeError):
@@ -65,7 +70,13 @@ class NextPrimarySubmissionWorkerError(RuntimeError):
 
 
 def _stable_identity(metadata: os.stat_result) -> tuple[int, int, int, int, int]:
-    return (metadata.st_dev, metadata.st_ino, metadata.st_size, metadata.st_mtime_ns, metadata.st_nlink)
+    return (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+        metadata.st_nlink,
+    )
 
 
 def read_stable_openai_secret(path: Path = OPENAI_SECRET_PATH) -> str:
@@ -234,7 +245,9 @@ def _aggregate(state: SpeakerReviewRunState, *, status: str, submitted: int) -> 
         raise NextPrimarySubmissionWorkerError("submission result invalid") from error
 
 
-def _workflow(secret: str) -> SpeakerReviewGraphWorkflow:
+def _workflow(
+    secret: str, *, expected_next_primary_request_sha256: str | None = None
+) -> SpeakerReviewGraphWorkflow:
     from openai import OpenAI
 
     client = OpenAI(api_key=secret)
@@ -248,6 +261,7 @@ def _workflow(secret: str) -> SpeakerReviewGraphWorkflow:
         primary_reasoning_effort=models.speaker_review_reasoning_effort,
         adjudication_reasoning_effort=models.speaker_adjudication_reasoning_effort,
         final_review_reasoning_effort=models.speaker_final_review_reasoning_effort,
+        expected_next_primary_request_sha256=expected_next_primary_request_sha256,
     )
     return SpeakerReviewGraphWorkflow(review_workflow)
 
@@ -345,6 +359,151 @@ def _validate_next_request_artifact(canonical: Path, completed_count: int) -> No
         raise NextPrimarySubmissionWorkerError("submission request unavailable")
 
 
+def _validate_expected_request_hash(
+    canonical: Path,
+    completed_count: int,
+    environment: Mapping[str, str] | None,
+) -> str | None:
+    source = os.environ if environment is None else environment
+    expected = source.get(contract.ENV_EXPECTED_REQUEST_SHA256, "")
+    if not expected:
+        return None
+    if (
+        not isinstance(expected, str)
+        or len(expected) != 64
+        or any(character not in "0123456789abcdef" for character in expected)
+    ):
+        raise NextPrimarySubmissionWorkerError("submission request unavailable")
+    request_path = _request_part_path(canonical, "primary", completed_count)
+    try:
+        snapshot = stable_file_snapshot(request_path, max_bytes=SUBMISSION_REQUEST_MAX_BYTES)
+    except Exception as error:
+        raise NextPrimarySubmissionWorkerError("submission request unavailable") from error
+    if sha256(snapshot.content).hexdigest() != expected:
+        raise NextPrimarySubmissionWorkerError("submission request changed")
+    return expected
+
+
+def _set_digest(contents: Mapping[str, bytes]) -> str:
+    digest = sha256()
+    for name in sorted(contents):
+        encoded = name.encode("ascii")
+        digest.update(len(encoded).to_bytes(4, "big"))
+        digest.update(encoded)
+        digest.update(len(contents[name]).to_bytes(8, "big"))
+        digest.update(contents[name])
+    return digest.hexdigest()
+
+
+def _expected_boundary_sha(
+    environment: Mapping[str, str] | None,
+    name: str,
+) -> str:
+    source = os.environ if environment is None else environment
+    value = source.get(name, "")
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise NextPrimarySubmissionWorkerError("submission checkpoint binding invalid")
+    return value
+
+
+def _validate_root_checkpoint_binding(
+    canonical: Path,
+    state: SpeakerReviewRunState,
+    environment: Mapping[str, str] | None,
+) -> bool:
+    """Bind the worker to the exact root-verified Phase 63 checkpoint."""
+
+    source = os.environ if environment is None else environment
+    names = (
+        contract.ENV_EXPECTED_REQUEST_SHA256,
+        contract.ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256,
+        contract.ENV_EXPECTED_PRE_JOURNAL_SET_SHA256,
+        contract.ENV_EXPECTED_PRE_RUN_STATE_SHA256,
+    )
+    present = tuple(bool(source.get(name, "")) for name in names)
+    if not any(present):
+        return False
+    if not all(present):
+        raise NextPrimarySubmissionWorkerError("submission checkpoint binding invalid")
+    expected_artifacts = _expected_boundary_sha(
+        environment, contract.ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256
+    )
+    expected_journals = _expected_boundary_sha(
+        environment, contract.ENV_EXPECTED_PRE_JOURNAL_SET_SHA256
+    )
+    expected_state = _expected_boundary_sha(environment, contract.ENV_EXPECTED_PRE_RUN_STATE_SHA256)
+
+    part_count = state.primary_part_count
+    required = {
+        _CANDIDATES_FILENAME,
+        _MANIFEST_FILENAME,
+        _STATE_FILENAME,
+        *(f"primary-part-{part:04d}-requests.jsonl" for part in range(1, part_count + 1)),
+        submission_filename("primary", 1, "intent"),
+        submission_filename("primary", 1, "completed"),
+        "primary-part-0001-output.jsonl",
+    }
+    optional = {
+        "primary-part-0001-api-errors.jsonl",
+        submission_filename("primary", 2, "intent"),
+        submission_filename("primary", 2, "completed"),
+    }
+    try:
+        observed_names = {entry.name for entry in canonical.iterdir()}
+    except OSError as error:
+        raise NextPrimarySubmissionWorkerError("submission checkpoint binding invalid") from error
+    part_two_records = {
+        submission_filename("primary", 2, "intent"),
+        submission_filename("primary", 2, "completed"),
+    }
+    if (
+        not required <= observed_names
+        or not observed_names <= required | optional
+        or bool(part_two_records & observed_names)
+        and not part_two_records <= observed_names
+    ):
+        raise NextPrimarySubmissionWorkerError("submission checkpoint binding invalid")
+
+    contents: dict[str, bytes] = {}
+    total = 0
+    try:
+        for name in sorted(observed_names):
+            snapshot = stable_file_snapshot(
+                canonical / name,
+                max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+            )
+            total += len(snapshot.content)
+            if total > CHECKPOINT_TOTAL_MAX_BYTES:
+                raise ValueError
+            contents[name] = snapshot.content
+    except Exception as error:
+        raise NextPrimarySubmissionWorkerError("submission checkpoint binding invalid") from error
+    phase63_contents = {name: raw for name, raw in contents.items() if name not in part_two_records}
+    part_one_journals = {
+        name: contents[name]
+        for name in (
+            submission_filename("primary", 1, "intent"),
+            submission_filename("primary", 1, "completed"),
+        )
+    }
+    try:
+        persisted_state = json.loads(contents[_STATE_FILENAME].decode("utf-8"))
+    except (UnicodeError, json.JSONDecodeError) as error:
+        raise NextPrimarySubmissionWorkerError("submission checkpoint binding invalid") from error
+    if (
+        persisted_state != state.to_dict()
+        or sha256(contents[_STATE_FILENAME]).hexdigest() != expected_state
+        or _set_digest(phase63_contents) != expected_artifacts
+        or _set_digest(part_one_journals) != expected_journals
+    ):
+        raise NextPrimarySubmissionWorkerError("submission checkpoint changed")
+    return True
+
+
 def _validate_checkpoint_evidence(canonical: Path, state: SpeakerReviewRunState) -> None:
     """Prove every completed part has immutable output and matching journals."""
 
@@ -356,7 +515,9 @@ def _validate_checkpoint_evidence(canonical: Path, state: SpeakerReviewRunState)
                 raise ValueError
             _validate_submission_evidence(canonical, state, index)
         except Exception as error:
-            raise NextPrimarySubmissionWorkerError("submission checkpoint evidence invalid") from error
+            raise NextPrimarySubmissionWorkerError(
+                "submission checkpoint evidence invalid"
+            ) from error
 
 
 def _validate_submission_evidence(
@@ -433,9 +594,7 @@ def submit_next_primary(
         raise NextPrimarySubmissionWorkerError("submission run unavailable")
     estimated = _cost_microusd(state.estimated_primary_cost_usd)
     cap = int(request["maximum_authorized_cost_microusd"])
-    configuration_cap = _cost_microusd(
-        DEFAULT_SPEAKER_REVIEW_CONFIGURATION.maximum_run_cost_usd
-    )
+    configuration_cap = _cost_microusd(DEFAULT_SPEAKER_REVIEW_CONFIGURATION.maximum_run_cost_usd)
     if estimated > cap or estimated > configuration_cap:
         raise NextPrimarySubmissionWorkerError("submission cost exceeds authorization")
     if state.status is SpeakerReviewRunStatus.PRIMARY_SUBMITTED:
@@ -449,12 +608,29 @@ def submit_next_primary(
 
     part = state.primary_completed_part_count + 1
     _validate_next_request_artifact(canonical, state.primary_completed_part_count)
+    expected_hash = _validate_expected_request_hash(
+        canonical,
+        state.primary_completed_part_count,
+        environment,
+    )
+    root_bound = _validate_root_checkpoint_binding(canonical, state, environment)
     completed_journal = canonical / submission_filename("primary", part, "completed")
     had_completed_journal = completed_journal.exists()
     secret = read_stable_openai_secret(secret_path)
     before = state
     try:
-        returned, submitted = _workflow(secret).submit_next_primary(canonical)
+        workflow = (
+            _workflow(secret, expected_next_primary_request_sha256=expected_hash)
+            if expected_hash
+            else _workflow(secret)
+        )
+        if root_bound:
+            returned, submitted = workflow.submit_next_primary(
+                canonical,
+                verified_run_state=state,
+            )
+        else:
+            returned, submitted = workflow.submit_next_primary(canonical)
     except RuntimeError as error:
         if contract.is_reconciliation_error(error):
             return _aggregate(before, status="reconciliation_required", submitted=0)

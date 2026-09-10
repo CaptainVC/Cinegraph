@@ -91,14 +91,17 @@ class SpeakerReviewGraphWorkflow:
     def submit_next_primary(
         self,
         run_directory: Path,
+        *,
+        verified_run_state: SpeakerReviewRunState | None = None,
     ) -> tuple[Path, SpeakerReviewRunState]:
-        """Submit at most one next primary part from a completed checkpoint."""
+        """Submit from a completed checkpoint, optionally using a bound state snapshot."""
 
         return self._invoke(
             operation="submit-next-primary",
             corpus_root=None,
             seasons=(),
             run_directory=run_directory,
+            verified_run_state=verified_run_state,
         )
 
     def advance(
@@ -152,6 +155,7 @@ class SpeakerReviewGraphWorkflow:
         corpus_root: Path | None,
         seasons: tuple[int, ...],
         run_directory: Path | None,
+        verified_run_state: SpeakerReviewRunState | None = None,
     ) -> tuple[Path, SpeakerReviewRunState]:
         final_state = cast(
             SpeakerReviewGraphState,
@@ -161,7 +165,7 @@ class SpeakerReviewGraphWorkflow:
                     corpus_root=corpus_root,
                     seasons=seasons,
                     run_directory=run_directory,
-                    run_state=None,
+                    run_state=verified_run_state,
                 ),  # type: ignore[arg-type]
             ),
         )
@@ -186,7 +190,11 @@ class SpeakerReviewGraphWorkflow:
         graph.add_conditional_edges(
             START,
             self._route_from_start,
-            {"prepare": "prepare", "load": "load"},
+            {
+                "prepare": "prepare",
+                "load": "load",
+                "submit_next_primary": "submit_next_primary",
+            },
         )
         graph.add_conditional_edges(
             "prepare",
@@ -226,7 +234,14 @@ class SpeakerReviewGraphWorkflow:
         return graph
 
     def _route_from_start(self, state: SpeakerReviewGraphState) -> str:
-        return "prepare" if state["operation"] in {"start", "prepare"} else "load"
+        if state["operation"] in {"start", "prepare"}:
+            return "prepare"
+        if (
+            state["operation"] == "submit-next-primary"
+            and state["run_state"] is not None
+        ):
+            return "submit_next_primary"
+        return "load"
 
     def _prepare(
         self,

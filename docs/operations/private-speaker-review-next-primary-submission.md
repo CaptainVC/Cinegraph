@@ -1,8 +1,10 @@
 # Private speaker-review next-primary submission
 
 Phase 64 adds the internal transition that submits at most one subsequent
-primary Batch part from an observed checkpoint. It is not yet a workstation-facing
-VPS command.
+primary Batch part from an observed checkpoint. Phase 65 exposes its first
+part-one-to-part-two use through the separately authorized
+[`speaker-review-submit-next-primary-v1`](private-speaker-review-next-primary-boundary.md)
+VPS boundary.
 
 ## Preconditions
 
@@ -39,7 +41,7 @@ file IDs, private paths, source/subtitle text, JSONL payloads, prompts, or secre
 
 `corpus-speaker-review-submit-next-primary` runs as UID/GID `10002`, with a
 read-only root filesystem, dropped capabilities, no-new-privileges, bounded
-CPU/memory/PIDs, and only the egress network. Its future host invocation may add
+CPU/memory/PIDs, and only the egress network. Its Phase 65 host invocation adds
 only the exact digest-bound `review-runs` directory at
 `/review-workspace/review-runs`. It has no corpus-source, PostgreSQL, Qdrant,
 knowledge, preparation-receipt, or application-credential mount.
@@ -55,8 +57,8 @@ completed journal, provider output, or state file to force a retry. Ambiguous
 evidence requires explicit reconciliation because the provider may already have
 accepted the paid submission.
 
-This profile has no root helper or forced SSH command in Phase 64. The next host
-boundary must require a fresh authorization and bind Phase 60 preparation,
-Phase 61 submission, Phase 63 observation, active release/image/configuration,
-and exact pre/post artifact inventories. Observation of the newly submitted part
-and final primary-result processing are later, separate transitions.
+Phase 65 supplies the root helper and forced SSH command with a fresh
+authorization bound to Phase 60 preparation, Phase 61 submission, Phase 63
+observation, the active release/image/configuration, and exact pre/post artifact
+inventories. Observation of the newly submitted part and final primary-result
+processing remain later, separate transitions.

@@ -73,9 +73,7 @@ def _write_submission_evidence(
     (run_directory / f"primary-part-{part:04d}-requests.jsonl").write_bytes(request)
     binding = {
         "batch_endpoint": DEFAULT_SPEAKER_REVIEW_CONFIGURATION.batch_endpoint,
-        "completion_window": (
-            DEFAULT_SPEAKER_REVIEW_CONFIGURATION.batch_completion_window
-        ),
+        "completion_window": (DEFAULT_SPEAKER_REVIEW_CONFIGURATION.batch_completion_window),
         "part": part,
         "prompt_version": state.prompt_version,
         "request_sha256": sha256(request).hexdigest(),
@@ -87,11 +85,11 @@ def _write_submission_evidence(
     (run_directory / f"{stem}-intent.json").write_bytes(
         (
             json.dumps(
-            {"binding": binding, "status": "intent"},
-            ensure_ascii=True,
-            sort_keys=True,
-            separators=(",", ":"),
-        )
+                {"binding": binding, "status": "intent"},
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            )
             + "\n"
         ).encode("utf-8")
     )
@@ -109,14 +107,45 @@ def _write_submission_evidence(
                 separators=(",", ":"),
             )
             + "\n"
-        )
-        .encode("utf-8")
+        ).encode("utf-8")
     )
     if output:
         (run_directory / f"primary-part-{part:04d}-output.jsonl").write_bytes(
             b'{"response":"bounded"}\n'
         )
     return run_directory
+
+
+def _write_root_checkpoint(
+    run_directory: Path,
+    state: SpeakerReviewRunState,
+) -> tuple[Path, dict[str, str]]:
+    canonical = _write_submission_evidence(run_directory, state, 0, output=True)
+    (canonical / "candidates.jsonl").write_bytes(b'{"candidate":"one"}\n')
+    (canonical / "source-manifest.json").write_bytes(b'{"source":"bound"}\n')
+    (canonical / "primary-part-0002-requests.jsonl").write_bytes(b'{"custom_id":"part-2"}\n')
+    state_bytes = (
+        json.dumps(state.to_dict(), ensure_ascii=True, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+    (canonical / "run-state.json").write_bytes(state_bytes)
+    contents = {path.name: path.read_bytes() for path in canonical.iterdir()}
+    journals = {
+        name: contents[name]
+        for name in (
+            ".primary-part-0001-submission-intent.json",
+            ".primary-part-0001-submission-completed.json",
+        )
+    }
+    environment = {
+        **_environment(),
+        contract.ENV_EXPECTED_REQUEST_SHA256: sha256(
+            contents["primary-part-0002-requests.jsonl"]
+        ).hexdigest(),
+        contract.ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256: worker._set_digest(contents),
+        contract.ENV_EXPECTED_PRE_JOURNAL_SET_SHA256: worker._set_digest(journals),
+        contract.ENV_EXPECTED_PRE_RUN_STATE_SHA256: sha256(state_bytes).hexdigest(),
+    }
+    return canonical, environment
 
 
 def test_contract_is_exact_and_aggregate_has_no_provider_fields() -> None:
@@ -206,9 +235,7 @@ def test_contract_enforces_status_count_semantics() -> None:
     }
 
     with pytest.raises(ValueError):
-        contract.validate_aggregate(
-            {**aggregate, "primary_completed_part_count": 2}
-        )
+        contract.validate_aggregate({**aggregate, "primary_completed_part_count": 2})
     with pytest.raises(ValueError):
         contract.validate_aggregate(
             {**aggregate, "status": "all_parts_completed", "submitted_part_count": 0}
@@ -375,6 +402,42 @@ def test_completed_checkpoint_evidence_and_next_request_are_validated(
         worker.submit_next_primary(environment=_environment(), review_root=tmp_path)
 
 
+def test_host_bound_request_hash_is_enforced_before_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _state()
+    canonical = _write_submission_evidence(tmp_path / RUN_ID, state, 0, output=True)
+    (canonical / "primary-part-0002-requests.jsonl").write_bytes(b"{}\n")
+    monkeypatch.setattr(worker, "load_validated_run_state", lambda *_: (canonical, state))
+    monkeypatch.setattr(worker, "read_stable_openai_secret", lambda *_: pytest.fail("secret"))
+    environment = {
+        **_environment(),
+        contract.ENV_EXPECTED_REQUEST_SHA256: "b" * 64,
+    }
+
+    with pytest.raises(worker.NextPrimarySubmissionWorkerError, match="request changed"):
+        worker.submit_next_primary(environment=environment, review_root=tmp_path)
+
+
+def test_root_bound_checkpoint_mutation_is_rejected_before_secret(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    state = _state()
+    canonical, environment = _write_root_checkpoint(tmp_path / RUN_ID, state)
+    monkeypatch.setattr(worker, "load_validated_run_state", lambda *_: (canonical, state))
+
+    def mutate_after_load(*_: object) -> None:
+        (canonical / "source-manifest.json").write_bytes(b'{"source":"changed"}\n')
+
+    monkeypatch.setattr(worker, "_validate_checkpoint_evidence", mutate_after_load)
+    monkeypatch.setattr(worker, "read_stable_openai_secret", lambda *_: pytest.fail("secret"))
+
+    with pytest.raises(worker.NextPrimarySubmissionWorkerError, match="checkpoint changed"):
+        worker.submit_next_primary(environment=environment, review_root=tmp_path)
+
+
 def test_tampered_completed_journal_fails_before_secret(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -438,9 +501,7 @@ def test_worker_maps_exact_reconciliation_without_retry(
 
     class Graph:
         def submit_next_primary(self, _: Path) -> tuple[Path, SpeakerReviewRunState]:
-            raise RuntimeError(
-                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
-            )
+            raise RuntimeError(SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED)
 
     monkeypatch.setattr(worker, "_workflow", lambda _: Graph())
 

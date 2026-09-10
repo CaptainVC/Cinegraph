@@ -250,6 +250,14 @@ shape. The root VPS authorization/receipt boundary remains a separate next phase
 See [ADR-0024](docs/adr/0024-bounded-next-primary-submission-transition.md) and
 the [next-primary transition runbook](docs/operations/private-speaker-review-next-primary-submission.md).
 
+Phase 65 adds the separately authorized VPS `speaker-review-submit-next-primary-v1`
+boundary. It binds the Phase 60 preparation, Phase 61 submission, and Phase 63
+part-one observation receipts before submitting exactly part two. The root
+intent includes the exact request digest and runtime image/configuration
+bindings, and the egress-only worker cannot observe, adjudicate, finalize, or
+ingest. See [ADR-0025](docs/adr/0025-private-speaker-review-next-primary-boundary.md)
+and the [VPS next-primary boundary runbook](docs/operations/private-speaker-review-next-primary-boundary.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

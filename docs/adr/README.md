@@ -24,4 +24,5 @@
 - [ADR-0022: Bounded primary-review observation transition](0022-bounded-primary-observation-transition.md)
 - [ADR-0023: Private speaker-review observation boundary](0023-private-speaker-review-observation-boundary.md)
 - [ADR-0024: Bounded next-primary submission transition](0024-bounded-next-primary-submission-transition.md)
+- [ADR-0025: Private speaker-review next-primary boundary](0025-private-speaker-review-next-primary-boundary.md)
 - [ADR template](template.md)

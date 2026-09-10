@@ -51,6 +51,14 @@ ENV_MAXIMUM_AUTHORIZED_COST_MICROUSD: Final = (
     "CINEGRAPH_SPEAKER_REVIEW_MAXIMUM_AUTHORIZED_COST_MICROUSD"
 )
 ENV_RUN_ID: Final = "CINEGRAPH_SPEAKER_REVIEW_RUN_ID"
+ENV_EXPECTED_REQUEST_SHA256: Final = "CINEGRAPH_SPEAKER_REVIEW_EXPECTED_REQUEST_SHA256"
+ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256: Final = (
+    "CINEGRAPH_SPEAKER_REVIEW_EXPECTED_PRE_ARTIFACT_SET_SHA256"
+)
+ENV_EXPECTED_PRE_JOURNAL_SET_SHA256: Final = (
+    "CINEGRAPH_SPEAKER_REVIEW_EXPECTED_PRE_JOURNAL_SET_SHA256"
+)
+ENV_EXPECTED_PRE_RUN_STATE_SHA256: Final = "CINEGRAPH_SPEAKER_REVIEW_EXPECTED_PRE_RUN_STATE_SHA256"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _RUN_ID = re.compile(r"^speaker-review-[0-9a-f]{16}$")
 _UUID4 = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$")
@@ -171,9 +179,15 @@ def validate_aggregate(value: object, *, status: str | None = None) -> dict[str,
         raise ValueError("invalid next-primary aggregate")
     if expected in {"submitted", "already_submitted"} and value["submitted_part_count"] != 1:
         raise ValueError("invalid next-primary aggregate")
-    if expected in {"all_parts_completed", "reconciliation_required"} and value["submitted_part_count"] != 0:
+    if (
+        expected in {"all_parts_completed", "reconciliation_required"}
+        and value["submitted_part_count"] != 0
+    ):
         raise ValueError("invalid next-primary aggregate")
-    if expected == "all_parts_completed" and value["primary_completed_part_count"] != value["primary_part_count"]:
+    if (
+        expected == "all_parts_completed"
+        and value["primary_completed_part_count"] != value["primary_part_count"]
+    ):
         raise ValueError("invalid next-primary aggregate")
     if expected in {"submitted", "already_submitted", "reconciliation_required"} and not (
         0 < value["primary_completed_part_count"] < value["primary_part_count"]
@@ -202,6 +216,10 @@ __all__ = [
     "ENV_AUTHORIZATION_ID",
     "ENV_MAXIMUM_AUTHORIZED_COST_MICROUSD",
     "ENV_RUN_ID",
+    "ENV_EXPECTED_REQUEST_SHA256",
+    "ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256",
+    "ENV_EXPECTED_PRE_JOURNAL_SET_SHA256",
+    "ENV_EXPECTED_PRE_RUN_STATE_SHA256",
     "MAXIMUM_AUTHORIZED_COST_MICROUSD",
     "OPERATION",
     "OUTPUT_MAX_BYTES",

@@ -156,6 +156,7 @@ class SpeakerReviewWorkflow:
         primary_reasoning_effort: str,
         adjudication_reasoning_effort: str,
         final_review_reasoning_effort: str,
+        expected_next_primary_request_sha256: str | None = None,
     ) -> None:
         self._gateway = gateway
         self._configuration = configuration
@@ -165,6 +166,9 @@ class SpeakerReviewWorkflow:
         self._primary_reasoning_effort = primary_reasoning_effort
         self._adjudication_reasoning_effort = adjudication_reasoning_effort
         self._final_review_reasoning_effort = final_review_reasoning_effort
+        self._expected_next_primary_request_sha256 = (
+            expected_next_primary_request_sha256
+        )
         self._filesystem_configuration = speaker_review_filesystem_configuration(
             configuration
         )
@@ -1365,6 +1369,14 @@ class SpeakerReviewWorkflow:
         }
         request_bytes = _bounded_file_bytes(request_path)
         request_hash = sha256(request_bytes).hexdigest()
+        if (
+            stage == "primary"
+            and self._expected_next_primary_request_sha256 is not None
+            and request_hash != self._expected_next_primary_request_sha256
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            )
         binding = {
             "schema_version": SUBMISSION_SCHEMA_VERSION,
             "request_sha256": request_hash,

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
+from hashlib import sha256
 from pathlib import Path
 from threading import Event, Thread
 
@@ -45,7 +46,11 @@ class SubmissionGateway:
         raise AssertionError("next-primary submission must not download")
 
 
-def _workflow(gateway: SubmissionGateway) -> SpeakerReviewWorkflow:
+def _workflow(
+    gateway: SubmissionGateway,
+    *,
+    expected_request_sha256: str | None = None,
+) -> SpeakerReviewWorkflow:
     return SpeakerReviewWorkflow(
         gateway=gateway,  # type: ignore[arg-type]
         configuration=DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
@@ -55,6 +60,7 @@ def _workflow(gateway: SubmissionGateway) -> SpeakerReviewWorkflow:
         primary_reasoning_effort="low",
         adjudication_reasoning_effort="medium",
         final_review_reasoning_effort="high",
+        expected_next_primary_request_sha256=expected_request_sha256,
     )
 
 
@@ -66,11 +72,15 @@ def _checkpoint(
     batch_ids: tuple[str, ...] | None = None,
     input_ids: tuple[str, ...] | None = None,
 ) -> SpeakerReviewRunState:
-    batches = batch_ids if batch_ids is not None else tuple(
-        f"batch-{index}" for index in range(1, completed + 1)
+    batches = (
+        batch_ids
+        if batch_ids is not None
+        else tuple(f"batch-{index}" for index in range(1, completed + 1))
     )
-    inputs = input_ids if input_ids is not None else tuple(
-        f"file-{index}" for index in range(1, completed + 1)
+    inputs = (
+        input_ids
+        if input_ids is not None
+        else tuple(f"file-{index}" for index in range(1, completed + 1))
     )
     return SpeakerReviewRunState(
         schema_version=5,
@@ -96,9 +106,7 @@ def _checkpoint(
 
 
 def _next_request(run_directory: Path) -> None:
-    (run_directory / "primary-part-0002-requests.jsonl").write_bytes(
-        b'{"custom_id":"part-2"}\n'
-    )
+    (run_directory / "primary-part-0002-requests.jsonl").write_bytes(b'{"custom_id":"part-2"}\n')
 
 
 def test_submits_exactly_one_next_part_and_stops_at_primary_submitted(
@@ -167,19 +175,39 @@ def test_changed_next_request_cannot_reuse_completed_journal(tmp_path: Path) -> 
     gateway = SubmissionGateway()
     workflow = _workflow(gateway)
     workflow.submit_next_primary_part(tmp_path, _checkpoint())
-    (tmp_path / "primary-part-0002-requests.jsonl").write_bytes(
-        b'{"custom_id":"changed"}\n'
-    )
+    (tmp_path / "primary-part-0002-requests.jsonl").write_bytes(b'{"custom_id":"changed"}\n')
 
     with pytest.raises(RuntimeError, match="operator reconciliation"):
         workflow.submit_next_primary_part(tmp_path, _checkpoint())
     assert gateway.submit_calls == 1
 
 
+def test_authorized_hash_is_checked_against_the_exact_bytes_sent(
+    tmp_path: Path,
+) -> None:
+    original = b'{"custom_id":"part-2"}\n'
+    expected = sha256(original).hexdigest()
+    _next_request(tmp_path)
+    (tmp_path / "primary-part-0002-requests.jsonl").write_bytes(
+        b'{"custom_id":"mutated-after-preflight"}\n'
+    )
+    gateway = SubmissionGateway()
+
+    with pytest.raises(RuntimeError, match="operator reconciliation"):
+        _workflow(
+            gateway,
+            expected_request_sha256=expected,
+        ).submit_next_primary_part(tmp_path, _checkpoint())
+
+    assert gateway.submit_calls == 0
+
+
 @pytest.mark.parametrize(
     "state",
     [
-        _checkpoint(status=SpeakerReviewRunStatus.PREPARED, completed=0, batch_ids=(), input_ids=()),
+        _checkpoint(
+            status=SpeakerReviewRunStatus.PREPARED, completed=0, batch_ids=(), input_ids=()
+        ),
         _checkpoint(
             status=SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
             completed=0,
