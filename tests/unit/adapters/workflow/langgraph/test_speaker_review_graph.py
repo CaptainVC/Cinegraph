@@ -225,6 +225,31 @@ def test_observe_primary_graph_stops_for_completed_part_without_workflow_call(
     assert workflow.calls == ["load"]
 
 
+def test_observe_primary_graph_uses_root_verified_checkpoint_without_reload(
+    tmp_path: Path,
+) -> None:
+    run_directory = tmp_path / "run"
+    checkpoint = replace(
+        run_state(SpeakerReviewRunStatus.PRIMARY_SUBMITTED),
+        primary_part_count=2,
+        primary_completed_part_count=1,
+        primary_batch_id="batch-2",
+        primary_input_file_id="file-2",
+        primary_batch_ids=("batch-1", "batch-2"),
+        primary_input_file_ids=("file-1", "file-2"),
+    )
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.observe_primary(
+        run_directory,
+        verified_run_state=checkpoint,
+    )
+
+    assert state.status is SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED
+    assert workflow.calls == ["observe_primary_part"]
+
+
 def test_submit_next_primary_graph_loads_checkpoint_and_stops_after_one_node(
     tmp_path: Path,
 ) -> None:

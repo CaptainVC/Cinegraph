@@ -29,6 +29,12 @@ from scripts.private_speaker_review_next_primary_host_contract import (  # noqa:
 from scripts.private_speaker_review_next_primary_host_contract import (  # noqa: E402
     SUDOERS_CONTENT as NEXT_PRIMARY_SUDOERS_CONTENT,
 )
+from scripts.private_speaker_review_next_primary_observation_host_contract import (  # noqa: E402
+    REVIEW_NEXT_OBSERVATION_HELPER_PATH,
+)
+from scripts.private_speaker_review_next_primary_observation_host_contract import (  # noqa: E402
+    SUDOERS_CONTENT as NEXT_OBSERVATION_SUDOERS_CONTENT,
+)
 from scripts.private_speaker_review_observation_host_contract import (  # noqa: E402
     REVIEW_OBSERVATION_RECEIPTS_ROOT,
 )
@@ -70,6 +76,9 @@ SOURCE_OBSERVATION_HELPER: Final = (
 SOURCE_NEXT_PRIMARY_HELPER: Final = (
     REPOSITORY_ROOT / "deploy/remote/submit-next-private-speaker-review.sh"
 )
+SOURCE_NEXT_OBSERVATION_HELPER: Final = (
+    REPOSITORY_ROOT / "deploy/remote/observe-next-private-speaker-review.sh"
+)
 FORBIDDEN_GROUP_NAMES: Final = frozenset(
     {"adm", "admin", "docker", "sudo", "wheel", "cinegraph-deploy", "cinegraph-corpus"}
 )
@@ -100,6 +109,7 @@ FILE_CONTRACT: Final = (
     ExpectedPath(REVIEW_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_OBSERVATION_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_NEXT_PRIMARY_HELPER_PATH, "file", 0, 0, 0o755),
+    ExpectedPath(REVIEW_NEXT_OBSERVATION_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_SUDOERS_PATH, "file", 0, 0, 0o440),
     ExpectedPath(REVIEW_AUTHORIZED_KEYS, "file", 0, 0, 0o644),
 )
@@ -235,7 +245,8 @@ def _managed_content(public_key: str) -> dict[Path, bytes]:
         REVIEW_HELPER_PATH: _read_source(SOURCE_HELPER),
         REVIEW_OBSERVATION_HELPER_PATH: _read_source(SOURCE_OBSERVATION_HELPER),
         REVIEW_NEXT_PRIMARY_HELPER_PATH: _read_source(SOURCE_NEXT_PRIMARY_HELPER),
-        REVIEW_SUDOERS_PATH: NEXT_PRIMARY_SUDOERS_CONTENT.encode("utf-8"),
+        REVIEW_NEXT_OBSERVATION_HELPER_PATH: _read_source(SOURCE_NEXT_OBSERVATION_HELPER),
+        REVIEW_SUDOERS_PATH: NEXT_OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
         REVIEW_AUTHORIZED_KEYS: authorized_key_entry(public_key).encode("utf-8"),
         REVIEW_DISPATCH_PATH: _read_source(SOURCE_DISPATCH),
     }
@@ -252,7 +263,12 @@ def _preflight_refresh_host_files(
     for path, content in managed.items():
         expected = by_path[path]
         if (
-            path in {REVIEW_OBSERVATION_HELPER_PATH, REVIEW_NEXT_PRIMARY_HELPER_PATH}
+            path
+            in {
+                REVIEW_OBSERVATION_HELPER_PATH,
+                REVIEW_NEXT_PRIMARY_HELPER_PATH,
+                REVIEW_NEXT_OBSERVATION_HELPER_PATH,
+            }
             and not path.exists()
             and not path.is_symlink()
         ):
@@ -266,6 +282,7 @@ def _preflight_refresh_host_files(
             raise BootstrapError("review authorization differs from the reviewed key")
         if path == REVIEW_SUDOERS_PATH and installed[path] not in {
             content,
+            NEXT_PRIMARY_SUDOERS_CONTENT.encode("utf-8"),
             OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
             LEGACY_SUDOERS_CONTENT.encode("utf-8"),
         }:
@@ -314,6 +331,7 @@ def _ensure_host_files(public_key: str, *, apply: bool, refresh_review_code: boo
             REVIEW_HELPER_PATH,
             REVIEW_OBSERVATION_HELPER_PATH,
             REVIEW_NEXT_PRIMARY_HELPER_PATH,
+            REVIEW_NEXT_OBSERVATION_HELPER_PATH,
         ):
             if path not in installed:
                 bootstrap_dev_host._ensure_exact_file(by_path[path], managed[path], apply=True)

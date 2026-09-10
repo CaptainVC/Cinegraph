@@ -258,6 +258,19 @@ bindings, and the egress-only worker cannot observe, adjudicate, finalize, or
 ingest. See [ADR-0025](docs/adr/0025-private-speaker-review-next-primary-boundary.md)
 and the [VPS next-primary boundary runbook](docs/operations/private-speaker-review-next-primary-boundary.md).
 
+Phase 66 adds the fourth exact review command,
+`speaker-review-observe-next-primary-v1`, for observing only submitted primary
+part two. The root coordinator revalidates the complete Phase 60/61/63/65
+receipt chain, active release/image/configuration, and the exact pre-state,
+request, artifact, and journal digests before opening the provider boundary.
+Those root-verified bytes are carried into LangGraph without a same-UID
+filesystem reload, closing the observer TOCTOU window for both primary parts.
+Waiting observations remain receipt-free and retryable; terminal observation
+or failure receives a part-specific create-once receipt. The command cannot
+submit another part, adjudicate, finalize, ingest, or select an arbitrary part.
+See [ADR-0026](docs/adr/0026-private-speaker-review-next-primary-observation-boundary.md)
+and the [part-two observation runbook](docs/operations/private-speaker-review-next-primary-observation.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

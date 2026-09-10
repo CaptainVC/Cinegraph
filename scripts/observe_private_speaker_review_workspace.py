@@ -8,6 +8,7 @@ environment; only the OpenAI secret is read from a Compose secret file.
 
 from __future__ import annotations
 
+import hashlib
 import math
 import os
 import stat
@@ -163,6 +164,177 @@ def _run_directory(run_id: str, review_root: Path = PRIVATE_REVIEW_RUNS_ROOT) ->
     return candidate
 
 
+def _sha256(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _set_digest(contents: Mapping[str, bytes]) -> str:
+    digest = hashlib.sha256()
+    for name in sorted(contents):
+        encoded = name.encode("ascii")
+        digest.update(len(encoded).to_bytes(4, "big"))
+        digest.update(encoded)
+        digest.update(len(contents[name]).to_bytes(8, "big"))
+        digest.update(contents[name])
+    return digest.hexdigest()
+
+
+def _read_checkpoint_file(path: Path, maximum: int) -> bytes:
+    descriptor = -1
+    try:
+        before = path.lstat()
+        if (
+            not stat.S_ISREG(before.st_mode)
+            or stat.S_ISLNK(before.st_mode)
+            or before.st_nlink != 1
+            or before.st_size <= 0
+            or before.st_size > maximum
+            or (
+                os.name == "posix"
+                and (
+                    stat.S_IMODE(before.st_mode) != 0o600
+                    or before.st_uid != os.geteuid()
+                    or before.st_gid != os.getegid()
+                )
+            )
+        ):
+            raise OSError
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        opened = os.fstat(descriptor)
+        raw = os.read(descriptor, maximum + 1)
+        after = path.lstat()
+    except OSError as error:
+        raise ObservationWorkerError("observation checkpoint unavailable") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+
+    def identity(value: os.stat_result) -> tuple[int, int, int, int, int]:
+        return (
+            value.st_dev,
+            value.st_ino,
+            value.st_size,
+            value.st_mtime_ns,
+            value.st_nlink,
+        )
+
+    if (
+        identity(before) != identity(opened)
+        or identity(opened) != identity(after)
+        or len(raw) != opened.st_size
+    ):
+        raise ObservationWorkerError("observation checkpoint changed")
+    return raw
+
+
+def _expected_hash(value: str, label: str) -> str:
+    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
+        raise ObservationWorkerError(f"observation {label} invalid")
+    return value
+
+
+def _expected_inventory_names(
+    state: SpeakerReviewRunState,
+    *,
+    target_part: int,
+) -> tuple[set[str], set[str]]:
+    required = {
+        "candidates.jsonl",
+        "source-manifest.json",
+        "run-state.json",
+        *(
+            f"primary-part-{part:04d}-requests.jsonl"
+            for part in range(1, state.primary_part_count + 1)
+        ),
+        *(f".primary-part-{part:04d}-submission-intent.json" for part in range(1, target_part + 1)),
+        *(
+            f".primary-part-{part:04d}-submission-completed.json"
+            for part in range(1, target_part + 1)
+        ),
+        *(f"primary-part-{part:04d}-output.jsonl" for part in range(1, target_part)),
+    }
+    optional = {
+        *(f"primary-part-{part:04d}-api-errors.jsonl" for part in range(1, target_part)),
+    }
+    return required, optional
+
+
+def _validate_expected_checkpoint(
+    run_directory: Path,
+    state: SpeakerReviewRunState,
+    environment: Mapping[str, str],
+) -> None:
+    """Validate root-bound part-two evidence before reading the secret."""
+
+    expected = {
+        "part": environment.get(contract.ENV_EXPECTED_PRIMARY_PART_NUMBER),
+        "state": environment.get(contract.ENV_EXPECTED_PRE_RUN_STATE_SHA256),
+        "artifacts": environment.get(contract.ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256),
+        "journals": environment.get(contract.ENV_EXPECTED_PRE_JOURNAL_SET_SHA256),
+        "request": environment.get(contract.ENV_EXPECTED_REQUEST_SHA256),
+    }
+    if all(value is None for value in expected.values()):
+        return
+    if any(value is None for value in expected.values()) or expected["part"] not in {"1", "2"}:
+        raise ObservationWorkerError("observation checkpoint invalid")
+    target_part = int(str(expected["part"]))
+    required_count = target_part - 1
+    if (
+        state.status is not SpeakerReviewRunStatus.PRIMARY_SUBMITTED
+        or state.primary_completed_part_count != required_count
+        or state.primary_part_count < target_part
+    ):
+        raise ObservationWorkerError("observation checkpoint invalid")
+    if _sha256(
+        _read_checkpoint_file(run_directory / "run-state.json", 64 * 1024)
+    ) != _expected_hash(str(expected["state"]), "state hash"):
+        raise ObservationWorkerError("observation checkpoint changed")
+    request_name = f"primary-part-{target_part:04d}-requests.jsonl"
+    if _sha256(
+        _read_checkpoint_file(run_directory / request_name, 64 * 1024 * 1024)
+    ) != _expected_hash(str(expected["request"]), "request hash"):
+        raise ObservationWorkerError("observation checkpoint changed")
+    try:
+        names = {entry.name for entry in run_directory.iterdir()}
+    except OSError as error:
+        raise ObservationWorkerError("observation checkpoint unavailable") from error
+    required_names, optional_names = _expected_inventory_names(state, target_part=target_part)
+    if not required_names <= names or not names <= required_names | optional_names:
+        raise ObservationWorkerError("observation checkpoint changed")
+    contents: dict[str, bytes] = {}
+    total = 0
+    for name in sorted(names):
+        raw = _read_checkpoint_file(
+            run_directory / name,
+            64 * 1024 if name == "run-state.json" else 64 * 1024 * 1024,
+        )
+        total += len(raw)
+        if total > 256 * 1024 * 1024:
+            raise ObservationWorkerError("observation checkpoint unavailable")
+        contents[name] = raw
+    artifacts = {
+        name: raw for name, raw in contents.items() if not name.startswith(".primary-part-")
+    }
+    journals = {name: raw for name, raw in contents.items() if name.startswith(".primary-part-")}
+    if _set_digest(artifacts) != _expected_hash(
+        str(expected["artifacts"]), "artifact hash"
+    ) or _set_digest(journals) != _expected_hash(str(expected["journals"]), "journal hash"):
+        raise ObservationWorkerError("observation checkpoint changed")
+
+
+def _checkpoint_binding_present(environment: Mapping[str, str]) -> bool:
+    return any(
+        environment.get(name) is not None
+        for name in (
+            contract.ENV_EXPECTED_PRIMARY_PART_NUMBER,
+            contract.ENV_EXPECTED_PRE_RUN_STATE_SHA256,
+            contract.ENV_EXPECTED_PRE_ARTIFACT_SET_SHA256,
+            contract.ENV_EXPECTED_PRE_JOURNAL_SET_SHA256,
+            contract.ENV_EXPECTED_REQUEST_SHA256,
+        )
+    )
+
+
 def _aggregate(
     state: SpeakerReviewRunState,
     *,
@@ -255,6 +427,7 @@ def observe_primary(
     secret_path: Path = OPENAI_SECRET_PATH,
     review_root: Path = PRIVATE_REVIEW_RUNS_ROOT,
 ) -> dict[str, object]:
+    values = os.environ if environment is None else environment
     request = request_from_environment(environment)
     run_directory = _run_directory(str(request["run_id"]), review_root)
     try:
@@ -278,10 +451,18 @@ def observe_primary(
         return _aggregate(state, status="already_observed")
     if state.status is not SpeakerReviewRunStatus.PRIMARY_SUBMITTED:
         raise ObservationWorkerError("observation run state invalid")
+    _validate_expected_checkpoint(canonical, state, values)
     secret = read_stable_openai_secret(secret_path)
     before = state
     try:
-        returned_directory, observed = _workflow(secret).observe_primary(canonical)
+        graph = _workflow(secret)
+        if _checkpoint_binding_present(values):
+            returned_directory, observed = graph.observe_primary(
+                canonical,
+                verified_run_state=before,
+            )
+        else:
+            returned_directory, observed = graph.observe_primary(canonical)
     except RuntimeError as error:
         if contract.is_reconciliation_error(error):
             return _aggregate(before, status="reconciliation_required")

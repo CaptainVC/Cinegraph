@@ -80,12 +80,15 @@ class SpeakerReviewGraphWorkflow:
     def observe_primary(
         self,
         run_directory: Path,
+        *,
+        verified_run_state: SpeakerReviewRunState | None = None,
     ) -> tuple[Path, SpeakerReviewRunState]:
         return self._invoke(
             operation="observe-primary",
             corpus_root=None,
             seasons=(),
             run_directory=run_directory,
+            verified_run_state=verified_run_state,
         )
 
     def submit_next_primary(
@@ -193,6 +196,7 @@ class SpeakerReviewGraphWorkflow:
             {
                 "prepare": "prepare",
                 "load": "load",
+                "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
             },
         )
@@ -241,6 +245,8 @@ class SpeakerReviewGraphWorkflow:
             and state["run_state"] is not None
         ):
             return "submit_next_primary"
+        if state["operation"] == "observe-primary" and state["run_state"] is not None:
+            return "observe_primary"
         return "load"
 
     def _prepare(

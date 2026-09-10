@@ -73,10 +73,12 @@ not submit another Batch.
 
 | Status | Meaning and next action |
 | --- | --- |
-| `submitted` | Exactly part two was created and the run returned to `primary_submitted`; use the later bounded observation operation when available. |
+| `submitted` | Exactly part two was created and the run returned to `primary_submitted`; use the [separately authorized part-two observation](private-speaker-review-next-primary-observation.md). |
 | `already_submitted` | Matching journals/state or the root receipt were revalidated; no second provider request was created. |
 | `reconciliation_required` | The provider boundary may be ambiguous. Stop automation and retain every intent, journal, state file, and root record for explicit reconciliation. |
 
 The operation never polls the new Batch, downloads output, parses results,
 adjudicates, finalizes, promotes corpus data, or ingests it into PostgreSQL or
-Qdrant. Those remain separately authorized transitions.
+Qdrant. Those remain separately authorized transitions. Observation of the
+submitted part is documented in the
+[part-two observation runbook](private-speaker-review-next-primary-observation.md).
