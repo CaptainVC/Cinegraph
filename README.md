@@ -271,6 +271,17 @@ submit another part, adjudicate, finalize, ingest, or select an arbitrary part.
 See [ADR-0026](docs/adr/0026-private-speaker-review-next-primary-observation-boundary.md)
 and the [part-two observation runbook](docs/operations/private-speaker-review-next-primary-observation.md).
 
+Phase 67 separates provider-free primary-result interpretation from every paid
+downstream action. A new LangGraph operation validates the complete observed
+Luna result set, fails closed on incomplete or impossible usage/cost metadata,
+and either finalizes unanimous high-confidence consensus locally or writes
+deterministic Terra request parts and stops at `adjudication_prepared`. Its
+isolated container has no network or OpenAI secret and requires distinct
+root-computed digests for state, requests, journals, observations/API errors,
+and derived evidence. Phase 68 will add the root-owned VPS command and receipts;
+no adjudication submission occurs here. See [ADR-0027](docs/adr/0027-provider-free-primary-result-processing.md)
+and the [primary-result processing runbook](docs/operations/private-speaker-review-primary-result-processing.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

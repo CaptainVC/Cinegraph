@@ -2,6 +2,8 @@ import json
 from dataclasses import replace
 from math import ceil
 
+import pytest
+
 from cinegraph.config import DEFAULT_SPEAKER_REVIEW_CONFIGURATION
 from cinegraph.domain.enums.enum import (
     SpeakerReviewAction,
@@ -205,6 +207,34 @@ def test_actual_cost_includes_usage_from_unparseable_model_output() -> None:
     )
 
     assert cost == 0.0205
+
+
+@pytest.mark.parametrize(
+    "usage",
+    [
+        {},
+        {"input_tokens": -1, "output_tokens": 1},
+        {"input_tokens": True, "output_tokens": 1},
+        {"input_tokens": 1, "output_tokens": 100_001},
+    ],
+)
+def test_actual_cost_rejects_incomplete_or_unbounded_usage(
+    usage: dict[str, object],
+) -> None:
+    line = {
+        "custom_id": f"{candidate().candidate_id}::primary-a",
+        "response": {
+            "status_code": 200,
+            "body": {"model": "gpt-5.6-luna", "output": [], "usage": usage},
+        },
+    }
+
+    with pytest.raises(ValueError, match="usage metadata"):
+        actual_batch_output_cost_usd(
+            output_jsonl=json.dumps(line),
+            configured_model="gpt-5.6-luna",
+            configuration=DEFAULT_SPEAKER_REVIEW_CONFIGURATION,
+        )
 
 
 def test_parses_responses_batch_output_and_validates_evidence() -> None:

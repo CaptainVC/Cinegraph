@@ -87,7 +87,12 @@ def actual_batch_output_cost_usd(
     configured_model: str,
     configuration: SpeakerReviewConfiguration,
 ) -> float:
-    """Price every API response with usage, including unparseable model output."""
+    """Price every API response and reject incomplete or impossible usage.
+
+    Provider output is private and untrusted.  Silently skipping a malformed
+    line or accepting negative/unbounded token counts could make the durable
+    cost checkpoint under-report spend, so this calculator fails closed.
+    """
     input_tokens = 0
     output_tokens = 0
     for raw_line in output_jsonl.splitlines():
@@ -95,19 +100,34 @@ def actual_batch_output_cost_usd(
             continue
         try:
             result = json.loads(raw_line)
-        except json.JSONDecodeError:
-            continue
+        except json.JSONDecodeError as error:
+            raise ValueError("Batch result usage metadata is invalid.") from error
+        if not isinstance(result, dict):
+            raise ValueError("Batch result usage metadata is invalid.")
         response = result.get("response")
         if not isinstance(response, dict):
-            continue
+            raise ValueError("Batch result usage metadata is invalid.")
         body = response.get("body")
         if not isinstance(body, dict):
-            continue
+            raise ValueError("Batch result usage metadata is invalid.")
         usage = body.get("usage")
         if not isinstance(usage, dict):
-            continue
-        input_tokens += int(usage.get("input_tokens", 0))
-        output_tokens += int(usage.get("output_tokens", 0))
+            raise ValueError("Batch result usage metadata is invalid.")
+        recorded_input = _bounded_token_count(
+            usage.get("input_tokens"),
+            maximum=configuration.maximum_recorded_input_tokens_per_result,
+        )
+        recorded_output = _bounded_token_count(
+            usage.get("output_tokens"),
+            maximum=configuration.maximum_recorded_output_tokens_per_result,
+        )
+        input_tokens += recorded_input
+        output_tokens += recorded_output
+        if (
+            input_tokens + output_tokens
+            > configuration.maximum_recorded_tokens_per_batch
+        ):
+            raise ValueError("Batch result usage metadata is invalid.")
     pricing = _pricing(configured_model, configuration)
     return _cost(
         input_tokens=input_tokens,
@@ -116,6 +136,12 @@ def actual_batch_output_cost_usd(
         output_price=pricing.output_usd_per_million,
         multiplier=configuration.batch_discount_multiplier,
     )
+
+
+def _bounded_token_count(value: object, *, maximum: int) -> int:
+    if type(value) is not int or value < 0 or value > maximum:
+        raise ValueError("Batch result usage metadata is invalid.")
+    return value
 
 
 def enforce_budget(

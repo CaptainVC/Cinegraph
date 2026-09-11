@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import stat
 from dataclasses import asdict, dataclass, replace
@@ -157,6 +158,7 @@ class SpeakerReviewWorkflow:
         adjudication_reasoning_effort: str,
         final_review_reasoning_effort: str,
         expected_next_primary_request_sha256: str | None = None,
+        maximum_authorized_cost_usd: float | None = None,
     ) -> None:
         self._gateway = gateway
         self._configuration = configuration
@@ -168,6 +170,11 @@ class SpeakerReviewWorkflow:
         self._final_review_reasoning_effort = final_review_reasoning_effort
         self._expected_next_primary_request_sha256 = (
             expected_next_primary_request_sha256
+        )
+        self._maximum_authorized_cost_usd = (
+            configuration.maximum_run_cost_usd
+            if maximum_authorized_cost_usd is None
+            else maximum_authorized_cost_usd
         )
         self._filesystem_configuration = speaker_review_filesystem_configuration(
             configuration
@@ -451,6 +458,378 @@ class SpeakerReviewWorkflow:
             raise RuntimeError(
                 SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
             ) from error
+
+    def process_primary_results(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Process a fully observed primary result checkpoint locally.
+
+        This transition is intentionally on the provider-free side of the
+        workflow boundary.  It accepts a checkpoint only after every primary
+        part has been observed and its immutable output artifact is present.
+        Parsing, pricing, consensus, and adjudication request preparation are
+        all deterministic local work; submitting an adjudication batch is a
+        separate, explicitly authorized transition.
+        """
+
+        replay_statuses = {
+            SpeakerReviewRunStatus.ADJUDICATION_PREPARED,
+            SpeakerReviewRunStatus.COMPLETED,
+        }
+        if state.status not in {
+            SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED,
+            *replay_statuses,
+        }:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.RUN_STATE_CONFLICT.format(
+                    status=state.status.value
+                )
+            )
+
+        self._validate_primary_processing_stage_shape(state)
+        output_text = self._validate_primary_result_checkpoint(run_directory, state)
+        candidates = load_candidates(run_directory)
+        if (
+            type(state.candidate_count) is not int
+            or state.candidate_count <= 0
+            or len(candidates) != state.candidate_count
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        candidates_by_id = {item.candidate_id: item for item in candidates}
+        primary_verdicts, parse_errors = parse_batch_results(
+            output_jsonl=output_text,
+            candidates=candidates_by_id,
+            configuration=self._configuration,
+        )
+        primary_decisions = decide_primary_consensus(
+            candidates=candidates,
+            verdicts=primary_verdicts,
+            configuration=self._configuration,
+        )
+        try:
+            primary_cost = actual_batch_output_cost_usd(
+                output_jsonl=output_text,
+                configured_model=self._primary_model,
+                configuration=self._configuration,
+            )
+        except (TypeError, ValueError) as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+        self._enforce_primary_processing_budget(primary_cost, 0.0)
+        enforce_budget(
+            estimated_cost_usd=0.0,
+            already_spent_usd=primary_cost,
+            configuration=self._configuration,
+        )
+        residual_ids = {
+            item.candidate_id
+            for item in primary_decisions
+            if item.disposition is SpeakerReviewDisposition.ADJUDICATION_REQUIRED
+        }
+
+        derived_names = {
+            "primary-verdicts.jsonl",
+            "primary-parse-errors.json",
+            "primary-decisions.jsonl",
+        }
+        present_derived = {
+            name for name in derived_names if os.path.lexists(run_directory / name)
+        }
+        if state.status in replay_statuses and present_derived != derived_names:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        try:
+            _write_jsonl(
+                run_directory / "primary-verdicts.jsonl",
+                tuple(
+                    verdict.to_dict()
+                    for candidate_id in sorted(primary_verdicts)
+                    for verdict in primary_verdicts[candidate_id]
+                ),
+            )
+            _write_json(
+                run_directory / "primary-parse-errors.json",
+                list(parse_errors),
+            )
+            _write_jsonl(
+                run_directory / "primary-decisions.jsonl",
+                tuple(item.to_dict() for item in primary_decisions),
+            )
+        except (FileExistsError, SpeakerReviewArtifactConflictError) as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+
+        if state.status in replay_statuses:
+            if state.actual_primary_cost_usd != primary_cost:
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+                )
+
+        if residual_ids:
+            residual = tuple(
+                item for item in candidates if item.candidate_id in residual_ids
+            )
+            adjudication_requests = build_adjudication_batch_requests(
+                candidates=residual,
+                primary_verdicts=primary_verdicts,
+                model=self._adjudication_model,
+                reasoning_effort=self._adjudication_reasoning_effort,
+                configuration=self._configuration,
+            )
+            estimated_adjudication_cost = estimate_batch_cost_usd(
+                requests=adjudication_requests,
+                model=self._adjudication_model,
+                configuration=self._configuration,
+            )
+            enforce_budget(
+                estimated_cost_usd=estimated_adjudication_cost,
+                already_spent_usd=primary_cost,
+                configuration=self._configuration,
+            )
+            self._enforce_primary_processing_budget(
+                primary_cost,
+                estimated_adjudication_cost,
+            )
+            adjudication_parts = partition_batch_requests(
+                requests=adjudication_requests,
+                configuration=self._configuration,
+            )
+            expected_request_names = {
+                _request_part_path(run_directory, "adjudication", index).name
+                for index in range(len(adjudication_parts))
+            }
+            existing_request_names = {
+                path.name
+                for path in run_directory.glob("adjudication-part-*-requests.jsonl")
+            }
+            if (
+                not existing_request_names.issubset(expected_request_names)
+                or (
+                    state.status in replay_statuses
+                    and existing_request_names != expected_request_names
+                )
+            ):
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+                )
+            try:
+                _write_request_parts(
+                    run_directory,
+                    "adjudication",
+                    adjudication_parts,
+                )
+            except (FileExistsError, SpeakerReviewArtifactConflictError) as error:
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+                ) from error
+            if state.status in replay_statuses:
+                if state.status is not SpeakerReviewRunStatus.ADJUDICATION_PREPARED:
+                    raise RuntimeError(
+                        SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+                    )
+                if (
+                    state.adjudication_part_count != len(adjudication_parts)
+                    or state.adjudication_batch_id is not None
+                    or state.adjudication_input_file_id is not None
+                    or state.adjudication_batch_ids
+                    or state.adjudication_input_file_ids
+                    or state.accepted_by_consensus
+                    != len(candidates) - len(residual_ids)
+                ):
+                    raise RuntimeError(
+                        SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+                    )
+                return state
+            updated = replace(
+                state,
+                status=SpeakerReviewRunStatus.ADJUDICATION_PREPARED,
+                updated_at=_now(),
+                actual_primary_cost_usd=primary_cost,
+                primary_completed_part_count=state.primary_part_count,
+                adjudication_part_count=len(adjudication_parts),
+                adjudication_completed_part_count=0,
+                adjudication_batch_id=None,
+                adjudication_input_file_id=None,
+                adjudication_batch_ids=(),
+                adjudication_input_file_ids=(),
+                accepted_by_consensus=len(candidates) - len(residual_ids),
+            )
+            save_run_state(run_directory, updated)
+            return updated
+
+        if any(
+            os.path.lexists(_request_part_path(run_directory, "adjudication", index))
+            for index in range(state.adjudication_part_count)
+        ) or any(run_directory.glob("adjudication-part-*-requests.jsonl")):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        if state.status in replay_statuses:
+            if (
+                state.status is not SpeakerReviewRunStatus.COMPLETED
+                or state.accepted_by_consensus != len(primary_decisions)
+            ):
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+                )
+            return state
+        completed = replace(
+            state,
+            actual_primary_cost_usd=primary_cost,
+            accepted_by_consensus=len(primary_decisions),
+            primary_completed_part_count=state.primary_part_count,
+            updated_at=_now(),
+        )
+        return self._finalize(run_directory, completed, primary_decisions)
+
+    def _validate_primary_result_checkpoint(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> str:
+        """Validate state and snapshot every observed primary output."""
+
+        batch_ids = state.primary_batch_ids
+        input_file_ids = state.primary_input_file_ids
+        part_count = state.primary_part_count
+        valid_batch_ids = (
+            isinstance(batch_ids, tuple)
+            and all(
+                isinstance(value, str) and value and value == value.strip()
+                for value in batch_ids
+            )
+            and len(set(batch_ids)) == len(batch_ids)
+        )
+        valid_input_file_ids = (
+            isinstance(input_file_ids, tuple)
+            and all(
+                isinstance(value, str) and value and value == value.strip()
+                for value in input_file_ids
+            )
+            and len(set(input_file_ids)) == len(input_file_ids)
+        )
+        if (
+            type(part_count) is not int
+            or part_count <= 0
+            or type(state.primary_completed_part_count) is not int
+            or state.primary_completed_part_count != part_count
+            or not valid_batch_ids
+            or not valid_input_file_ids
+            or len(batch_ids) != part_count
+            or len(input_file_ids) != part_count
+            or state.primary_batch_id != batch_ids[-1]
+            or state.primary_input_file_id != input_file_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        output_paths = {
+            _part_stage_name("primary", index) + "-output.jsonl"
+            for index in range(part_count)
+        }
+        present_outputs = {
+            path.name for path in run_directory.glob("primary-part-*-output.jsonl")
+        }
+        if present_outputs != output_paths:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        return _combined_stage_output(run_directory, "primary", part_count)
+
+    def _validate_primary_processing_stage_shape(
+        self,
+        state: SpeakerReviewRunState,
+    ) -> None:
+        """Reject stale downstream state at the primary-processing boundary."""
+
+        adjudication_empty = (
+            state.actual_adjudication_cost_usd == 0.0
+            and state.adjudication_completed_part_count == 0
+            and state.adjudication_batch_id is None
+            and state.adjudication_input_file_id is None
+            and state.adjudication_batch_ids == ()
+            and state.adjudication_input_file_ids == ()
+        )
+        final_review_empty = (
+            state.actual_final_review_cost_usd == 0.0
+            and state.final_review_part_count == 0
+            and state.final_review_completed_part_count == 0
+            and state.final_review_batch_id is None
+            and state.final_review_input_file_id is None
+            and state.final_review_batch_ids == ()
+            and state.final_review_input_file_ids == ()
+            and state.final_review_retry_count == 0
+        )
+        if (
+            type(state.schema_version) is not int
+            or state.schema_version != self._configuration.schema_version
+            or state.primary_model != self._primary_model
+            or state.adjudication_model != self._adjudication_model
+            or state.final_review_model != self._final_review_model
+            or state.prompt_version != self._configuration.prompt_version
+            or not math.isfinite(state.maximum_cost_usd)
+            or state.maximum_cost_usd <= 0
+            or state.maximum_cost_usd > self._configuration.maximum_run_cost_usd
+            or not math.isfinite(self._maximum_authorized_cost_usd)
+            or self._maximum_authorized_cost_usd <= 0
+            or self._maximum_authorized_cost_usd
+            > self._configuration.maximum_run_cost_usd
+            or not math.isfinite(state.estimated_primary_cost_usd)
+            or state.estimated_primary_cost_usd < 0
+            or state.estimated_primary_cost_usd > self._maximum_authorized_cost_usd
+            or not math.isfinite(state.actual_primary_cost_usd)
+            or state.actual_primary_cost_usd < 0
+            or not adjudication_empty
+            or not final_review_empty
+            or state.accepted_by_adjudication != 0
+            or state.accepted_by_final_review != 0
+            or state.accepted_by_human != 0
+            or state.needs_human != 0
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        if state.status is SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED:
+            valid_stage = (
+                state.actual_primary_cost_usd == 0.0
+                and state.adjudication_part_count == 0
+                and state.accepted_by_consensus == 0
+            )
+        elif state.status is SpeakerReviewRunStatus.ADJUDICATION_PREPARED:
+            valid_stage = state.adjudication_part_count > 0
+        elif state.status is SpeakerReviewRunStatus.COMPLETED:
+            valid_stage = state.adjudication_part_count == 0
+        else:
+            valid_stage = False
+        if not valid_stage:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.PRIMARY_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+
+    def _enforce_primary_processing_budget(
+        self,
+        actual_primary_cost_usd: float,
+        estimated_adjudication_cost_usd: float,
+    ) -> None:
+        total = actual_primary_cost_usd + estimated_adjudication_cost_usd
+        maximum = min(
+            self._maximum_authorized_cost_usd,
+            self._configuration.maximum_run_cost_usd,
+        )
+        if not math.isfinite(total) or total < 0 or total > maximum:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.REVIEW_BUDGET_EXCEEDED.format(
+                    estimated=total,
+                    maximum=maximum,
+                )
+            )
 
     def _active_primary_observation_batch_id(
         self,

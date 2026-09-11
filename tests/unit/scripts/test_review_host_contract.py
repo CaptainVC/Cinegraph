@@ -215,7 +215,7 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
 def test_compose_primary_submission_is_egress_only_and_secret_file_based() -> None:
     compose = Path("deploy/compose.yaml").read_text(encoding="utf-8")
     service = compose.split("  corpus-speaker-review-submit-primary:", 1)[1].split(
-        "\n  postgres:", 1
+        "\n  corpus-speaker-review-observe-primary:", 1
     )[0]
     assert "profiles: [corpus-speaker-review-submit-primary]" in service
     assert 'user: "10002:10002"' in service

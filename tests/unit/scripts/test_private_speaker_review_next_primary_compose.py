@@ -6,7 +6,7 @@ def _service() -> str:
     return compose.split(
         "\n  corpus-speaker-review-submit-next-primary:",
         1,
-    )[1].split("\n  postgres:", 1)[0]
+    )[1].split("\n  # Provider-free processing of a fully observed", 1)[0]
 
 
 def test_next_primary_worker_has_dedicated_egress_only_profile() -> None:

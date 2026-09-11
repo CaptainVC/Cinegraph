@@ -4,7 +4,7 @@ from pathlib import Path
 def _service() -> str:
     compose = Path("deploy/compose.yaml").read_text(encoding="utf-8")
     return compose.split("\n  corpus-speaker-review-observe-primary:", 1)[1].split(
-        "\n  postgres:", 1
+        "\n  # Submit one and only one subsequent primary part", 1
     )[0]
 
 
