@@ -16,6 +16,7 @@ SpeakerReviewGraphOperation = Literal[
     "submit",
     "observe-primary",
     "submit-next-primary",
+    "process-primary-results",
     "advance",
     "final-review",
     "retry-incomplete",
@@ -107,6 +108,22 @@ class SpeakerReviewGraphWorkflow:
             verified_run_state=verified_run_state,
         )
 
+    def process_primary_results(
+        self,
+        run_directory: Path,
+        *,
+        verified_run_state: SpeakerReviewRunState | None = None,
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        """Process a fully observed primary checkpoint without provider access."""
+
+        return self._invoke(
+            operation="process-primary-results",
+            corpus_root=None,
+            seasons=(),
+            run_directory=run_directory,
+            verified_run_state=verified_run_state,
+        )
+
     def advance(
         self,
         run_directory: Path,
@@ -185,6 +202,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_node("submit", self._submit)
         graph.add_node("observe_primary", self._observe_primary)
         graph.add_node("submit_next_primary", self._submit_next_primary)
+        graph.add_node("process_primary_results", self._process_primary_results)
         graph.add_node("advance", self._advance)
         graph.add_node("final_review", self._final_review)
         graph.add_node("retry_incomplete", self._retry_incomplete)
@@ -198,6 +216,7 @@ class SpeakerReviewGraphWorkflow:
                 "load": "load",
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
+                "process_primary_results": "process_primary_results",
             },
         )
         graph.add_conditional_edges(
@@ -207,6 +226,7 @@ class SpeakerReviewGraphWorkflow:
                 "submit": "submit",
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
+                "process_primary_results": "process_primary_results",
                 "advance": "advance",
                 "final_review": "final_review",
                 "retry_incomplete": "retry_incomplete",
@@ -221,6 +241,7 @@ class SpeakerReviewGraphWorkflow:
                 "submit": "submit",
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
+                "process_primary_results": "process_primary_results",
                 "advance": "advance",
                 "final_review": "final_review",
                 "retry_incomplete": "retry_incomplete",
@@ -231,6 +252,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_edge("submit", END)
         graph.add_edge("observe_primary", END)
         graph.add_edge("submit_next_primary", END)
+        graph.add_edge("process_primary_results", END)
         graph.add_edge("advance", END)
         graph.add_edge("final_review", END)
         graph.add_edge("retry_incomplete", END)
@@ -245,6 +267,11 @@ class SpeakerReviewGraphWorkflow:
             and state["run_state"] is not None
         ):
             return "submit_next_primary"
+        if (
+            state["operation"] == "process-primary-results"
+            and state["run_state"] is not None
+        ):
+            return "process_primary_results"
         if state["operation"] == "observe-primary" and state["run_state"] is not None:
             return "observe_primary"
         return "load"
@@ -300,6 +327,12 @@ class SpeakerReviewGraphWorkflow:
             }
         ):
             return "submit_next_primary"
+        if state["operation"] == "process-primary-results" and run_state.status in {
+            SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED,
+            SpeakerReviewRunStatus.ADJUDICATION_PREPARED,
+            SpeakerReviewRunStatus.COMPLETED,
+        }:
+            return "process_primary_results"
         if state["operation"] == "advance" and run_state.status in {
             SpeakerReviewRunStatus.PRIMARY_SUBMITTED,
             SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
@@ -363,6 +396,18 @@ class SpeakerReviewGraphWorkflow:
         run_directory, run_state = self._required_run_context(state)
         return {
             "run_state": self._workflow.submit_next_primary_part(
+                run_directory,
+                run_state,
+            )
+        }
+
+    def _process_primary_results(
+        self,
+        state: SpeakerReviewGraphState,
+    ) -> dict[str, SpeakerReviewRunState]:
+        run_directory, run_state = self._required_run_context(state)
+        return {
+            "run_state": self._workflow.process_primary_results(
                 run_directory,
                 run_state,
             )

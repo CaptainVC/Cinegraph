@@ -36,6 +36,9 @@ class SpeakerReviewConfiguration:
     final_review_max_retry_rounds: int
     estimated_characters_per_token: int
     maximum_enqueued_input_tokens_per_batch: int
+    maximum_recorded_input_tokens_per_result: int
+    maximum_recorded_output_tokens_per_result: int
+    maximum_recorded_tokens_per_batch: int
     batch_discount_multiplier: float
     maximum_run_cost_usd: float
     batch_completion_window: str
@@ -89,6 +92,9 @@ DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
     final_review_max_retry_rounds=1,
     estimated_characters_per_token=3,
     maximum_enqueued_input_tokens_per_batch=1_500_000,
+    maximum_recorded_input_tokens_per_result=2_000_000,
+    maximum_recorded_output_tokens_per_result=100_000,
+    maximum_recorded_tokens_per_batch=20_000_000,
     batch_discount_multiplier=0.5,
     maximum_run_cost_usd=5.0,
     batch_completion_window="24h",

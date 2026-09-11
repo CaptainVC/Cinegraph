@@ -133,6 +133,7 @@ class SpeakerReviewRunStatus(StrEnum):
     PREPARED = "prepared"
     PRIMARY_SUBMITTED = "primary_submitted"
     PRIMARY_PART_COMPLETED = "primary_part_completed"
+    ADJUDICATION_PREPARED = "adjudication_prepared"
     ADJUDICATION_SUBMITTED = "adjudication_submitted"
     FINAL_REVIEW_SUBMITTED = "final_review_submitted"
     COMPLETED = "completed"
