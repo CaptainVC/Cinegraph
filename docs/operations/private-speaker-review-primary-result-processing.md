@@ -21,9 +21,10 @@ trusted root coordinator, for:
 4. primary outputs and optional API-error evidence; and
 5. any deterministic derived files present during crash recovery or replay.
 
-Direct Compose invocation is intentionally incomplete because Phase 67 does not
-yet expose a forced SSH command. Phase 68 will supply the source/run mounts,
-authorization chain, serialization locks, and root-owned receipt evidence.
+Direct Compose invocation remains unsupported. Phase 68 supplies the required
+forced SSH command, source/run mounts, authorization chain, serialization locks,
+and root-owned receipt evidence; use its
+[VPS boundary runbook](private-speaker-review-primary-result-processing-boundary.md).
 
 ## Outcomes
 
@@ -64,7 +65,7 @@ reconciliation; never delete evidence to make the job appear retryable.
 
 ## Next transition
 
-Phase 68 will expose this exact transition through the root-owned VPS command
-and receipt chain. A later separately authorized transition will submit the
-first prepared Terra adjudication part. This phase does not observe Terra,
-invoke Sol final review, promote the corpus, or ingest it.
+Phase 68 exposes this exact transition through the root-owned VPS command and
+receipt chain. A later separately authorized transition will submit the first
+prepared Terra adjudication part. This phase does not observe Terra, invoke Sol
+final review, promote the corpus, or ingest it.

@@ -61,11 +61,11 @@ or credentials.
 ## Consequences
 
 Primary interpretation and Terra submission are now distinct security and cost
-boundaries. A future Phase 68 root coordinator must validate the predecessor
-authorization/receipt chain, mount the immutable source workspace read-only and
-the exact digest-selected review-runs workspace read-write, pass all five
-pre-state digests, serialize execution, and create root-owned intent/receipt
-evidence.
+boundaries. Phase 68's root coordinator validates the predecessor
+authorization/receipt chain, mounts the immutable source workspace read-only and
+the exact digest-selected review-runs workspace read-write, passes all five
+pre-state digests, serializes execution, and creates root-owned intent/receipt
+evidence; see [ADR-0028](0028-private-primary-result-processing-boundary.md).
 
 No Terra batch is submitted in this phase. Adjudication observation, final
 review, human escalation, corpus promotion, and ingestion remain later explicit

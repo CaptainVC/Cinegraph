@@ -10,6 +10,9 @@ from scripts import (
     private_speaker_review_next_primary_observation_host_contract as next_observation_contract,
 )
 from scripts import private_speaker_review_observation_host_contract as observation_contract
+from scripts import (
+    private_speaker_review_primary_result_processing_host_contract as processing_contract,
+)
 from scripts import private_speaker_review_submission_host_contract as contract
 from scripts.bootstrap_dev_host import BootstrapError
 
@@ -24,6 +27,9 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     assert next_observation_contract.REVIEW_NEXT_OBSERVATION_COMMAND == (
         "speaker-review-observe-next-primary-v1"
     )
+    assert processing_contract.REVIEW_PRIMARY_RESULT_PROCESSING_COMMAND == (
+        "speaker-review-process-primary-results-v1"
+    )
     assert contract.REVIEW_USER != contract.CORPUS_USER
     assert "cinegraph-corpus" not in contract.SUDOERS_CONTENT
     assert "cinegraph-deploy" not in contract.SUDOERS_CONTENT
@@ -36,6 +42,10 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     assert next_contract.REVIEW_NEXT_PRIMARY_RECEIPTS_ROOT.parent == contract.SPEAKER_REVIEW_ROOT
     assert (
         next_observation_contract.REVIEW_NEXT_OBSERVATION_RECEIPTS_ROOT.parent
+        == contract.SPEAKER_REVIEW_ROOT
+    )
+    assert (
+        processing_contract.REVIEW_PRIMARY_RESULT_PROCESSING_RECEIPTS_ROOT.parent
         == contract.SPEAKER_REVIEW_ROOT
     )
     assert contract.MINIMUM_PYTHON_VERSION >= (3, 12)
@@ -60,11 +70,13 @@ def test_review_bootstrap_contract_covers_dedicated_paths_and_has_no_broad_sudo(
     assert contract.REVIEW_SUBMISSION_RECEIPTS_ROOT in directories
     assert observation_contract.REVIEW_OBSERVATION_RECEIPTS_ROOT in directories
     assert next_contract.REVIEW_NEXT_PRIMARY_RECEIPTS_ROOT in directories
+    assert processing_contract.REVIEW_PRIMARY_RESULT_PROCESSING_RECEIPTS_ROOT in directories
     assert contract.REVIEW_DISPATCH_PATH in files
     assert contract.REVIEW_HELPER_PATH in files
     assert contract.REVIEW_OBSERVATION_HELPER_PATH in files
     assert next_contract.REVIEW_NEXT_PRIMARY_HELPER_PATH in files
     assert next_observation_contract.REVIEW_NEXT_OBSERVATION_HELPER_PATH in files
+    assert processing_contract.REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH in files
     assert contract.REVIEW_SUDOERS_PATH in files
     assert contract.REVIEW_AUTHORIZED_KEYS in files
     assert "NOPASSWD: ALL" not in contract.SUDOERS_CONTENT
@@ -83,16 +95,21 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
     next_observation_helper = Path(
         "deploy/remote/observe-next-private-speaker-review.sh"
     ).read_text(encoding="utf-8")
+    processing_helper = Path(
+        "deploy/remote/process-private-speaker-review-results.sh"
+    ).read_text(encoding="utf-8")
     assert "[[ $# -eq 0 ]]" in dispatch
     assert '[[ "$(id -un)" == "cinegraph-review" ]]' in dispatch
     assert "speaker-review-submit-primary-v1)" in dispatch
     assert "speaker-review-observe-primary-v1)" in dispatch
     assert "speaker-review-submit-next-primary-v1)" in dispatch
     assert "speaker-review-observe-next-primary-v1)" in dispatch
+    assert "speaker-review-process-primary-results-v1)" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-submit-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-observe-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-submit-next-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-observe-next-private-speaker-review" in dispatch
+    assert "sudo -n /usr/local/sbin/cinegraph-process-private-speaker-review-results" in dispatch
     assert "eval" not in dispatch
     assert "bash -c" not in dispatch
     assert "scp" not in dispatch.lower()
@@ -210,6 +227,28 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
         "deploy/compose.yaml",
     ):
         assert trusted_path in next_observation_helper
+    assert '[[ "${SUDO_USER-}" == "cinegraph-review" ]]' in processing_helper
+    assert 'python3 -I -S -B "$processor"' in processing_helper
+    assert "origin/main" in processing_helper
+    assert "flock -n 8" in processing_helper
+    assert "flock -w 10 9" in processing_helper
+    assert "flock -n 7" in processing_helper
+    assert "OPENAI_API_KEY" not in processing_helper
+    assert "OPENAI_" in processing_helper
+    assert "eval" not in processing_helper and "bash -c" not in processing_helper
+    assert 'docker rm --force "$CONTAINER_NAME"' in processing_helper
+    for trusted_path in (
+        "scripts/run_private_speaker_review_primary_result_processing.py",
+        "scripts/process_private_speaker_review_results_workspace.py",
+        "scripts/private_speaker_review_primary_result_processing_contract.py",
+        "scripts/private_speaker_review_primary_result_processing_host_contract.py",
+        "scripts/private_speaker_review_submission_contract.py",
+        "scripts/private_speaker_review_submission_host_contract.py",
+        "scripts/private_corpus_host_contract.py",
+        "scripts/dev_host_contract.py",
+        "deploy/compose.yaml",
+    ):
+        assert trusted_path in processing_helper
 
 
 def test_compose_primary_submission_is_egress_only_and_secret_file_based() -> None:
@@ -272,6 +311,7 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         bootstrap_review_host.REVIEW_OBSERVATION_HELPER_PATH: b"new-observation-helper",
         bootstrap_review_host.REVIEW_NEXT_PRIMARY_HELPER_PATH: b"new-next-helper",
         bootstrap_review_host.REVIEW_NEXT_OBSERVATION_HELPER_PATH: b"new-next-observation-helper",
+        bootstrap_review_host.REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH: b"new-processing-helper",
         bootstrap_review_host.REVIEW_SUDOERS_PATH: b"sudoers",
         bootstrap_review_host.REVIEW_AUTHORIZED_KEYS: b"authorized",
     }
@@ -314,6 +354,7 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         ("ensure", bootstrap_review_host.REVIEW_OBSERVATION_HELPER_PATH, True),
         ("ensure", bootstrap_review_host.REVIEW_NEXT_PRIMARY_HELPER_PATH, True),
         ("ensure", bootstrap_review_host.REVIEW_NEXT_OBSERVATION_HELPER_PATH, True),
+        ("ensure", bootstrap_review_host.REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH, True),
         ("replace", bootstrap_review_host.REVIEW_SUDOERS_PATH, None),
         ("replace", bootstrap_review_host.REVIEW_DISPATCH_PATH, None),
     ]
@@ -327,6 +368,7 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         (contract.SUDOERS_CONTENT.encode("utf-8"), True),
         (next_contract.SUDOERS_CONTENT.encode("utf-8"), True),
         (next_observation_contract.SUDOERS_CONTENT.encode("utf-8"), True),
+        (processing_contract.SUDOERS_CONTENT.encode("utf-8"), True),
         (b"cinegraph-review ALL=(root) NOPASSWD: ALL\n", False),
     ],
 )
@@ -342,6 +384,7 @@ def test_review_refresh_accepts_only_finite_sudoers_upgrade_states(
         "observation": tmp_path / "observation",
         "next": tmp_path / "next",
         "next_observation": tmp_path / "next_observation",
+        "processing": tmp_path / "processing",
         "sudoers": tmp_path / "sudoers",
         "authorized": tmp_path / "authorized_keys",
     }
@@ -351,7 +394,8 @@ def test_review_refresh_accepts_only_finite_sudoers_upgrade_states(
         paths["observation"]: b"new-observation",
         paths["next"]: b"new-next",
         paths["next_observation"]: b"new-next-observation",
-        paths["sudoers"]: next_observation_contract.SUDOERS_CONTENT.encode("utf-8"),
+        paths["processing"]: b"new-processing",
+        paths["sudoers"]: processing_contract.SUDOERS_CONTENT.encode("utf-8"),
         paths["authorized"]: b"review-key",
     }
     for name, path in paths.items():
@@ -373,6 +417,11 @@ def test_review_refresh_accepts_only_finite_sudoers_upgrade_states(
         bootstrap_review_host,
         "REVIEW_NEXT_OBSERVATION_HELPER_PATH",
         paths["next_observation"],
+    )
+    monkeypatch.setattr(
+        bootstrap_review_host,
+        "REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH",
+        paths["processing"],
     )
     monkeypatch.setattr(bootstrap_review_host, "REVIEW_SUDOERS_PATH", paths["sudoers"])
     monkeypatch.setattr(
