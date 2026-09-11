@@ -27,4 +27,5 @@
 - [ADR-0025: Private speaker-review next-primary boundary](0025-private-speaker-review-next-primary-boundary.md)
 - [ADR-0026: Private speaker-review next-primary observation boundary](0026-private-speaker-review-next-primary-observation-boundary.md)
 - [ADR-0027: Provider-free primary-result processing checkpoint](0027-provider-free-primary-result-processing.md)
+- [ADR-0028: Private primary-result processing VPS boundary](0028-private-primary-result-processing-boundary.md)
 - [ADR template](template.md)

@@ -278,9 +278,20 @@ and either finalizes unanimous high-confidence consensus locally or writes
 deterministic Terra request parts and stops at `adjudication_prepared`. Its
 isolated container has no network or OpenAI secret and requires distinct
 root-computed digests for state, requests, journals, observations/API errors,
-and derived evidence. Phase 68 will add the root-owned VPS command and receipts;
-no adjudication submission occurs here. See [ADR-0027](docs/adr/0027-provider-free-primary-result-processing.md)
+and derived evidence. See [ADR-0027](docs/adr/0027-provider-free-primary-result-processing.md)
 and the [primary-result processing runbook](docs/operations/private-speaker-review-primary-result-processing.md).
+
+Phase 68 exposes that exact transition as the fifth forced review command,
+`speaker-review-process-primary-results-v1`. A root coordinator revalidates the
+complete preparation and two-part submission/observation receipt chain, active
+release/image/configuration, immutable source snapshot, and five independent
+pre-state digest classes before launching the secretless, network-disabled
+worker. The worker receives only the digest-selected source mount read-only and
+its corresponding review-runs mount read-write. Create-once root intent and
+completion receipts make exact replay and crash recovery auditable without
+widening the command into Terra submission, promotion, or ingestion. See
+[ADR-0028](docs/adr/0028-private-primary-result-processing-boundary.md) and the
+[VPS processing runbook](docs/operations/private-speaker-review-primary-result-processing-boundary.md).
 
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
