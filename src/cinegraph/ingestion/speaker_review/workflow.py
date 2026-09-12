@@ -158,6 +158,7 @@ class SpeakerReviewWorkflow:
         adjudication_reasoning_effort: str,
         final_review_reasoning_effort: str,
         expected_next_primary_request_sha256: str | None = None,
+        expected_first_adjudication_request_sha256: str | None = None,
         maximum_authorized_cost_usd: float | None = None,
     ) -> None:
         self._gateway = gateway
@@ -170,6 +171,9 @@ class SpeakerReviewWorkflow:
         self._final_review_reasoning_effort = final_review_reasoning_effort
         self._expected_next_primary_request_sha256 = (
             expected_next_primary_request_sha256
+        )
+        self._expected_first_adjudication_request_sha256 = (
+            expected_first_adjudication_request_sha256
         )
         self._maximum_authorized_cost_usd = (
             configuration.maximum_run_cost_usd
@@ -1079,6 +1083,116 @@ class SpeakerReviewWorkflow:
         save_run_state(run_directory, updated)
         return updated
 
+    def submit_first_adjudication(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Submit exactly adjudication part one from an adjudication checkpoint.
+
+        This transition is intentionally provider-boundary narrow: it accepts
+        only the exact ``ADJUDICATION_PREPARED`` state, submits no other part,
+        and never observes, parses, or advances the review.  The create-once
+        journals in :meth:`_submit_part` make a matching completed submission
+        recoverable while an intent or mismatched journal fails closed.
+        """
+
+        if state.status is SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED:
+            self._validate_first_adjudication_replay(run_directory, state)
+            return state
+        if state.status is not SpeakerReviewRunStatus.ADJUDICATION_PREPARED:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        if (
+            type(state.adjudication_part_count) is not int
+            or state.adjudication_part_count <= 0
+            or state.adjudication_completed_part_count != 0
+            or state.adjudication_batch_id is not None
+            or state.adjudication_input_file_id is not None
+            or state.adjudication_batch_ids
+            or state.adjudication_input_file_ids
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        submission = self._submit_part(
+            run_directory=run_directory,
+            state=state,
+            stage="adjudication",
+            part_index=0,
+        )
+        updated = replace(
+            state,
+            status=SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
+            updated_at=_now(),
+            adjudication_batch_id=submission.batch_id,
+            adjudication_input_file_id=submission.input_file_id,
+            adjudication_batch_ids=(submission.batch_id,),
+            adjudication_input_file_ids=(submission.input_file_id,),
+        )
+        save_run_state(run_directory, updated)
+        return updated
+
+    # Explicit part-suffixed alias keeps the operation discoverable alongside
+    # ``submit_next_primary_part`` for callers that name transitions by part.
+    submit_first_adjudication_part = submit_first_adjudication
+
+    def _validate_first_adjudication_replay(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> None:
+        ids = state.adjudication_batch_ids
+        input_ids = state.adjudication_input_file_ids
+        if (
+            type(state.adjudication_part_count) is not int
+            or state.adjudication_part_count <= 0
+            or state.adjudication_completed_part_count != 0
+            or not isinstance(ids, tuple)
+            or not isinstance(input_ids, tuple)
+            or len(ids) != 1
+            or len(input_ids) != 1
+            or not all(isinstance(value, str) and value and value == value.strip() for value in ids)
+            or not all(isinstance(value, str) and value and value == value.strip() for value in input_ids)
+            or state.adjudication_batch_id != ids[0]
+            or state.adjudication_input_file_id != input_ids[0]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        request_path = _request_part_path(run_directory, "adjudication", 0)
+        request_bytes = _bounded_file_bytes(request_path)
+        binding = {
+            "schema_version": SUBMISSION_SCHEMA_VERSION,
+            "request_sha256": sha256(request_bytes).hexdigest(),
+            "run_id": state.run_id,
+            "stage": "adjudication",
+            "part": 1,
+            "prompt_version": state.prompt_version,
+            "batch_endpoint": self._configuration.batch_endpoint,
+            "completion_window": self._configuration.batch_completion_window,
+        }
+        intent = _read_submission_record(
+            _submission_path(run_directory, "adjudication", 0, "intent"),
+            completed=False,
+        )
+        completed = _read_submission_record(
+            _submission_path(run_directory, "adjudication", 0, "completed"),
+            completed=True,
+        )
+        if (
+            intent is None
+            or completed is None
+            or intent.get("binding") != binding
+            or completed.get("binding") != binding
+            or completed.get("batch_id") != ids[0]
+            or completed.get("input_file_id") != input_ids[0]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+
     @staticmethod
     def _validate_next_primary_checkpoint(state: SpeakerReviewRunState) -> None:
         """Validate the exact state shape required before provider access."""
@@ -1752,6 +1866,15 @@ class SpeakerReviewWorkflow:
             stage == "primary"
             and self._expected_next_primary_request_sha256 is not None
             and request_hash != self._expected_next_primary_request_sha256
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        if (
+            stage == "adjudication"
+            and part_index == 0
+            and self._expected_first_adjudication_request_sha256 is not None
+            and request_hash != self._expected_first_adjudication_request_sha256
         ):
             raise RuntimeError(
                 SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED

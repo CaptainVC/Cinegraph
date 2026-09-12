@@ -293,6 +293,20 @@ widening the command into Terra submission, promotion, or ingestion. See
 [ADR-0028](docs/adr/0028-private-primary-result-processing-boundary.md) and the
 [VPS processing runbook](docs/operations/private-speaker-review-primary-result-processing-boundary.md).
 
+Phase 69 adds the sixth forced review command,
+`speaker-review-submit-first-adjudication-v1`, for the first and only the first
+prepared Terra adjudication part. The egress worker receives the OpenAI key as
+a read-only Compose secret, rechecks the exact root-selected request digest at
+the provider-call boundary, and cannot observe results, submit a later part,
+enter final review, promote corpus files, or ingest data. The root coordinator
+binds the complete Phase 68 receipt, the five pre-state digest classes, the
+active release/image/configuration, a fresh authorization and cost ceiling, and
+the deterministic total estimated adjudication cost. A completed provider
+journal can be replayed without a second call; an unmatched intent instead
+requires explicit reconciliation. See
+[ADR-0029](docs/adr/0029-private-first-adjudication-submission-boundary.md) and
+the [VPS first-adjudication submission runbook](docs/operations/private-speaker-review-first-adjudication-submission-boundary.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

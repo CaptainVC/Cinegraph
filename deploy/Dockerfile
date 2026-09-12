@@ -33,6 +33,10 @@ ENV PATH=/opt/venv/bin:${PATH} \
     PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+RUN apt-get update \
+    && apt-get install --only-upgrade --yes --no-install-recommends libpcre2-8-0 \
+    && rm -rf /var/lib/apt/lists/*
+
 RUN groupadd --system --gid 10001 cinegraph \
     && useradd --system --uid 10001 --gid 10001 --home-dir /home/cinegraph \
        --create-home cinegraph \

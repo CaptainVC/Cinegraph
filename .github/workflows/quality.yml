@@ -222,6 +222,7 @@ jobs:
           deploy/remote/submit-next-private-speaker-review.sh
           deploy/remote/observe-next-private-speaker-review.sh
           deploy/remote/process-private-speaker-review-results.sh
+          deploy/remote/submit-first-private-speaker-review-adjudication.sh
       - name: Render and build Dev/Prod runtime
         shell: bash
         run: |

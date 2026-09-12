@@ -87,7 +87,7 @@ and any attempt to widen the fixed remote command.
 
 | Status | Durable effect | Next action |
 | --- | --- | --- |
-| `adjudication_prepared` | Primary verdicts/decisions and one or more deterministic Terra request parts are verified and receipted. | Use a future separately authorized Terra submission boundary. |
+| `adjudication_prepared` | Primary verdicts/decisions and one or more deterministic Terra request parts are verified and receipted. | Use the separately authorized [first-adjudication submission boundary](private-speaker-review-first-adjudication-submission-boundary.md). |
 | `completed` | Every candidate met consensus; reviewed SRT, decision ledger, and calibration evidence are verified and receipted. | Continue only through a future corpus-promotion boundary. |
 | `already_processed` | The terminal checkpoint, predecessor chain, intent, receipt, source, and complete inventory revalidated. | Treat as an idempotent success. |
 | rejection | Nothing is declared successful; evidence is preserved. | Inspect protected VPS evidence and reconcile explicitly. |
@@ -120,3 +120,6 @@ reconciliation.
 This command stops at `adjudication_prepared` or consensus-only `completed`.
 It does not submit Terra adjudication, observe adjudication, invoke final review,
 request human corrections, promote reviewed files, or ingest PostgreSQL/Qdrant.
+
+Phase 69 narrows the next action to submission of exactly adjudication part one;
+all observation and later-stage actions remain outside that command.
