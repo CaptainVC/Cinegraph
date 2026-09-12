@@ -5,7 +5,7 @@ def _service() -> str:
     compose = Path("deploy/compose.yaml").read_text(encoding="utf-8")
     return compose.split("\n  corpus-speaker-review-process-primary-results:", 1)[
         1
-    ].split("\n  postgres:", 1)[0]
+    ].split("\n  corpus-speaker-review-submit-first-adjudication:", 1)[0]
 
 
 def test_primary_result_processing_worker_is_offline_and_isolated() -> None:

@@ -72,10 +72,10 @@ shell. A successful aggregate contains counts and statuses only; it cannot carry
 source text, model output, provider identifiers, rationales, host paths, prompts,
 or credentials.
 
-This boundary spends no provider money and never submits Terra work. The next
-phase must add a separately authorized, egress-only transition for one prepared
-Terra adjudication part. Observation of that part, additional adjudication
-parts, final review, human escalation, corpus promotion, and ingestion remain
-separate future decisions.
+This boundary spends no provider money and never submits Terra work. Phase 69
+adds a separately authorized, egress-only transition for exactly the first
+prepared Terra adjudication part. Observation of that part, additional
+adjudication parts, final review, human escalation, corpus promotion, and
+ingestion remain separate future decisions.
 
 See the [VPS processing runbook](../operations/private-speaker-review-primary-result-processing-boundary.md).
