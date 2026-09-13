@@ -320,6 +320,20 @@ review, promote corpus files, or ingest data. See
 [ADR-0030](docs/adr/0030-private-first-adjudication-observation-boundary.md) and
 the [VPS first-adjudication observation runbook](docs/operations/private-speaker-review-first-adjudication-observation.md).
 
+Phase 71 adds the eighth forced review command,
+`speaker-review-submit-next-adjudication-v1`, for the paid submission of exactly
+Terra adjudication part two after Phase 70 has authenticated the first observed
+part. The generic LangGraph transition validates any completed part and submits
+only `k + 1`, but the current root boundary deliberately requires `k == 1`
+until later-part observation receipts exist. The egress-only worker revalidates
+the exact request plus five inventory digests and the deterministic total Terra
+estimate before reading its mode-`0400` OpenAI secret. Provider-disabled replay,
+create-once application journals, full root binding reconstruction, and
+aggregate-only receipts prevent duplicate submission after a crash. It cannot
+observe, parse, enter final review, promote, or ingest. See
+[ADR-0031](docs/adr/0031-private-next-adjudication-submission-boundary.md) and
+the [VPS next-adjudication submission runbook](docs/operations/private-speaker-review-next-adjudication-submission.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

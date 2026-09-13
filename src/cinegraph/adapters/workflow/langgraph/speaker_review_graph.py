@@ -17,6 +17,7 @@ SpeakerReviewGraphOperation = Literal[
     "observe-primary",
     "submit-next-primary",
     "submit-first-adjudication",
+    "submit-next-adjudication",
     "observe-first-adjudication",
     "process-primary-results",
     "advance",
@@ -127,6 +128,24 @@ class SpeakerReviewGraphWorkflow:
         )
 
     submit_first_adjudication_part = submit_first_adjudication
+
+    def submit_next_adjudication(
+        self,
+        run_directory: Path,
+        *,
+        verified_run_state: SpeakerReviewRunState | None = None,
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        """Submit exactly the next adjudication part from a completed checkpoint."""
+
+        return self._invoke(
+            operation="submit-next-adjudication",
+            corpus_root=None,
+            seasons=(),
+            run_directory=run_directory,
+            verified_run_state=verified_run_state,
+        )
+
+    submit_next_adjudication_part = submit_next_adjudication
 
     def observe_first_adjudication(
         self,
@@ -241,6 +260,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_node("observe_primary", self._observe_primary)
         graph.add_node("submit_next_primary", self._submit_next_primary)
         graph.add_node("submit_first_adjudication", self._submit_first_adjudication)
+        graph.add_node("submit_next_adjudication", self._submit_next_adjudication)
         graph.add_node("observe_first_adjudication", self._observe_first_adjudication)
         graph.add_node("process_primary_results", self._process_primary_results)
         graph.add_node("advance", self._advance)
@@ -257,6 +277,7 @@ class SpeakerReviewGraphWorkflow:
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
+                "submit_next_adjudication": "submit_next_adjudication",
                 "observe_first_adjudication": "observe_first_adjudication",
                 "process_primary_results": "process_primary_results",
             },
@@ -269,6 +290,7 @@ class SpeakerReviewGraphWorkflow:
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
+                "submit_next_adjudication": "submit_next_adjudication",
                 "observe_first_adjudication": "observe_first_adjudication",
                 "process_primary_results": "process_primary_results",
                 "advance": "advance",
@@ -286,6 +308,7 @@ class SpeakerReviewGraphWorkflow:
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
+                "submit_next_adjudication": "submit_next_adjudication",
                 "observe_first_adjudication": "observe_first_adjudication",
                 "process_primary_results": "process_primary_results",
                 "advance": "advance",
@@ -299,6 +322,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_edge("observe_primary", END)
         graph.add_edge("submit_next_primary", END)
         graph.add_edge("submit_first_adjudication", END)
+        graph.add_edge("submit_next_adjudication", END)
         graph.add_edge("observe_first_adjudication", END)
         graph.add_edge("process_primary_results", END)
         graph.add_edge("advance", END)
@@ -320,6 +344,11 @@ class SpeakerReviewGraphWorkflow:
             and state["run_state"] is not None
         ):
             return "submit_first_adjudication"
+        if (
+            state["operation"] == "submit-next-adjudication"
+            and state["run_state"] is not None
+        ):
+            return "submit_next_adjudication"
         if (
             state["operation"] == "observe-first-adjudication"
             and state["run_state"] is not None
@@ -396,6 +425,17 @@ class SpeakerReviewGraphWorkflow:
             }
         ):
             return "submit_first_adjudication"
+        if (
+            state["operation"] == "submit-next-adjudication"
+            and run_state.status
+            in {
+                SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
+                # Route the submitted shape into the workflow so it can
+                # validate the application journals before an idempotent replay.
+                SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
+            }
+        ):
+            return "submit_next_adjudication"
         if state["operation"] == "observe-first-adjudication" and run_state.status in {
             SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
             SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
@@ -483,6 +523,18 @@ class SpeakerReviewGraphWorkflow:
         run_directory, run_state = self._required_run_context(state)
         return {
             "run_state": self._workflow.submit_first_adjudication_part(
+                run_directory,
+                run_state,
+            )
+        }
+
+    def _submit_next_adjudication(
+        self,
+        state: SpeakerReviewGraphState,
+    ) -> dict[str, SpeakerReviewRunState]:
+        run_directory, run_state = self._required_run_context(state)
+        return {
+            "run_state": self._workflow.submit_next_adjudication_part(
                 run_directory,
                 run_state,
             )
