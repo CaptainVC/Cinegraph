@@ -1138,6 +1138,124 @@ class SpeakerReviewWorkflow:
     # ``submit_next_primary_part`` for callers that name transitions by part.
     submit_first_adjudication_part = submit_first_adjudication
 
+    def observe_first_adjudication(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Observe exactly adjudication part one, without advancing stages.
+
+        This transition is deliberately separate from :meth:`advance`: a
+        successful observation only stores the first output/error artifacts
+        and moves to an explicit intermediate checkpoint. No result parsing,
+        later-part submission, final review, or corpus publication occurs.
+        """
+
+        if state.status is SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED:
+            self._validate_first_adjudication_observation_replay(
+                run_directory,
+                state,
+            )
+            return state
+        if state.status is SpeakerReviewRunStatus.FAILED:
+            return state
+        if state.status is not SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        self._validate_first_adjudication_observation_checkpoint(state)
+        snapshot = self._required_snapshot(state.adjudication_batch_ids[0])
+        if snapshot.batch_id != state.adjudication_batch_ids[0]:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        try:
+            if snapshot.status in self._configuration.terminal_batch_failure_statuses:
+                return self._persist_failed_batch(run_directory, state, snapshot)
+            if snapshot.status != self._configuration.successful_batch_status:
+                return state
+            self._download_completed_batch(
+                run_directory,
+                _part_stage_name("adjudication", 0),
+                snapshot,
+            )
+            updated = replace(
+                state,
+                status=SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
+                adjudication_completed_part_count=1,
+                updated_at=_now(),
+            )
+            save_run_state(run_directory, updated)
+            return updated
+        except (FileExistsError, SpeakerReviewArtifactConflictError) as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+
+    observe_first_adjudication_part = observe_first_adjudication
+
+    @staticmethod
+    def _validate_first_adjudication_observation_checkpoint(
+        state: SpeakerReviewRunState,
+    ) -> None:
+        if (
+            type(state.adjudication_part_count) is not int
+            or state.adjudication_part_count <= 0
+            or type(state.adjudication_completed_part_count) is not int
+            or state.adjudication_completed_part_count != 0
+            or not isinstance(state.adjudication_batch_ids, tuple)
+            or not isinstance(state.adjudication_input_file_ids, tuple)
+            or len(state.adjudication_batch_ids) != 1
+            or len(state.adjudication_input_file_ids) != 1
+            or state.adjudication_batch_id != state.adjudication_batch_ids[0]
+            or state.adjudication_input_file_id
+            != state.adjudication_input_file_ids[0]
+            or not all(
+                isinstance(value, str) and value and value == value.strip()
+                for value in (
+                    *state.adjudication_batch_ids,
+                    *state.adjudication_input_file_ids,
+                )
+            )
+            or len(set(state.adjudication_batch_ids)) != 1
+            or len(set(state.adjudication_input_file_ids)) != 1
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+
+    @staticmethod
+    def _validate_first_adjudication_observation_replay(
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> None:
+        if (
+            type(state.adjudication_part_count) is not int
+            or state.adjudication_part_count <= 0
+            or state.adjudication_completed_part_count != 1
+            or not isinstance(state.adjudication_batch_ids, tuple)
+            or not isinstance(state.adjudication_input_file_ids, tuple)
+            or len(state.adjudication_batch_ids) != 1
+            or len(state.adjudication_input_file_ids) != 1
+            or state.adjudication_batch_id != state.adjudication_batch_ids[0]
+            or state.adjudication_input_file_id
+            != state.adjudication_input_file_ids[0]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        output = run_directory / "adjudication-part-0001-output.jsonl"
+        optional_errors = run_directory / "adjudication-part-0001-api-errors.jsonl"
+        if (
+            not output.is_file()
+            or output.is_symlink()
+            or (optional_errors.exists() and not optional_errors.is_file())
+            or optional_errors.is_symlink()
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+
     def _validate_first_adjudication_replay(
         self,
         run_directory: Path,

@@ -8,6 +8,9 @@ from scripts import bootstrap_review_host
 from scripts import (
     private_speaker_review_first_adjudication_host_contract as first_adjudication_contract,
 )
+from scripts import (
+    private_speaker_review_first_adjudication_observation_host_contract as first_adjudication_observation_contract,
+)
 from scripts import private_speaker_review_next_primary_host_contract as next_contract
 from scripts import (
     private_speaker_review_next_primary_observation_host_contract as next_observation_contract,
@@ -36,6 +39,10 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     assert first_adjudication_contract.REVIEW_FIRST_ADJUDICATION_COMMAND == (
         "speaker-review-submit-first-adjudication-v1"
     )
+    assert (
+        first_adjudication_observation_contract.REVIEW_FIRST_ADJUDICATION_OBSERVATION_COMMAND
+        == ("speaker-review-observe-first-adjudication-v1")
+    )
     assert contract.REVIEW_USER != contract.CORPUS_USER
     assert "cinegraph-corpus" not in contract.SUDOERS_CONTENT
     assert "cinegraph-deploy" not in contract.SUDOERS_CONTENT
@@ -56,6 +63,10 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     )
     assert (
         first_adjudication_contract.REVIEW_FIRST_ADJUDICATION_RECEIPTS_ROOT.parent
+        == contract.SPEAKER_REVIEW_ROOT
+    )
+    assert (
+        first_adjudication_observation_contract.REVIEW_FIRST_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT.parent
         == contract.SPEAKER_REVIEW_ROOT
     )
     assert contract.MINIMUM_PYTHON_VERSION >= (3, 12)
@@ -82,6 +93,10 @@ def test_review_bootstrap_contract_covers_dedicated_paths_and_has_no_broad_sudo(
     assert next_contract.REVIEW_NEXT_PRIMARY_RECEIPTS_ROOT in directories
     assert processing_contract.REVIEW_PRIMARY_RESULT_PROCESSING_RECEIPTS_ROOT in directories
     assert first_adjudication_contract.REVIEW_FIRST_ADJUDICATION_RECEIPTS_ROOT in directories
+    assert (
+        first_adjudication_observation_contract.REVIEW_FIRST_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT
+        in directories
+    )
     assert contract.REVIEW_DISPATCH_PATH in files
     assert contract.REVIEW_HELPER_PATH in files
     assert contract.REVIEW_OBSERVATION_HELPER_PATH in files
@@ -89,6 +104,10 @@ def test_review_bootstrap_contract_covers_dedicated_paths_and_has_no_broad_sudo(
     assert next_observation_contract.REVIEW_NEXT_OBSERVATION_HELPER_PATH in files
     assert processing_contract.REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH in files
     assert first_adjudication_contract.REVIEW_FIRST_ADJUDICATION_HELPER_PATH in files
+    assert (
+        first_adjudication_observation_contract.REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH
+        in files
+    )
     assert contract.REVIEW_SUDOERS_PATH in files
     assert contract.REVIEW_AUTHORIZED_KEYS in files
     assert "NOPASSWD: ALL" not in contract.SUDOERS_CONTENT
@@ -107,11 +126,14 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
     next_observation_helper = Path(
         "deploy/remote/observe-next-private-speaker-review.sh"
     ).read_text(encoding="utf-8")
-    processing_helper = Path(
-        "deploy/remote/process-private-speaker-review-results.sh"
-    ).read_text(encoding="utf-8")
+    processing_helper = Path("deploy/remote/process-private-speaker-review-results.sh").read_text(
+        encoding="utf-8"
+    )
     first_adjudication_helper = Path(
         "deploy/remote/submit-first-private-speaker-review-adjudication.sh"
+    ).read_text(encoding="utf-8")
+    first_adjudication_observation_helper = Path(
+        "deploy/remote/observe-first-private-speaker-review-adjudication.sh"
     ).read_text(encoding="utf-8")
     assert "[[ $# -eq 0 ]]" in dispatch
     assert '[[ "$(id -un)" == "cinegraph-review" ]]' in dispatch
@@ -121,12 +143,20 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
     assert "speaker-review-observe-next-primary-v1)" in dispatch
     assert "speaker-review-process-primary-results-v1)" in dispatch
     assert "speaker-review-submit-first-adjudication-v1)" in dispatch
+    assert "speaker-review-observe-first-adjudication-v1)" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-submit-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-observe-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-submit-next-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-observe-next-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-process-private-speaker-review-results" in dispatch
-    assert "sudo -n /usr/local/sbin/cinegraph-submit-first-private-speaker-review-adjudication" in dispatch
+    assert (
+        "sudo -n /usr/local/sbin/cinegraph-submit-first-private-speaker-review-adjudication"
+        in dispatch
+    )
+    assert (
+        "sudo -n /usr/local/sbin/cinegraph-observe-first-private-speaker-review-adjudication"
+        in dispatch
+    )
     assert "eval" not in dispatch
     assert "bash -c" not in dispatch
     assert "scp" not in dispatch.lower()
@@ -283,6 +313,24 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
         "deploy/compose.yaml",
     ):
         assert trusted_path in first_adjudication_helper
+    assert '[[ "${SUDO_USER-}" == "cinegraph-review" ]]' in first_adjudication_observation_helper
+    assert 'python3 -I -S -B "$processor"' in first_adjudication_observation_helper
+    assert "eval" not in first_adjudication_observation_helper
+    assert "bash -c" not in first_adjudication_observation_helper
+    assert "--env OPENAI_API_KEY" not in first_adjudication_observation_helper
+    assert first_adjudication_observation_helper.count("docker inspect") == 1
+    assert first_adjudication_observation_helper.count("cleanup_worker") == 2
+    for trusted_path in (
+        "scripts/run_private_speaker_review_first_adjudication_observation.py",
+        "scripts/observe_first_private_speaker_review_adjudication_workspace.py",
+        "scripts/private_speaker_review_first_adjudication_observation_contract.py",
+        "scripts/private_speaker_review_first_adjudication_observation_host_contract.py",
+        "scripts/run_private_speaker_review_first_adjudication.py",
+        "scripts/private_speaker_review_first_adjudication_submission_contract.py",
+        "scripts/private_speaker_review_first_adjudication_host_contract.py",
+        "deploy/compose.yaml",
+    ):
+        assert trusted_path in first_adjudication_observation_helper
 
 
 def test_compose_primary_submission_is_egress_only_and_secret_file_based() -> None:
@@ -347,6 +395,9 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         bootstrap_review_host.REVIEW_NEXT_OBSERVATION_HELPER_PATH: b"new-next-observation-helper",
         bootstrap_review_host.REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH: b"new-processing-helper",
         bootstrap_review_host.REVIEW_FIRST_ADJUDICATION_HELPER_PATH: b"new-first-helper",
+        bootstrap_review_host.REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH: (
+            b"new-first-observation-helper"
+        ),
         bootstrap_review_host.REVIEW_SUDOERS_PATH: b"sudoers",
         bootstrap_review_host.REVIEW_AUTHORIZED_KEYS: b"authorized",
     }
@@ -391,6 +442,11 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         ("ensure", bootstrap_review_host.REVIEW_NEXT_OBSERVATION_HELPER_PATH, True),
         ("ensure", bootstrap_review_host.REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH, True),
         ("ensure", bootstrap_review_host.REVIEW_FIRST_ADJUDICATION_HELPER_PATH, True),
+        (
+            "ensure",
+            bootstrap_review_host.REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH,
+            True,
+        ),
         ("replace", bootstrap_review_host.REVIEW_SUDOERS_PATH, None),
         ("replace", bootstrap_review_host.REVIEW_DISPATCH_PATH, None),
     ]
@@ -406,6 +462,7 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         (next_observation_contract.SUDOERS_CONTENT.encode("utf-8"), True),
         (processing_contract.SUDOERS_CONTENT.encode("utf-8"), True),
         (first_adjudication_contract.PHASE68_SUDOERS_CONTENT.encode("utf-8"), True),
+        (first_adjudication_contract.SUDOERS_CONTENT.encode("utf-8"), True),
         (b"cinegraph-review ALL=(root) NOPASSWD: ALL\n", False),
     ],
 )

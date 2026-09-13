@@ -17,6 +17,7 @@ SpeakerReviewGraphOperation = Literal[
     "observe-primary",
     "submit-next-primary",
     "submit-first-adjudication",
+    "observe-first-adjudication",
     "process-primary-results",
     "advance",
     "final-review",
@@ -127,6 +128,24 @@ class SpeakerReviewGraphWorkflow:
 
     submit_first_adjudication_part = submit_first_adjudication
 
+    def observe_first_adjudication(
+        self,
+        run_directory: Path,
+        *,
+        verified_run_state: SpeakerReviewRunState | None = None,
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        """Observe only adjudication part one and stop immediately."""
+
+        return self._invoke(
+            operation="observe-first-adjudication",
+            corpus_root=None,
+            seasons=(),
+            run_directory=run_directory,
+            verified_run_state=verified_run_state,
+        )
+
+    observe_first_adjudication_part = observe_first_adjudication
+
     def process_primary_results(
         self,
         run_directory: Path,
@@ -222,6 +241,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_node("observe_primary", self._observe_primary)
         graph.add_node("submit_next_primary", self._submit_next_primary)
         graph.add_node("submit_first_adjudication", self._submit_first_adjudication)
+        graph.add_node("observe_first_adjudication", self._observe_first_adjudication)
         graph.add_node("process_primary_results", self._process_primary_results)
         graph.add_node("advance", self._advance)
         graph.add_node("final_review", self._final_review)
@@ -237,6 +257,7 @@ class SpeakerReviewGraphWorkflow:
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
+                "observe_first_adjudication": "observe_first_adjudication",
                 "process_primary_results": "process_primary_results",
             },
         )
@@ -248,6 +269,7 @@ class SpeakerReviewGraphWorkflow:
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
+                "observe_first_adjudication": "observe_first_adjudication",
                 "process_primary_results": "process_primary_results",
                 "advance": "advance",
                 "final_review": "final_review",
@@ -264,6 +286,7 @@ class SpeakerReviewGraphWorkflow:
                 "observe_primary": "observe_primary",
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
+                "observe_first_adjudication": "observe_first_adjudication",
                 "process_primary_results": "process_primary_results",
                 "advance": "advance",
                 "final_review": "final_review",
@@ -276,6 +299,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_edge("observe_primary", END)
         graph.add_edge("submit_next_primary", END)
         graph.add_edge("submit_first_adjudication", END)
+        graph.add_edge("observe_first_adjudication", END)
         graph.add_edge("process_primary_results", END)
         graph.add_edge("advance", END)
         graph.add_edge("final_review", END)
@@ -296,6 +320,11 @@ class SpeakerReviewGraphWorkflow:
             and state["run_state"] is not None
         ):
             return "submit_first_adjudication"
+        if (
+            state["operation"] == "observe-first-adjudication"
+            and state["run_state"] is not None
+        ):
+            return "observe_first_adjudication"
         if (
             state["operation"] == "process-primary-results"
             and state["run_state"] is not None
@@ -367,6 +396,12 @@ class SpeakerReviewGraphWorkflow:
             }
         ):
             return "submit_first_adjudication"
+        if state["operation"] == "observe-first-adjudication" and run_state.status in {
+            SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
+            SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
+            SpeakerReviewRunStatus.FAILED,
+        }:
+            return "observe_first_adjudication"
         if state["operation"] == "process-primary-results" and run_state.status in {
             SpeakerReviewRunStatus.PRIMARY_PART_COMPLETED,
             SpeakerReviewRunStatus.ADJUDICATION_PREPARED,
@@ -460,6 +495,18 @@ class SpeakerReviewGraphWorkflow:
         run_directory, run_state = self._required_run_context(state)
         return {
             "run_state": self._workflow.process_primary_results(
+                run_directory,
+                run_state,
+            )
+        }
+
+    def _observe_first_adjudication(
+        self,
+        state: SpeakerReviewGraphState,
+    ) -> dict[str, SpeakerReviewRunState]:
+        run_directory, run_state = self._required_run_context(state)
+        return {
+            "run_state": self._workflow.observe_first_adjudication(
                 run_directory,
                 run_state,
             )
