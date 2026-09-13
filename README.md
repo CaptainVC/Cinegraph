@@ -307,6 +307,19 @@ requires explicit reconciliation. See
 [ADR-0029](docs/adr/0029-private-first-adjudication-submission-boundary.md) and
 the [VPS first-adjudication submission runbook](docs/operations/private-speaker-review-first-adjudication-submission-boundary.md).
 
+Phase 70 adds the seventh forced review command,
+`speaker-review-observe-first-adjudication-v1`, for one status lookup of exactly
+the first submitted Terra adjudication part. A successful lookup downloads only
+that part's output and stops at the explicit `adjudication_part_completed`
+checkpoint; a non-terminal lookup is a no-op and never polls. The isolated
+egress worker revalidates five root-selected inventory digests plus the exact
+request digest before opening its read-only secret, while the root coordinator
+binds the complete Phase 69 evidence chain and publishes aggregate-only,
+create-once receipts. It cannot submit work, parse adjudication, enter final
+review, promote corpus files, or ingest data. See
+[ADR-0030](docs/adr/0030-private-first-adjudication-observation-boundary.md) and
+the [VPS first-adjudication observation runbook](docs/operations/private-speaker-review-first-adjudication-observation.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
