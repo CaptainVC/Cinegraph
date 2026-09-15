@@ -59,6 +59,7 @@ source = ["src/cinegraph"]
 
 [tool.coverage.report]
 fail_under = 87
+precision = 2
 show_missing = true
 
 [tool.coverage.xml]

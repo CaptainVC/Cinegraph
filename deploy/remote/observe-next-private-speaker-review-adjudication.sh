@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# Root-owned, no-argument wrapper for one bounded next-adjudication submission.
+# Root-owned, no-argument wrapper for one bounded next-adjudication observation.
 set -euo pipefail
 PATH=/usr/sbin:/usr/bin
 export PATH
@@ -17,10 +17,9 @@ readonly CORPUS_ROOT="$SHARED_ROOT/private-corpus"
 readonly DEV_CORPUS_ROOT="$CORPUS_ROOT/dev"
 readonly SPEAKER_REVIEW_ROOT="$DEV_CORPUS_ROOT/speaker-review"
 readonly AUTHORIZATION_ROOT="$SPEAKER_REVIEW_ROOT/authorization"
-readonly SUBMISSION_RECEIPTS_ROOT="$SPEAKER_REVIEW_ROOT/submission-receipts"
-readonly FIRST_ADJUDICATION_RECEIPTS_ROOT="$SPEAKER_REVIEW_ROOT/first-adjudication-submission-receipts"
-readonly FIRST_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT="$SPEAKER_REVIEW_ROOT/first-adjudication-observation-receipts"
-readonly NEXT_RECEIPTS_ROOT="$SPEAKER_REVIEW_ROOT/next-adjudication-submission-receipts"
+readonly PRIMARY_SUBMISSION_RECEIPTS_ROOT="$SPEAKER_REVIEW_ROOT/submission-receipts"
+readonly NEXT_ADJUDICATION_SUBMISSION_RECEIPTS_ROOT="$SPEAKER_REVIEW_ROOT/next-adjudication-submission-receipts"
+readonly OBSERVATION_RECEIPTS_ROOT="$SPEAKER_REVIEW_ROOT/next-adjudication-observation-receipts"
 readonly RUNS_ROOT="$DEV_CORPUS_ROOT/review-runs"
 readonly TRANSFER_LOCK="$DEV_CORPUS_ROOT/.transfer.lock"
 readonly DEPLOYMENT_LOCK="$DEPLOY_ROOT/.deploy.lock"
@@ -29,11 +28,11 @@ readonly ENV_FILE="/etc/cinegraph/dev.env"
 readonly REPOSITORY_URL="https://github.com/CaptainVC/Cinegraph.git"
 readonly TIMEOUT_SECONDS="1800"
 readonly KILL_AFTER_SECONDS="10"
-readonly CONTAINER_NAME="cinegraph-speaker-review-submit-next-adjudication"
-readonly COMPOSE_SERVICE="corpus-speaker-review-submit-next-adjudication"
+readonly CONTAINER_NAME="cinegraph-speaker-review-observe-next-adjudication"
+readonly COMPOSE_SERVICE="corpus-speaker-review-observe-next-adjudication"
 
 fail() {
-    printf '%s\n' "private next-adjudication submission rejected" >&2
+    printf '%s\n' "private next-adjudication observation rejected" >&2
     exit 1
 }
 
@@ -45,20 +44,21 @@ cleanup_worker() {
     local review_mount_source=""
     local secret_mount=""
     local tmp_mount=""
-    expected_image="$({
+    expected_image="$(
         timeout --signal=TERM --kill-after="${KILL_AFTER_SECONDS}s" "${KILL_AFTER_SECONDS}s" \
-            docker compose --progress quiet --env-file "$ENV_FILE" \
-            --profile corpus-speaker-review-submit-next-adjudication \
+            docker compose --progress quiet \
+            --env-file "$ENV_FILE" \
+            --profile corpus-speaker-review-observe-next-adjudication \
             -f "$release_dir/deploy/compose.yaml" \
             config --images "$COMPOSE_SERVICE" 2>/dev/null
-    })" || return 0
+    )" || return 0
     [[ -n "$expected_image" && "$expected_image" != *$'\n'* ]] || return 0
-    identity="$({
+    identity="$(
         timeout --signal=TERM --kill-after="${KILL_AFTER_SECONDS}s" "${KILL_AFTER_SECONDS}s" \
             docker inspect --format \
-            '{{.Name}}{{"\n"}}{{index .Config.Labels "com.docker.compose.service"}}{{"\n"}}{{index .Config.Labels "com.docker.compose.oneoff"}}{{"\n"}}{{index .Config.Labels "com.docker.compose.project.config_files"}}{{"\n"}}{{index .Config.Labels "com.docker.compose.project.working_dir"}}{{"\n"}}{{.Config.Image}}{{"\n"}}{{index .Config.Labels "com.docker.compose.project"}}{{"\n"}}{{.Config.User}}{{"\n"}}{{.Config.WorkingDir}}{{"\n"}}{{json .Config.Cmd}}{{"\n"}}{{.HostConfig.ReadonlyRootfs}}{{"\n"}}{{.HostConfig.Privileged}}{{"\n"}}{{json .HostConfig.CapDrop}}{{"\n"}}{{json .HostConfig.SecurityOpt}}{{"\n"}}{{.HostConfig.PidsLimit}}{{"\n"}}{{json .Config.Env}}{{"\n"}}{{range $name, $configuration := .NetworkSettings.Networks}}{{printf "%s," $name}}{{end}}{{"\n"}}{{range .Mounts}}{{printf "%s|%s|%t\n" .Source .Destination .RW}}{{end}}' \
+            '{{.Name}}{{"\n"}}{{index .Config.Labels "com.docker.compose.service"}}{{"\n"}}{{index .Config.Labels "com.docker.compose.oneoff"}}{{"\n"}}{{index .Config.Labels "com.docker.compose.project.config_files"}}{{"\n"}}{{index .Config.Labels "com.docker.compose.project.working_dir"}}{{"\n"}}{{.Config.Image}}{{"\n"}}{{index .Config.Labels "com.docker.compose.project"}}{{"\n"}}{{.Config.User}}{{"\n"}}{{.Config.WorkingDir}}{{"\n"}}{{json .Config.Cmd}}{{"\n"}}{{.HostConfig.ReadonlyRootfs}}{{"\n"}}{{.HostConfig.Privileged}}{{"\n"}}{{json .HostConfig.CapDrop}}{{"\n"}}{{json .HostConfig.SecurityOpt}}{{"\n"}}{{.HostConfig.PidsLimit}}{{"\n"}}{{json .Config.Env}}{{"\n"}}{{range $name, $configuration := .NetworkSettings.Networks}}{{printf "%s," $name}}{{end}}{{"\n"}}{{range .Mounts}}{{printf "%s|%s|%t\\n" .Source .Destination .RW}}{{end}}' \
             "$CONTAINER_NAME" 2>/dev/null
-    })" || return 0
+    )" || return 0
     mapfile -t lines <<<"$identity"
     [[ "${#lines[@]}" -eq 20 ]] || return 0
     [[ "${lines[0]}" == "/$CONTAINER_NAME" ]] || return 0
@@ -70,7 +70,7 @@ cleanup_worker() {
     [[ "${lines[6]}" == "cinegraph-dev" ]] || return 0
     [[ "${lines[7]}" == "10002:10002" ]] || return 0
     [[ "${lines[8]}" == "/app" ]] || return 0
-    [[ "${lines[9]}" == '["python","scripts/submit_next_private_speaker_review_adjudication_workspace.py"]' ]] || return 0
+    [[ "${lines[9]}" == '["python","scripts/observe_next_private_speaker_review_adjudication_workspace.py"]' ]] || return 0
     [[ "${lines[10]}" == "true" ]] || return 0
     [[ "${lines[11]}" == "false" ]] || return 0
     [[ "${lines[12]}" == '["ALL"]' ]] || return 0
@@ -144,15 +144,15 @@ check_root_path "$CORPUS_ROOT" directory 700
 check_root_path "$DEV_CORPUS_ROOT" directory 700
 check_root_path "$SPEAKER_REVIEW_ROOT" directory 700
 check_root_path "$AUTHORIZATION_ROOT" directory 700
-check_root_path "$SUBMISSION_RECEIPTS_ROOT" directory 700
-check_root_path "$FIRST_ADJUDICATION_RECEIPTS_ROOT" directory 700
-check_root_path "$FIRST_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT" directory 700
-check_root_path "$NEXT_RECEIPTS_ROOT" directory 700
+check_root_path "$PRIMARY_SUBMISSION_RECEIPTS_ROOT" directory 700
+check_root_path "$NEXT_ADJUDICATION_SUBMISSION_RECEIPTS_ROOT" directory 700
+check_root_path "$OBSERVATION_RECEIPTS_ROOT" directory 700
 check_root_path "$RUNS_ROOT" directory 700
 check_root_path "$ENV_FILE" file 600
-check_root_path /usr/local/sbin/cinegraph-submit-next-private-speaker-review-adjudication file 755
+check_root_path /usr/local/sbin/cinegraph-observe-next-private-speaker-review-adjudication file 755
 
 umask 077
+# Every private worker acquires locks in transfer -> deployment -> review order.
 [[ ! -L "$TRANSFER_LOCK" ]] || fail
 exec 8>"$TRANSFER_LOCK"
 [[ -f "$TRANSFER_LOCK" && "$(stat -c '%u:%g:%a:%h' "$TRANSFER_LOCK")" == "0:0:600:1" ]] || fail
@@ -180,26 +180,23 @@ release_sha="$(git -C "$release_dir" rev-parse --verify HEAD)"
 [[ "$release_dir" == "$RELEASES_ROOT/$release_sha" ]] || fail
 [[ "$(git -C "$release_dir" rev-parse --verify refs/remotes/origin/main)" == "$release_sha" ]] || fail
 
-processor="$release_dir/scripts/run_private_speaker_review_next_adjudication.py"
-worker="$release_dir/scripts/submit_next_private_speaker_review_adjudication_workspace.py"
-next_contract="$release_dir/scripts/private_speaker_review_next_adjudication_submission_contract.py"
-next_host_contract="$release_dir/scripts/private_speaker_review_next_adjudication_host_contract.py"
+processor="$release_dir/scripts/run_private_speaker_review_next_adjudication_observation.py"
+worker="$release_dir/scripts/observe_next_private_speaker_review_adjudication_workspace.py"
+observation_contract="$release_dir/scripts/private_speaker_review_next_adjudication_observation_contract.py"
+observation_host_contract="$release_dir/scripts/private_speaker_review_next_adjudication_observation_host_contract.py"
 compose="$release_dir/deploy/compose.yaml"
 trusted_files=(
     "$processor"
     "$worker"
-    "$next_contract"
-    "$next_host_contract"
-    "$release_dir/scripts/run_private_speaker_review_first_adjudication_observation.py"
-    "$release_dir/scripts/private_speaker_review_first_adjudication_observation_contract.py"
-    "$release_dir/scripts/private_speaker_review_first_adjudication_observation_host_contract.py"
-    "$release_dir/scripts/run_private_speaker_review_first_adjudication.py"
-    "$release_dir/scripts/private_speaker_review_first_adjudication_submission_contract.py"
-    "$release_dir/scripts/private_speaker_review_first_adjudication_host_contract.py"
-    "$release_dir/scripts/run_private_speaker_review_next_primary.py"
-    "$release_dir/scripts/private_speaker_review_next_primary_submission_contract.py"
-    "$release_dir/scripts/private_speaker_review_next_primary_host_contract.py"
-    "$release_dir/scripts/private_speaker_review_submission.py"
+    "$observation_contract"
+    "$observation_host_contract"
+    "$release_dir/scripts/run_private_speaker_review_next_adjudication.py"
+    "$release_dir/scripts/private_speaker_review_next_adjudication_submission_contract.py"
+    "$release_dir/scripts/private_speaker_review_next_adjudication_host_contract.py"
+    "$release_dir/scripts/run_private_speaker_review_observation.py"
+    "$release_dir/scripts/private_speaker_review_observation_contract.py"
+    "$release_dir/scripts/private_speaker_review_observation_host_contract.py"
+    "$release_dir/scripts/run_private_speaker_review_submission.py"
     "$release_dir/scripts/private_speaker_review_submission_contract.py"
     "$release_dir/scripts/private_speaker_review_submission_host_contract.py"
     "$release_dir/scripts/private_corpus_host_contract.py"
@@ -211,19 +208,16 @@ for tracked_file in "${trusted_files[@]}"; do
     [[ "$((8#$(stat -c '%a' "$tracked_file") & 8#022))" -eq 0 ]] || fail
 done
 for tracked_name in \
+    scripts/run_private_speaker_review_next_adjudication_observation.py \
+    scripts/observe_next_private_speaker_review_adjudication_workspace.py \
+    scripts/private_speaker_review_next_adjudication_observation_contract.py \
+    scripts/private_speaker_review_next_adjudication_observation_host_contract.py \
     scripts/run_private_speaker_review_next_adjudication.py \
-    scripts/submit_next_private_speaker_review_adjudication_workspace.py \
     scripts/private_speaker_review_next_adjudication_submission_contract.py \
     scripts/private_speaker_review_next_adjudication_host_contract.py \
-    scripts/run_private_speaker_review_first_adjudication_observation.py \
-    scripts/private_speaker_review_first_adjudication_observation_contract.py \
-    scripts/private_speaker_review_first_adjudication_observation_host_contract.py \
-    scripts/run_private_speaker_review_first_adjudication.py \
-    scripts/private_speaker_review_first_adjudication_submission_contract.py \
-    scripts/private_speaker_review_first_adjudication_host_contract.py \
-    scripts/run_private_speaker_review_next_primary.py \
-    scripts/private_speaker_review_next_primary_submission_contract.py \
-    scripts/private_speaker_review_next_primary_host_contract.py \
+    scripts/run_private_speaker_review_observation.py \
+    scripts/private_speaker_review_observation_contract.py \
+    scripts/private_speaker_review_observation_host_contract.py \
     scripts/run_private_speaker_review_submission.py \
     scripts/private_speaker_review_submission_contract.py \
     scripts/private_speaker_review_submission_host_contract.py \

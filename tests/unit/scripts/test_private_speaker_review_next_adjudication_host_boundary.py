@@ -37,9 +37,10 @@ def test_bootstrap_manages_the_new_root_only_paths(
         "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP7fR75LrVcoQQVx+uQnTj2m1aNQdnziE/Km8eKh9XZk"
     )
     assert host.REVIEW_NEXT_ADJUDICATION_HELPER_PATH in managed
-    assert managed[bootstrap_review_host.REVIEW_SUDOERS_PATH] == (
-        host.SUDOERS_CONTENT.encode("utf-8")
-    )
+    managed_sudoers = managed[bootstrap_review_host.REVIEW_SUDOERS_PATH]
+    assert managed_sudoers.startswith(host.SUDOERS_CONTENT.encode("utf-8"))
+    assert b"cinegraph-observe-next-private-speaker-review-adjudication" in managed_sudoers
+    assert b"NOPASSWD: ALL" not in managed_sudoers
 
 
 def test_dispatcher_and_helper_are_fixed_and_fail_closed() -> None:
@@ -68,7 +69,7 @@ def test_dispatcher_and_helper_are_fixed_and_fail_closed() -> None:
     assert '[[ "${lines[16]}" == "cinegraph-dev_egress," ]]' in helper
     assert "OPENAI_API_KEY=" in helper
     assert (
-        "^/opt/cinegraph/shared/private-corpus/dev/review-runs/sha256-[0-9a-f]{64}/review-runs$"
+        "^/opt/cinegraph/shared/private-corpus/dev/review-runs/sha256-[0-9a-f]{64}/review-runs/(speaker-review-[0-9a-f]{16})$"
         in helper
     )
     assert "$release_dir/shared/private-corpus/dev/review-runs" not in helper

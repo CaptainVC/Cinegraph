@@ -10,6 +10,8 @@ from cinegraph.adapters.llm.openai_speaker_review_batch_gateway import (
 )
 from cinegraph.config import DEFAULT_SPEAKER_REVIEW_CONFIGURATION
 from cinegraph.config.speaker_review_transport import (
+    SPEAKER_REVIEW_OBSERVATION_MAX_RETRIES,
+    SPEAKER_REVIEW_OBSERVATION_TIMEOUT_SECONDS,
     SPEAKER_REVIEW_SUBMISSION_TIMEOUT_SECONDS,
 )
 
@@ -120,3 +122,61 @@ def test_submission_rejects_unbounded_or_empty_bytes() -> None:
     for content in (b"", b"x" * (SUBMISSION_REQUEST_MAX_BYTES + 1)):
         with pytest.raises(ValueError, match="configured limit"):
             gateway.submit("requests.jsonl", content, "24h", {})
+
+
+class _ObservationClient:
+    def __init__(self) -> None:
+        self.options: list[dict[str, object]] = []
+        self.retrieve_calls: list[str] = []
+        self.content_calls: list[str] = []
+        self.batches = self
+        self.files = self
+        self.request_counts = type("Counts", (), {"total": 3, "completed": 2, "failed": 1})()
+        self.id = "batch-observed"
+        self.status = "completed"
+        self.output_file_id = "output-file"
+        self.error_file_id = "error-file"
+        self.text = "{}\n"
+
+    def with_options(self, **options: object) -> "_ObservationClient":
+        self.options.append(options)
+        return self
+
+    def retrieve(self, batch_id: str) -> "_ObservationClient":
+        self.retrieve_calls.append(batch_id)
+        return self
+
+    def content(self, file_id: str) -> "_ObservationClient":
+        self.content_calls.append(file_id)
+        return self
+
+
+def test_retrieve_uses_one_no_retry_bounded_observation_client_call() -> None:
+    client = _ObservationClient()
+    gateway = OpenAISpeakerReviewBatchGateway(client, DEFAULT_SPEAKER_REVIEW_CONFIGURATION)  # type: ignore[arg-type]
+
+    result = gateway.retrieve("batch-observed")
+
+    assert client.options == [
+        {
+            "max_retries": SPEAKER_REVIEW_OBSERVATION_MAX_RETRIES,
+            "timeout": SPEAKER_REVIEW_OBSERVATION_TIMEOUT_SECONDS,
+        }
+    ]
+    assert client.retrieve_calls == ["batch-observed"]
+    assert result.batch_id == "batch-observed"
+    assert (result.total_requests, result.completed_requests, result.failed_requests) == (3, 2, 1)
+
+
+def test_download_file_uses_one_no_retry_bounded_observation_client_call() -> None:
+    client = _ObservationClient()
+    gateway = OpenAISpeakerReviewBatchGateway(client, DEFAULT_SPEAKER_REVIEW_CONFIGURATION)  # type: ignore[arg-type]
+
+    assert gateway.download_file("output-file") == "{}\n"
+    assert client.options == [
+        {
+            "max_retries": SPEAKER_REVIEW_OBSERVATION_MAX_RETRIES,
+            "timeout": SPEAKER_REVIEW_OBSERVATION_TIMEOUT_SECONDS,
+        }
+    ]
+    assert client.content_calls == ["output-file"]

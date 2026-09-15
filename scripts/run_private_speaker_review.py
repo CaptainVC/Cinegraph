@@ -64,6 +64,7 @@ _CONFIGURATION_BINDING_FILES: Final = (
     "src/cinegraph/common/prompts.py",
     "src/cinegraph/config/models.py",
     "src/cinegraph/config/speaker_review.py",
+    "src/cinegraph/common/speaker_review_cost_policy.py",
     "src/cinegraph/config/speaker_review_filesystem.py",
     "src/cinegraph/ingestion/speaker_review/batch_requests.py",
     "src/cinegraph/ingestion/speaker_review/costs.py",

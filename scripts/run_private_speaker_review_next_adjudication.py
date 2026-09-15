@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import concurrent.futures
 import hashlib
+import importlib
 import json
 import os
 import platform
@@ -19,21 +20,35 @@ import signal
 import stat
 import subprocess
 import sys
+import types
 from dataclasses import replace
 from decimal import ROUND_CEILING, Decimal, InvalidOperation
+from math import ceil
 from pathlib import Path
 from typing import BinaryIO, Final, Mapping
 
 _ROOT = Path(__file__).resolve().parents[1]
+_SCRIPTS = _ROOT / "scripts"
+_ISOLATED_ROOT = bool(sys.flags.no_site)
 if os.fspath(_ROOT) not in sys.path:
     sys.path.insert(0, os.fspath(_ROOT))
+if os.fspath(_SCRIPTS) not in sys.path:
+    sys.path.insert(0, os.fspath(_SCRIPTS))
+if os.fspath(_ROOT / "src") not in sys.path:
+    sys.path.insert(0, os.fspath(_ROOT / "src"))
 
-from cinegraph.config import DEFAULT_SPEAKER_REVIEW_CONFIGURATION  # noqa: E402
-from cinegraph.domain.enums.enum import SpeakerReviewRunStatus  # noqa: E402
-from cinegraph.ingestion.speaker_review.workflow import (  # noqa: E402
-    SpeakerReviewRunState,
-    load_validated_run_state,
+from cinegraph.common.speaker_review_cost_policy import (  # noqa: E402
+    BATCH_DISCOUNT_MULTIPLIER,
+    ESTIMATED_CHARACTERS_PER_TOKEN,
+    MAXIMUM_RUN_COST_USD,
+    MODEL_TOKEN_PRICES,
 )
+
+# The root helper is deliberately executable with ``python -I -S -B``.  Do
+# not import the application package here: its configuration imports optional
+# Qdrant/OpenAI dependencies that are intentionally available only in the
+# isolated Compose worker. Both paths reuse the established host predecessor
+# checks; isolated execution uses a stdlib state view and journal validation.
 from scripts import (  # noqa: E402
     private_speaker_review_first_adjudication_host_contract as phase69_host,
 )
@@ -49,18 +64,99 @@ from scripts import (  # noqa: E402
 from scripts import (  # noqa: E402
     private_speaker_review_next_adjudication_submission_contract as contract,
 )
-from scripts import (  # noqa: E402
-    run_private_speaker_review_first_adjudication as phase69,
-)
-from scripts import (  # noqa: E402
-    run_private_speaker_review_first_adjudication_observation as phase70,
-)
-from scripts import (  # noqa: E402
-    run_private_speaker_review_next_primary as preparation,
-)
-from scripts import (  # noqa: E402
-    submit_next_private_speaker_review_adjudication_workspace as worker,
-)
+
+try:  # Application/state and provider worker imports are never required at root.
+    # ``-S`` is the security boundary: skip application imports entirely in
+    # isolated mode instead of probing optional host dependencies.
+    if sys.flags.no_site:
+        raise ModuleNotFoundError("isolated root")
+    _config = importlib.import_module("cinegraph.config")
+    _enum = importlib.import_module("cinegraph.domain.enums.enum")
+    _workflow = importlib.import_module("cinegraph.ingestion.speaker_review.workflow")
+    DEFAULT_SPEAKER_REVIEW_CONFIGURATION = _config.DEFAULT_SPEAKER_REVIEW_CONFIGURATION
+    SpeakerReviewRunStatus = _enum.SpeakerReviewRunStatus
+    SpeakerReviewRunState = _workflow.SpeakerReviewRunState
+    load_validated_run_state = _workflow.load_validated_run_state
+    from scripts import (  # noqa: E402
+        run_private_speaker_review_first_adjudication as phase69,
+    )
+    from scripts import (  # noqa: E402
+        run_private_speaker_review_first_adjudication_observation as phase70,
+    )
+    from scripts import run_private_speaker_review_next_primary as preparation  # noqa: E402
+    from scripts import (  # noqa: E402
+        submit_next_private_speaker_review_adjudication_workspace as worker,
+    )
+except ModuleNotFoundError:  # pragma: no cover - exercised by isolated launch test
+    _ISOLATED_ROOT = True
+    from dataclasses import dataclass
+    from enum import Enum
+
+    class SpeakerReviewRunStatus(str, Enum):
+        ADJUDICATION_PART_COMPLETED = "adjudication_part_completed"
+        ADJUDICATION_SUBMITTED = "adjudication_submitted"
+        FAILED = "failed"
+
+    @dataclass(frozen=True, slots=True)
+    class SpeakerReviewRunState:
+        """Small stdlib state view used only before the worker is started."""
+
+        values: Mapping[str, object]
+
+        def __getattr__(self, name: str) -> object:
+            try:
+                value = self.values[name]
+            except KeyError as error:
+                raise AttributeError(name) from error
+            if name == "status" and isinstance(value, str):
+                return SpeakerReviewRunStatus(value)
+            if name in {"adjudication_batch_ids", "adjudication_input_file_ids"}:
+                return tuple(value) if isinstance(value, list) else value
+            return value
+
+        def to_dict(self) -> dict[str, object]:
+            return dict(self.values)
+
+    def load_validated_run_state(
+        run: Path, _configuration: object
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        raw = (run / STATE_NAME).read_bytes()
+        state = _decode(raw)
+        state_keys = importlib.import_module(
+            "scripts.run_private_speaker_review_observation"
+        )._RUN_STATE_KEYS
+        if state.get("run_id") != run.name or set(state) != state_keys:
+            raise ValueError("run id")
+        return run, SpeakerReviewRunState(state)
+
+    preparation = importlib.import_module("scripts.run_private_speaker_review_next_primary")
+
+    # These predecessor coordinators are intentionally stdlib-only and remain
+    # usable under ``-I -S``. Keep their complete authentication and source
+    # verification path instead of replacing it with reduced shims.
+    phase69 = importlib.import_module("scripts.run_private_speaker_review_first_adjudication")
+    phase70 = importlib.import_module(
+        "scripts.run_private_speaker_review_first_adjudication_observation"
+    )
+    worker = types.SimpleNamespace(
+        _expected_names=lambda state: _expected_inventory_names(state),
+        _validate_checkpoint_shape=lambda state, *, submitted: _validate_state_shape(state),
+        _validate_completed_parts=lambda run, contents, state, count: _validate_completed_evidence(run, contents, state),
+        _validate_journal=lambda run, contents, state, part, **kwargs: _stdlib_journal(contents, state, part, **kwargs),
+        _parse_requests=lambda contents, state: tuple(
+            value
+            for part in range(1, state.adjudication_part_count + 1)
+            for value in (
+                json.loads(line.decode("utf-8"))
+                for line in contents[f"adjudication-part-{part:04d}-requests.jsonl"].splitlines()
+                if line.strip()
+            )
+        ),
+        _validate_replay_evidence=lambda *args, **kwargs: _validate_replay_evidence_stdlib(*args, **kwargs),
+    )
+    DEFAULT_SPEAKER_REVIEW_CONFIGURATION = types.SimpleNamespace(
+        maximum_run_cost_usd=MAXIMUM_RUN_COST_USD,
+    )
 
 
 class NextAdjudicationSubmissionError(RuntimeError):
@@ -260,6 +356,45 @@ def _record(path: Path) -> tuple[dict[str, object], str]:
     return _decode(raw), _sha(raw)
 
 
+def _fsync_directory(path: Path) -> None:
+    """Durably publish root evidence without importing a predecessor."""
+
+    if os.name != "posix":
+        return
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _repair_linked_publication(path: Path) -> None:
+    """Finish only the authenticated hard-link publication after a crash."""
+
+    pending = path.with_name(f".{path.name}.pending")
+    if not os.path.lexists(pending):
+        return
+    try:
+        published = path.lstat()
+        staging = pending.lstat()
+        if (
+            not stat.S_ISREG(published.st_mode)
+            or not stat.S_ISREG(staging.st_mode)
+            or stat.S_ISLNK(published.st_mode)
+            or stat.S_ISLNK(staging.st_mode)
+            or (published.st_dev, published.st_ino) != (staging.st_dev, staging.st_ino)
+            or published.st_nlink != 2
+            or staging.st_nlink != 2
+            or stat.S_IMODE(published.st_mode) != 0o600
+            or (published.st_uid, published.st_gid) != (ROOT_UID, ROOT_GID)
+        ):
+            raise OSError
+        pending.unlink()
+        _fsync_directory(path.parent)
+    except OSError as error:
+        raise NextAdjudicationSubmissionError("adjudication record unavailable") from error
+
+
 def _read_request(stream: BinaryIO) -> dict[str, object]:
     raw = stream.readline(contract.REQUEST_MAX_BYTES + 1)
     if stream.read(1):
@@ -332,6 +467,74 @@ def _classes(
     return artifacts, journals, outputs, derived
 
 
+def _state_dict(state: object) -> dict[str, object]:
+    """Return the canonical state payload without importing workflow code."""
+
+    if isinstance(state, Mapping):
+        return dict(state)
+    to_dict = getattr(state, "to_dict", None)
+    if not callable(to_dict):
+        raise ValueError("state")
+    value = to_dict()
+    if not isinstance(value, dict):
+        raise ValueError("state")
+    return value
+
+
+def _state_value(state: object, name: str) -> object:
+    if isinstance(state, Mapping):
+        return state[name]
+    return getattr(state, name)
+
+
+def _expected_inventory_names(state: object) -> tuple[set[str], set[str]]:
+    """Build the worker inventory contract from raw state fields.
+
+    This mirrors the worker's name contract but intentionally lives in the
+    root coordinator so a terminal ``failed`` checkpoint can be inspected
+    without importing LangGraph/configuration dependencies.  It is also the
+    source of truth when the worker module is unavailable under ``-S``.
+    """
+
+    completed = _state_value(state, "adjudication_completed_part_count")
+    primary_parts = _state_value(state, "primary_part_count")
+    adjudication_parts = _state_value(state, "adjudication_part_count")
+    if not all(type(value) is int and value >= 0 for value in (completed, primary_parts, adjudication_parts)):
+        raise ValueError("state counts")
+    status = _state_value(state, "status")
+    status_value = getattr(status, "value", status)
+    journal_parts = range(1, completed + 2) if status_value in {"adjudication_submitted", "failed"} else range(1, completed + 1)
+    required = {
+        STATE_NAME,
+        "candidates.jsonl",
+        "source-manifest.json",
+        *(f"primary-part-{part:04d}-requests.jsonl" for part in range(1, primary_parts + 1)),
+        *(f"primary-part-{part:04d}-output.jsonl" for part in range(1, primary_parts + 1)),
+        *(f"adjudication-part-{part:04d}-output.jsonl" for part in range(1, completed + 1)),
+        *(f".primary-part-{part:04d}-submission-{kind}.json" for part in range(1, primary_parts + 1) for kind in ("intent", "completed")),
+        *(f"adjudication-part-{part:04d}-requests.jsonl" for part in range(1, adjudication_parts + 1)),
+        *(f".adjudication-part-{part:04d}-submission-{kind}.json" for part in journal_parts for kind in ("intent", "completed")),
+        "primary-verdicts.jsonl",
+        "primary-parse-errors.json",
+        "primary-decisions.jsonl",
+    }
+    optional = {
+        *(f"primary-part-{part:04d}-api-errors.jsonl" for part in range(1, primary_parts + 1)),
+        *(f"adjudication-part-{part:04d}-api-errors.jsonl" for part in range(1, completed + 1)),
+    }
+    if status_value == "adjudication_part_completed":
+        next_part = completed + 1
+        optional.update(
+            {
+                f".adjudication-part-{next_part:04d}-submission-intent.json",
+                f".adjudication-part-{next_part:04d}-submission-completed.json",
+            }
+        )
+    if status_value == "failed":
+        required.add("terminal-api-errors.jsonl")
+    return required, optional
+
+
 def _set_digest(contents: Mapping[str, bytes]) -> str:
     digest = hashlib.sha256()
     for name in sorted(contents):
@@ -361,11 +564,25 @@ def _inventory(
         )
         if (
             canonical != run
-            or state_payload != state.to_dict()
-            or state.run_id != run.name
+            or not isinstance(state_payload, dict)
+            or _canonical(state_payload) != _canonical(_state_dict(state))
+            or _state_value(state, "run_id") != run.name
         ):
             raise ValueError
-        required, optional = worker._expected_names(state)
+        # Use the worker's established contract for active checkpoints so its
+        # richer tests/public API remain unchanged.  The worker deliberately
+        # rejects terminal checkpoints, while the root must still inspect a
+        # failed run to publish an evidence-bound failed receipt; use the
+        # stdlib contract for that case (and whenever the worker is absent in
+        # an isolated release).
+        status = getattr(_state_value(state, "status"), "value", _state_value(state, "status"))
+        if status == "failed":
+            required, optional = _expected_inventory_names(state)
+        else:
+            try:
+                required, optional = worker._expected_names(state)
+            except (AttributeError, ModuleNotFoundError):
+                required, optional = _expected_inventory_names(state)
         if not required <= set(files) or not set(files) <= required | optional:
             raise ValueError
         artifacts, journals, outputs, derived = _classes(files)
@@ -510,15 +727,27 @@ def _pre_submission_snapshot(
             or not isinstance(intent.get("pre_updated_at"), str)
         ):
             raise ValueError
-        previous = replace(
-            state,
-            status=SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
-            updated_at=intent["pre_updated_at"],
-            adjudication_batch_id=state.adjudication_batch_ids[-2],
-            adjudication_input_file_id=state.adjudication_input_file_ids[-2],
-            adjudication_batch_ids=state.adjudication_batch_ids[:-1],
-            adjudication_input_file_ids=state.adjudication_input_file_ids[:-1],
-        )
+        if _ISOLATED_ROOT:
+            previous_payload = state.to_dict()
+            previous_payload.update(
+                status=SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED.value,
+                updated_at=intent["pre_updated_at"],
+                adjudication_batch_id=state.adjudication_batch_ids[-2],
+                adjudication_input_file_id=state.adjudication_input_file_ids[-2],
+                adjudication_batch_ids=list(state.adjudication_batch_ids[:-1]),
+                adjudication_input_file_ids=list(state.adjudication_input_file_ids[:-1]),
+            )
+            previous = SpeakerReviewRunState(previous_payload)
+        else:
+            previous = replace(
+                state,
+                status=SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
+                updated_at=intent["pre_updated_at"],
+                adjudication_batch_id=state.adjudication_batch_ids[-2],
+                adjudication_input_file_id=state.adjudication_input_file_ids[-2],
+                adjudication_batch_ids=state.adjudication_batch_ids[:-1],
+                adjudication_input_file_ids=state.adjudication_input_file_ids[:-1],
+            )
         snapshot = dict(contents)
         snapshot.pop(_INTENT_NAME.format(part=completed + 1), None)
         snapshot.pop(_COMPLETED_NAME.format(part=completed + 1), None)
@@ -550,10 +779,26 @@ def _receipt_paths(run_id: str, part: int) -> tuple[Path, Path]:
 
 def _validate_state_shape(state: SpeakerReviewRunState) -> None:
     try:
-        worker._validate_checkpoint_shape(
-            state,
-            submitted=state.status is SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
-        )
+        submitted = state.status is SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED
+        if _ISOLATED_ROOT:
+            count = state.adjudication_completed_part_count
+            total = state.adjudication_part_count
+            ids = state.adjudication_batch_ids
+            inputs = state.adjudication_input_file_ids
+            expected = count + 1 if submitted else count
+            if (
+                type(count) is not int or type(total) is not int or count <= 0 or count >= total
+                or not isinstance(ids, tuple) or not isinstance(inputs, tuple)
+                or len(ids) != expected or len(inputs) != expected
+                or len(set(ids)) != len(ids) or len(set(inputs)) != len(inputs)
+                or not all(isinstance(value, str) and value == value.strip() and value for value in ids)
+                or not all(isinstance(value, str) and value == value.strip() and value for value in inputs)
+                or state.adjudication_batch_id != ids[-1]
+                or state.adjudication_input_file_id != inputs[-1]
+            ):
+                raise ValueError
+        else:
+            worker._validate_checkpoint_shape(state, submitted=submitted)
     except Exception as error:
         raise NextAdjudicationSubmissionError("adjudication checkpoint invalid") from error
     if state.adjudication_part_count <= 1:
@@ -576,15 +821,126 @@ def _validate_completed_evidence(
     state: SpeakerReviewRunState,
 ) -> None:
     try:
-        worker._validate_completed_parts(
-            run, contents, state, state.adjudication_completed_part_count
-        )
+        if _ISOLATED_ROOT:
+            ids = state.adjudication_batch_ids
+            inputs = state.adjudication_input_file_ids
+            for part in range(1, state.adjudication_completed_part_count + 1):
+                request = contents[f"adjudication-part-{part:04d}-requests.jsonl"]
+                binding = {
+                    "schema_version": 1,
+                    "request_sha256": _sha(request),
+                    "run_id": state.run_id,
+                    "stage": "adjudication",
+                    "part": part,
+                    "prompt_version": state.prompt_version,
+                    "batch_endpoint": "/v1/responses",
+                    "completion_window": "24h",
+                }
+                intent = _decode(contents[f".adjudication-part-{part:04d}-submission-intent.json"])
+                completed = _decode(contents[f".adjudication-part-{part:04d}-submission-completed.json"])
+                if (
+                    intent.get("binding") != binding
+                    or completed.get("binding") != binding
+                    or completed.get("batch_id") != ids[part - 1]
+                    or completed.get("input_file_id") != inputs[part - 1]
+                    or f"adjudication-part-{part:04d}-output.jsonl" not in contents
+                ):
+                    raise ValueError
+        else:
+            worker._validate_completed_parts(
+                run, contents, state, state.adjudication_completed_part_count
+            )
     except Exception as error:
         raise NextAdjudicationSubmissionError("adjudication evidence invalid") from error
 
 
+def _stdlib_journal(
+    contents: Mapping[str, bytes],
+    state: SpeakerReviewRunState,
+    part: int,
+    *,
+    expected_batch: str,
+    expected_input: str,
+) -> None:
+    request = contents[f"adjudication-part-{part:04d}-requests.jsonl"]
+    binding = {
+        "schema_version": 1,
+        "request_sha256": _sha(request),
+        "run_id": state.run_id,
+        "stage": "adjudication",
+        "part": part,
+        "prompt_version": state.prompt_version,
+        "batch_endpoint": "/v1/responses",
+        "completion_window": "24h",
+    }
+    intent = _decode(contents[f".adjudication-part-{part:04d}-submission-intent.json"])
+    completed = _decode(contents[f".adjudication-part-{part:04d}-submission-completed.json"])
+    if (
+        intent.get("binding") != binding
+        or completed.get("binding") != binding
+        or completed.get("batch_id") != expected_batch
+        or completed.get("input_file_id") != expected_input
+    ):
+        raise ValueError("journal")
+
+
+def _validate_replay_evidence_stdlib(
+    run: Path, contents: Mapping[str, bytes], state: SpeakerReviewRunState
+) -> None:
+    """Validate completed-prefix and active-part evidence without the worker."""
+
+    if state.status is not SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED:
+        raise ValueError("checkpoint")
+    _validate_state_shape(state)
+    ids = state.adjudication_batch_ids
+    inputs = state.adjudication_input_file_ids
+    for part in range(1, state.adjudication_completed_part_count + 1):
+        _stdlib_journal(
+            contents,
+            state,
+            part,
+            expected_batch=ids[part - 1],
+            expected_input=inputs[part - 1],
+        )
+        if f"adjudication-part-{part:04d}-output.jsonl" not in contents:
+            raise ValueError("output")
+    active = state.adjudication_completed_part_count + 1
+    _stdlib_journal(
+        contents,
+        state,
+        active,
+        expected_batch=ids[-1],
+        expected_input=inputs[-1],
+    )
+    if any(
+        f"adjudication-part-{active:04d}-{suffix}" in contents
+        for suffix in ("output.jsonl", "api-errors.jsonl")
+    ):
+        raise ValueError("active output")
+
+
 def _estimate_cost(contents: Mapping[str, bytes], state: SpeakerReviewRunState) -> int:
     try:
+        if _ISOLATED_ROOT:
+            requests = worker._parse_requests(contents, state)
+            if not requests:
+                raise ValueError
+            input_characters = 0
+            output_tokens = 0
+            for request in requests:
+                body = request.get("body")
+                if not isinstance(body, dict) or type(body.get("max_output_tokens")) is not int:
+                    raise ValueError
+                input_characters += len(json.dumps(body, ensure_ascii=False, separators=(",", ":")))
+                output_tokens += body["max_output_tokens"]
+            input_tokens = ceil(input_characters / ESTIMATED_CHARACTERS_PER_TOKEN)
+            input_price, output_price = MODEL_TOKEN_PRICES[state.adjudication_model]
+            estimate = (
+                (input_tokens * input_price + output_tokens * output_price)
+                / 1_000_000
+                * BATCH_DISCOUNT_MULTIPLIER
+            )
+            return _cost_micros(estimate)
         requests = worker._parse_requests(contents, state)
         return _cost_micros(
             worker.estimate_batch_cost_usd(
@@ -738,11 +1094,11 @@ def _write_once(path: Path, value: Mapping[str, object]) -> None:
                 stream.write(raw)
                 stream.flush()
                 os.fsync(stream.fileno())
-            phase69._fsync_directory(RECEIPTS_ROOT)
+            _fsync_directory(RECEIPTS_ROOT)
         os.link(pending, path, follow_symlinks=False)
-        phase69._fsync_directory(RECEIPTS_ROOT)
+        _fsync_directory(RECEIPTS_ROOT)
         pending.unlink()
-        phase69._fsync_directory(RECEIPTS_ROOT)
+        _fsync_directory(RECEIPTS_ROOT)
     except FileExistsError:
         existing, _ = _record(path)
         if existing != dict(value):
@@ -804,14 +1160,14 @@ def _worker_args(
     command.extend(
         (
             "--volume",
-            f"{run_parent.as_posix()}:{host.REVIEW_NEXT_ADJUDICATION_RUNS_TARGET}:rw",
+            f"{(run_parent / str(request['run_id'])).as_posix()}:{(host.REVIEW_NEXT_ADJUDICATION_RUNS_TARGET / str(request['run_id'])).as_posix()}:rw",
             host.REVIEW_NEXT_ADJUDICATION_COMPOSE_SERVICE,
         )
     )
     return command
 
 
-def _container_identity_is_exact(runs: Path) -> bool:
+def _container_identity_is_exact(runs: Path, run_id: str | None = None) -> bool:
     """Return true only for this operation's fixed-name Compose container."""
 
     try:
@@ -907,15 +1263,20 @@ def _container_identity_is_exact(runs: Path) -> bool:
             ):
                 return False
             destinations[destination] = (source, writable)
+        expected_destination = host.REVIEW_NEXT_ADJUDICATION_RUNS_TARGET
+        expected_source = runs
+        if run_id is not None:
+            expected_destination = expected_destination / run_id
+            expected_source = expected_source / run_id
         return (
-            destinations.get(host.REVIEW_NEXT_ADJUDICATION_RUNS_TARGET.as_posix())
-            == (runs.as_posix(), True)
+            destinations.get(expected_destination.as_posix())
+            == (expected_source.as_posix(), True)
             and destinations.get(host.REVIEW_NEXT_ADJUDICATION_SECRET_TARGET, ("", True))[1]
             is False
             and destinations.get(host.REVIEW_NEXT_ADJUDICATION_TMP_TARGET) == ("", True)
             and set(destinations)
             == {
-                host.REVIEW_NEXT_ADJUDICATION_RUNS_TARGET.as_posix(),
+                expected_destination.as_posix(),
                 host.REVIEW_NEXT_ADJUDICATION_SECRET_TARGET,
                 host.REVIEW_NEXT_ADJUDICATION_TMP_TARGET,
             }
@@ -932,8 +1293,8 @@ def _container_identity_is_exact(runs: Path) -> bool:
         return False
 
 
-def _cleanup_worker(runs: Path) -> None:
-    if not _container_identity_is_exact(runs):
+def _cleanup_worker(runs: Path, run_id: str | None = None) -> None:
+    if not _container_identity_is_exact(runs, run_id):
         return
     try:
         subprocess.run(
@@ -982,7 +1343,8 @@ def _run_worker(
 ) -> dict[str, object]:
     process: subprocess.Popen[bytes] | None = None
     try:
-        _cleanup_worker(run_parent)
+        run_id = str(request["run_id"])
+        _cleanup_worker(run_parent, run_id)
         process = subprocess.Popen(
             _worker_args(request, run_parent, bindings),
             cwd=RELEASE_ROOT,
@@ -1024,7 +1386,7 @@ def _run_worker(
                 _terminate_worker(process)
             except (OSError, subprocess.SubprocessError):
                 pass
-        _cleanup_worker(run_parent)
+        _cleanup_worker(run_parent, str(request["run_id"]))
 
 
 def _checkpoint_bindings(
@@ -1045,6 +1407,16 @@ def _checkpoint_bindings(
         contract.ENV_EXPECTED_PRE_OUTPUT_SET_SHA256: _set_digest(outputs),
         contract.ENV_EXPECTED_PRE_DERIVED_SET_SHA256: _set_digest(derived),
     }
+
+
+def _post_inventory(run: Path):
+    """Re-read and compare the complete post-worker inventory."""
+
+    first = _inventory(run)
+    second = _inventory(run)
+    if first != second:
+        raise NextAdjudicationSubmissionError("adjudication post-inventory changed")
+    return second
 
 
 def _fresh_binding_contents(
@@ -1325,7 +1697,7 @@ def process_request(request: Mapping[str, object]) -> dict[str, object]:
                 estimated=estimated,
                 actual=prior_actual,
             )
-            after, after_artifacts, after_journals, after_outputs, after_derived, after_state = _inventory(run)
+            after, after_artifacts, after_journals, after_outputs, after_derived, after_state = _post_inventory(run)
             _post_validate(
                 contents,
                 after,
@@ -1398,7 +1770,7 @@ def process_request(request: Mapping[str, object]) -> dict[str, object]:
             estimated=estimated,
             actual=prior_actual,
         )
-        after, after_artifacts, after_journals, after_outputs, after_derived, after_state = _inventory(run)
+        after, after_artifacts, after_journals, after_outputs, after_derived, after_state = _post_inventory(run)
         _post_validate(
             contents,
             after,

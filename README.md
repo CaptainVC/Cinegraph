@@ -334,6 +334,20 @@ observe, parse, enter final review, promote, or ingest. See
 [ADR-0031](docs/adr/0031-private-next-adjudication-submission-boundary.md) and
 the [VPS next-adjudication submission runbook](docs/operations/private-speaker-review-next-adjudication-submission.md).
 
+Phase 72 adds the ninth forced review command,
+`speaker-review-observe-next-adjudication-v1`, for exactly one observation of
+Terra adjudication part two. The root boundary accepts only the authenticated
+Phase 71 submitted checkpoint (`completed_count == 1`, exactly two IDs),
+binds the full immutable inventory and request/runtime evidence, and grants a
+fresh one-shot authorization. Incomplete provider work returns `waiting`
+without mutation; success downloads only part two and moves to
+`adjudication_part_completed` with `completed_count == 2`. Replay validates the
+existing root receipt without provider access; terminal checkpoints missing
+that receipt require operator reconciliation. It cannot parse
+results, submit part three, enter final review, promote, or ingest. See
+[ADR-0032](docs/adr/0032-private-next-adjudication-observation-boundary.md) and
+the [VPS next-adjudication observation runbook](docs/operations/private-speaker-review-next-adjudication-observation.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

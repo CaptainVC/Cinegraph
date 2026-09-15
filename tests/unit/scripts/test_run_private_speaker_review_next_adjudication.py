@@ -94,7 +94,7 @@ def _install_process_dependencies(
     run.mkdir()
     receipts = tmp_path / "receipts"
     receipts.mkdir()
-    sequence = iter(inventories)
+    sequence = iter([inventories[0], *(item for snapshot in inventories[1:] for item in (snapshot, snapshot))])
     writes: list[tuple[Path, dict[str, object]]] = []
     preparation = {
         "config_sha": "c" * 64,
@@ -148,8 +148,10 @@ def test_worker_arguments_bind_request_and_all_six_digests(tmp_path: Path) -> No
     for name, value in bindings.items():
         assert f"{name}={value}" in arguments
     assert arguments[-1] == root.host.REVIEW_NEXT_ADJUDICATION_COMPOSE_SERVICE
+    run_id = str(REQUEST["run_id"])
     assert (
-        f"{(tmp_path / 'review-runs').as_posix()}:{root.host.REVIEW_NEXT_ADJUDICATION_RUNS_TARGET}:rw"
+        f"{(tmp_path / 'review-runs' / run_id).as_posix()}:"
+        f"{(root.host.REVIEW_NEXT_ADJUDICATION_RUNS_TARGET / run_id).as_posix()}:rw"
         in arguments
     )
 
