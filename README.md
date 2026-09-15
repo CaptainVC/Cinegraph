@@ -348,6 +348,19 @@ results, submit part three, enter final review, promote, or ingest. See
 [ADR-0032](docs/adr/0032-private-next-adjudication-observation-boundary.md) and
 the [VPS next-adjudication observation runbook](docs/operations/private-speaker-review-next-adjudication-observation.md).
 
+Phase 73 adds the tenth forced review command,
+`speaker-review-submit-third-adjudication-v1`, for exactly Terra adjudication
+part three after Phase 72 has authenticated observation of part two. The root
+boundary accepts only `adjudication_part_completed` with `completed_count == 2`
+and `part_count > 2`, binds the complete predecessor chain, inventory,
+release/image/configuration, fresh authorization, deterministic cost, and
+authorized ceiling, and double-reads the post inventory. Only the part-three
+submission journal pair and narrow submitted checkpoint may change; matching
+journals can repair provider-free while ambiguity requires reconciliation. The
+egress worker cannot observe, download, parse, enter final review, promote, or
+ingest. See [ADR-0033](docs/adr/0033-private-third-adjudication-submission-boundary.md)
+and the [VPS third-adjudication submission runbook](docs/operations/private-speaker-review-third-adjudication-submission.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
