@@ -43,6 +43,7 @@ check_root_path /usr/local/sbin/cinegraph-submit-first-private-speaker-review-ad
 check_root_path /usr/local/sbin/cinegraph-observe-first-private-speaker-review-adjudication file 755
 check_root_path /usr/local/sbin/cinegraph-submit-next-private-speaker-review-adjudication file 755
 check_root_path /usr/local/sbin/cinegraph-observe-next-private-speaker-review-adjudication file 755
+check_root_path /usr/local/sbin/cinegraph-submit-third-private-speaker-review-adjudication file 755
 
 case "${SSH_ORIGINAL_COMMAND-}" in
     speaker-review-submit-primary-v1)
@@ -71,6 +72,9 @@ case "${SSH_ORIGINAL_COMMAND-}" in
         ;;
     speaker-review-observe-next-adjudication-v1)
         exec sudo -n /usr/local/sbin/cinegraph-observe-next-private-speaker-review-adjudication
+        ;;
+    speaker-review-submit-third-adjudication-v1)
+        exec sudo -n /usr/local/sbin/cinegraph-submit-third-private-speaker-review-adjudication
         ;;
     *)
         fail

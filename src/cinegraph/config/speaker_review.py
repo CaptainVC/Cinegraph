@@ -2,7 +2,9 @@ from dataclasses import dataclass
 
 from cinegraph.common.private_corpus_policy import SCRIPT_PDF_FILENAME_TEMPLATE
 from cinegraph.common.speaker_review_cost_policy import (
+    BATCH_COMPLETION_WINDOW,
     BATCH_DISCOUNT_MULTIPLIER,
+    BATCH_ENDPOINT,
     ESTIMATED_CHARACTERS_PER_TOKEN,
     MAXIMUM_RUN_COST_USD,
     MODEL_TOKEN_PRICES,
@@ -77,7 +79,7 @@ DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
     schema_version=5,
     ledger_schema_version=5,
     prompt_version="speaker-review-v1",
-    batch_endpoint="/v1/responses",
+    batch_endpoint=BATCH_ENDPOINT,
     batch_method="POST",
     response_schema_name="speaker_review_verdict",
     custom_id_separator="::",
@@ -103,7 +105,7 @@ DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
     maximum_recorded_tokens_per_batch=20_000_000,
     batch_discount_multiplier=BATCH_DISCOUNT_MULTIPLIER,
     maximum_run_cost_usd=MAXIMUM_RUN_COST_USD,
-    batch_completion_window="24h",
+    batch_completion_window=BATCH_COMPLETION_WINDOW,
     poll_interval_seconds=30,
     maximum_wait_seconds=86_400,
     calibration_sample_size=100,
