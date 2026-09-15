@@ -30,6 +30,7 @@ def test_dispatcher_helper_and_bootstrap_are_root_only_and_fail_closed() -> None
     assert "eval" not in helper and "bash -c" not in helper
     assert "--env OPENAI_API_KEY" not in helper and "${OPENAI_API_KEY" not in helper
     assert "origin/main" in helper
+    assert helper.count("src/cinegraph/common/speaker_review_cost_policy.py") == 2
     assert "scripts/run_private_speaker_review_next_adjudication_observation.py" in helper
     assert "scripts/observe_next_private_speaker_review_adjudication_workspace.py" in helper
     assert "deploy/compose.yaml" in helper

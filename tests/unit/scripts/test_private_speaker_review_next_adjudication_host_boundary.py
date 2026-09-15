@@ -64,6 +64,7 @@ def test_dispatcher_and_helper_are_fixed_and_fail_closed() -> None:
     assert "--env OPENAI_API_KEY" not in helper
     assert "eval" not in helper and "bash -c" not in helper
     assert "origin/main" in helper
+    assert helper.count("src/cinegraph/common/speaker_review_cost_policy.py") == 2
     assert '[[ "${lines[6]}" == "cinegraph-dev" ]]' in helper
     assert '[[ "${lines[7]}" == "10002:10002" ]]' in helper
     assert '[[ "${lines[16]}" == "cinegraph-dev_egress," ]]' in helper

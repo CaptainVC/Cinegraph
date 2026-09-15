@@ -201,6 +201,7 @@ trusted_files=(
     "$release_dir/scripts/private_speaker_review_submission_host_contract.py"
     "$release_dir/scripts/private_corpus_host_contract.py"
     "$release_dir/scripts/dev_host_contract.py"
+    "$release_dir/src/cinegraph/common/speaker_review_cost_policy.py"
     "$compose"
 )
 for tracked_file in "${trusted_files[@]}"; do
@@ -223,6 +224,7 @@ for tracked_name in \
     scripts/private_speaker_review_submission_host_contract.py \
     scripts/private_corpus_host_contract.py \
     scripts/dev_host_contract.py \
+    src/cinegraph/common/speaker_review_cost_policy.py \
     deploy/compose.yaml; do
     [[ "$(git -C "$release_dir" ls-files --error-unmatch -- "$tracked_name")" == "$tracked_name" ]] || fail
 done
