@@ -6,6 +6,8 @@ from cinegraph.common.error_messages import SpeakerReviewErrorMessages
 from cinegraph.config import SpeakerReviewConfiguration
 from cinegraph.config.speaker_review_submission import SUBMISSION_REQUEST_MAX_BYTES
 from cinegraph.config.speaker_review_transport import (
+    SPEAKER_REVIEW_OBSERVATION_MAX_RETRIES,
+    SPEAKER_REVIEW_OBSERVATION_TIMEOUT_SECONDS,
     SPEAKER_REVIEW_SUBMISSION_MAX_RETRIES,
     SPEAKER_REVIEW_SUBMISSION_TIMEOUT_SECONDS,
 )
@@ -57,7 +59,11 @@ class OpenAISpeakerReviewBatchGateway:
         )
 
     def retrieve(self, batch_id: str) -> BatchSnapshot:
-        batch = self._client.batches.retrieve(batch_id)
+        observation_client = self._client.with_options(
+            max_retries=SPEAKER_REVIEW_OBSERVATION_MAX_RETRIES,
+            timeout=SPEAKER_REVIEW_OBSERVATION_TIMEOUT_SECONDS,
+        )
+        batch = observation_client.batches.retrieve(batch_id)
         counts = batch.request_counts
         return BatchSnapshot(
             batch_id=batch.id,
@@ -70,7 +76,11 @@ class OpenAISpeakerReviewBatchGateway:
         )
 
     def download_file(self, file_id: str) -> str:
-        return self._client.files.content(file_id).text
+        observation_client = self._client.with_options(
+            max_retries=SPEAKER_REVIEW_OBSERVATION_MAX_RETRIES,
+            timeout=SPEAKER_REVIEW_OBSERVATION_TIMEOUT_SECONDS,
+        )
+        return observation_client.files.content(file_id).text
 
 
 def _enum_value(value: object) -> str:

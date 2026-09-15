@@ -30,4 +30,5 @@
 - [ADR-0028: Private primary-result processing VPS boundary](0028-private-primary-result-processing-boundary.md)
 - [ADR-0029: Private first-adjudication submission VPS boundary](0029-private-first-adjudication-submission-boundary.md)
 - [ADR-0030: Private first-adjudication observation boundary](0030-private-first-adjudication-observation-boundary.md)
+- [ADR-0032: Private next-adjudication observation boundary](0032-private-next-adjudication-observation-boundary.md)
 - [ADR template](template.md)

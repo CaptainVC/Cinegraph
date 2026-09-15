@@ -1,6 +1,12 @@
 from dataclasses import dataclass
 
 from cinegraph.common.private_corpus_policy import SCRIPT_PDF_FILENAME_TEMPLATE
+from cinegraph.common.speaker_review_cost_policy import (
+    BATCH_DISCOUNT_MULTIPLIER,
+    ESTIMATED_CHARACTERS_PER_TOKEN,
+    MAXIMUM_RUN_COST_USD,
+    MODEL_TOKEN_PRICES,
+)
 from cinegraph.config.speaker_review_filesystem import RUN_DIRECTORY_NAME
 
 
@@ -90,13 +96,13 @@ DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
     final_review_max_output_tokens=1_200,
     final_review_retry_max_output_tokens=2_400,
     final_review_max_retry_rounds=1,
-    estimated_characters_per_token=3,
+    estimated_characters_per_token=ESTIMATED_CHARACTERS_PER_TOKEN,
     maximum_enqueued_input_tokens_per_batch=1_500_000,
     maximum_recorded_input_tokens_per_result=2_000_000,
     maximum_recorded_output_tokens_per_result=100_000,
     maximum_recorded_tokens_per_batch=20_000_000,
-    batch_discount_multiplier=0.5,
-    maximum_run_cost_usd=5.0,
+    batch_discount_multiplier=BATCH_DISCOUNT_MULTIPLIER,
+    maximum_run_cost_usd=MAXIMUM_RUN_COST_USD,
     batch_completion_window="24h",
     poll_interval_seconds=30,
     maximum_wait_seconds=86_400,
@@ -125,17 +131,7 @@ DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
     terminal_batch_failure_statuses=frozenset({"failed", "expired", "cancelled"}),
     redaction_placeholders=frozenset({"***", "- ***.", "--"}),
     model_pricing={
-        "gpt-5.6-luna": ModelTokenPricing(
-            input_usd_per_million=0.20,
-            output_usd_per_million=1.20,
-        ),
-        "gpt-5.6-terra": ModelTokenPricing(
-            input_usd_per_million=2.00,
-            output_usd_per_million=12.00,
-        ),
-        "gpt-5.6-sol": ModelTokenPricing(
-            input_usd_per_million=5.00,
-            output_usd_per_million=30.00,
-        ),
+        model: ModelTokenPricing(input_usd_per_million=prices[0], output_usd_per_million=prices[1])
+        for model, prices in MODEL_TOKEN_PRICES.items()
     },
 )

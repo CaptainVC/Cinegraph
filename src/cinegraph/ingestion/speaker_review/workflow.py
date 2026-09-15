@@ -1448,6 +1448,184 @@ class SpeakerReviewWorkflow:
                 SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
             ) from error
 
+    def observe_next_adjudication(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Observe exactly the next submitted adjudication part.
+
+        This is the generic k+1 primitive.  Host boundaries may narrow it to a
+        particular k (Phase 72 authorizes k=1), but the workflow itself keeps
+        the invariant that all prior parts are complete and the active part is
+        the sole provider operation.
+        """
+        completed = state.adjudication_completed_part_count
+        if state.status is SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED:
+            self._validate_next_adjudication_observation_replay(run_directory, state)
+            return state
+        if state.status is SpeakerReviewRunStatus.FAILED:
+            return state
+        if state.status is not SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        self._validate_next_adjudication_observation_checkpoint(run_directory, state)
+        ids = state.adjudication_batch_ids
+        active = ids[-1]
+        snapshot = self._required_snapshot(active)
+        if snapshot.batch_id != active:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        try:
+            if snapshot.status in self._configuration.terminal_batch_failure_statuses:
+                return self._persist_failed_batch(run_directory, state, snapshot)
+            if snapshot.status != self._configuration.successful_batch_status:
+                return state
+            self._download_completed_batch(
+                run_directory,
+                _part_stage_name("adjudication", completed),
+                snapshot,
+            )
+            updated = replace(
+                state,
+                status=SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
+                adjudication_completed_part_count=completed + 1,
+                updated_at=_now(),
+            )
+            save_run_state(run_directory, updated)
+            return updated
+        except (FileExistsError, SpeakerReviewArtifactConflictError) as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+
+    observe_next_adjudication_part = observe_next_adjudication
+
+    def _validate_next_adjudication_observation_checkpoint(
+        self, run_directory: Path, state: SpeakerReviewRunState
+    ) -> None:
+        completed = state.adjudication_completed_part_count
+        ids = state.adjudication_batch_ids
+        input_ids = state.adjudication_input_file_ids
+        if (
+            type(completed) is not int
+            or completed <= 0
+            or completed >= state.adjudication_part_count
+            or state.status is not SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED
+            or not isinstance(ids, tuple)
+            or not isinstance(input_ids, tuple)
+            or len(ids) != completed + 1
+            or len(input_ids) != completed + 1
+            or len(set(ids)) != len(ids)
+            or len(set(input_ids)) != len(input_ids)
+            or state.adjudication_batch_id != ids[-1]
+            or state.adjudication_input_file_id != input_ids[-1]
+            or not all(isinstance(v, str) and v and v == v.strip() for v in (*ids, *input_ids))
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        # Reuse the strict submission-chain validator for every completed
+        # prefix (including request SHA, run/stage/part/config bindings and
+        # provider IDs), then validate the active journal against its exact
+        # next request and IDs before any provider call.
+        try:
+            self._validate_next_adjudication_checkpoint_parts(
+                run_directory, state, completed, ids, input_ids
+            )
+        except Exception as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+        active = completed + 1
+        active_request = _bounded_file_bytes(
+            _request_part_path(run_directory, "adjudication", active - 1)
+        )
+        active_binding = {
+            "schema_version": SUBMISSION_SCHEMA_VERSION,
+            "request_sha256": sha256(active_request).hexdigest(),
+            "run_id": state.run_id,
+            "stage": "adjudication",
+            "part": active,
+            "prompt_version": state.prompt_version,
+            "batch_endpoint": self._configuration.batch_endpoint,
+            "completion_window": self._configuration.batch_completion_window,
+        }
+        active_intent = _read_submission_record(
+            _submission_path(run_directory, "adjudication", active - 1, "intent"),
+            completed=False,
+        )
+        active_completed = _read_submission_record(
+            _submission_path(run_directory, "adjudication", active - 1, "completed"),
+            completed=True,
+        )
+        if (
+            active_intent is None
+            or active_completed is None
+            or active_intent.get("status") != "intent"
+            or active_completed.get("status") not in {"validating", "completed", "failed"}
+            or active_intent.get("binding") != active_binding
+            or active_completed.get("binding") != active_binding
+            or active_completed.get("batch_id") != ids[-1]
+            or active_completed.get("input_file_id") != input_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        if any(
+            os.path.lexists(run_directory / f"adjudication-part-{active:04d}-{suffix}")
+            for suffix in ("output.jsonl", "api-errors.jsonl")
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+
+    def _validate_next_adjudication_observation_replay(
+        self, run_directory: Path, state: SpeakerReviewRunState
+    ) -> None:
+        completed = state.adjudication_completed_part_count
+        if (
+            type(completed) is not int
+            or completed <= 1
+            or completed > state.adjudication_part_count
+            or state.status is not SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED
+            or not isinstance(state.adjudication_batch_ids, tuple)
+            or not isinstance(state.adjudication_input_file_ids, tuple)
+            or len(state.adjudication_batch_ids) != completed
+            or len(state.adjudication_input_file_ids) != completed
+            or state.adjudication_batch_id != state.adjudication_batch_ids[-1]
+            or state.adjudication_input_file_id != state.adjudication_input_file_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        ids = state.adjudication_batch_ids
+        input_ids = state.adjudication_input_file_ids
+        try:
+            self._validate_next_adjudication_checkpoint_parts(
+                run_directory, state, completed, ids, input_ids
+            )
+        except Exception as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+        for part in range(1, completed + 1):
+            output = run_directory / f"adjudication-part-{part:04d}-output.jsonl"
+            _bounded_file_bytes(output)
+            optional_errors = run_directory / f"adjudication-part-{part:04d}-api-errors.jsonl"
+            if os.path.lexists(optional_errors):
+                _bounded_file_bytes(optional_errors)
+        if any(
+            os.path.lexists(run_directory / f"adjudication-part-{part:04d}-{suffix}")
+            for part in range(completed + 1, state.adjudication_part_count + 1)
+            for suffix in ("output.jsonl", "api-errors.jsonl")
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+
     observe_first_adjudication_part = observe_first_adjudication
 
     @staticmethod
