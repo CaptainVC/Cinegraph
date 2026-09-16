@@ -11,6 +11,12 @@ from scripts import (
 from scripts import (
     private_speaker_review_first_adjudication_observation_host_contract as first_adjudication_observation_contract,
 )
+from scripts import (
+    private_speaker_review_next_adjudication_host_contract as next_adjudication_contract,
+)
+from scripts import (
+    private_speaker_review_next_adjudication_observation_host_contract as next_adjudication_observation_contract,
+)
 from scripts import private_speaker_review_next_primary_host_contract as next_contract
 from scripts import (
     private_speaker_review_next_primary_observation_host_contract as next_observation_contract,
@@ -20,6 +26,12 @@ from scripts import (
     private_speaker_review_primary_result_processing_host_contract as processing_contract,
 )
 from scripts import private_speaker_review_submission_host_contract as contract
+from scripts import (
+    private_speaker_review_third_adjudication_host_contract as third_adjudication_contract,
+)
+from scripts import (
+    private_speaker_review_third_adjudication_observation_host_contract as third_adjudication_observation_contract,
+)
 from scripts.bootstrap_dev_host import BootstrapError
 
 
@@ -42,6 +54,10 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     assert (
         first_adjudication_observation_contract.REVIEW_FIRST_ADJUDICATION_OBSERVATION_COMMAND
         == ("speaker-review-observe-first-adjudication-v1")
+    )
+    assert (
+        third_adjudication_observation_contract.REVIEW_THIRD_ADJUDICATION_OBSERVATION_COMMAND
+        == "speaker-review-observe-third-adjudication-v1"
     )
     assert contract.REVIEW_USER != contract.CORPUS_USER
     assert "cinegraph-corpus" not in contract.SUDOERS_CONTENT
@@ -97,6 +113,16 @@ def test_review_bootstrap_contract_covers_dedicated_paths_and_has_no_broad_sudo(
         first_adjudication_observation_contract.REVIEW_FIRST_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT
         in directories
     )
+    assert next_adjudication_contract.REVIEW_NEXT_ADJUDICATION_RECEIPTS_ROOT in directories
+    assert (
+        next_adjudication_observation_contract.REVIEW_NEXT_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT
+        in directories
+    )
+    assert third_adjudication_contract.REVIEW_THIRD_ADJUDICATION_RECEIPTS_ROOT in directories
+    assert (
+        third_adjudication_observation_contract.REVIEW_THIRD_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT
+        in directories
+    )
     assert contract.REVIEW_DISPATCH_PATH in files
     assert contract.REVIEW_HELPER_PATH in files
     assert contract.REVIEW_OBSERVATION_HELPER_PATH in files
@@ -108,10 +134,37 @@ def test_review_bootstrap_contract_covers_dedicated_paths_and_has_no_broad_sudo(
         first_adjudication_observation_contract.REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH
         in files
     )
+    assert next_adjudication_contract.REVIEW_NEXT_ADJUDICATION_HELPER_PATH in files
+    assert (
+        next_adjudication_observation_contract.REVIEW_NEXT_ADJUDICATION_OBSERVATION_HELPER_PATH
+        in files
+    )
+    assert third_adjudication_contract.REVIEW_THIRD_ADJUDICATION_HELPER_PATH in files
+    assert (
+        third_adjudication_observation_contract.REVIEW_THIRD_ADJUDICATION_OBSERVATION_HELPER_PATH
+        in files
+    )
     assert contract.REVIEW_SUDOERS_PATH in files
     assert contract.REVIEW_AUTHORIZED_KEYS in files
     assert "NOPASSWD: ALL" not in contract.SUDOERS_CONTENT
     assert "bash -c" not in contract.SUDOERS_CONTENT
+
+
+def test_review_bootstrap_installs_latest_cumulative_sudoers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(bootstrap_review_host, "_read_source", lambda _: b"reviewed")
+    monkeypatch.setattr(
+        bootstrap_review_host,
+        "authorized_key_entry",
+        lambda _: "authorized\n",
+    )
+
+    managed = bootstrap_review_host._managed_content("review-key")
+
+    assert managed[bootstrap_review_host.REVIEW_SUDOERS_PATH] == (
+        third_adjudication_observation_contract.SUDOERS_CONTENT.encode("utf-8")
+    )
 
 
 def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
@@ -398,6 +451,9 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         bootstrap_review_host.REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH: (
             b"new-first-observation-helper"
         ),
+        bootstrap_review_host.REVIEW_THIRD_ADJUDICATION_OBSERVATION_HELPER_PATH: (
+            b"new-third-observation-helper"
+        ),
         bootstrap_review_host.REVIEW_SUDOERS_PATH: b"sudoers",
         bootstrap_review_host.REVIEW_AUTHORIZED_KEYS: b"authorized",
     }
@@ -447,6 +503,11 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
             bootstrap_review_host.REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH,
             True,
         ),
+        (
+            "ensure",
+            bootstrap_review_host.REVIEW_THIRD_ADJUDICATION_OBSERVATION_HELPER_PATH,
+            True,
+        ),
         ("replace", bootstrap_review_host.REVIEW_SUDOERS_PATH, None),
         ("replace", bootstrap_review_host.REVIEW_DISPATCH_PATH, None),
     ]
@@ -463,6 +524,10 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
         (processing_contract.SUDOERS_CONTENT.encode("utf-8"), True),
         (first_adjudication_contract.PHASE68_SUDOERS_CONTENT.encode("utf-8"), True),
         (first_adjudication_contract.SUDOERS_CONTENT.encode("utf-8"), True),
+        (next_adjudication_contract.SUDOERS_CONTENT.encode("utf-8"), True),
+        (next_adjudication_observation_contract.SUDOERS_CONTENT.encode("utf-8"), True),
+        (third_adjudication_contract.SUDOERS_CONTENT.encode("utf-8"), True),
+        (third_adjudication_observation_contract.SUDOERS_CONTENT.encode("utf-8"), True),
         (b"cinegraph-review ALL=(root) NOPASSWD: ALL\n", False),
     ],
 )

@@ -140,8 +140,12 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by isolated launch t
     worker = types.SimpleNamespace(
         _expected_names=lambda state: _expected_inventory_names(state),
         _validate_checkpoint_shape=lambda state, *, submitted: _validate_state_shape(state),
-        _validate_completed_parts=lambda run, contents, state, count: _validate_completed_evidence(run, contents, state),
-        _validate_journal=lambda run, contents, state, part, **kwargs: _stdlib_journal(contents, state, part, **kwargs),
+        _validate_completed_parts=lambda run, contents, state, count: _validate_completed_evidence(
+            run, contents, state
+        ),
+        _validate_journal=lambda run, contents, state, part, **kwargs: _stdlib_journal(
+            contents, state, part, **kwargs
+        ),
         _parse_requests=lambda contents, state: tuple(
             value
             for part in range(1, state.adjudication_part_count + 1)
@@ -151,7 +155,9 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by isolated launch t
                 if line.strip()
             )
         ),
-        _validate_replay_evidence=lambda *args, **kwargs: _validate_replay_evidence_stdlib(*args, **kwargs),
+        _validate_replay_evidence=lambda *args, **kwargs: _validate_replay_evidence_stdlib(
+            *args, **kwargs
+        ),
     )
     DEFAULT_SPEAKER_REVIEW_CONFIGURATION = types.SimpleNamespace(
         maximum_run_cost_usd=MAXIMUM_RUN_COST_USD,
@@ -199,7 +205,6 @@ FORBIDDEN_WORKER_ENVIRONMENT: Final = frozenset(
         "LD_PRELOAD",
         "OPENAI_API_KEY",
         "PYTHONHOME",
-        "PYTHONPATH",
     }
 )
 MAX_RECORD_BYTES: Final = 128 * 1024
@@ -522,11 +527,18 @@ def _expected_inventory_names(state: object) -> tuple[set[str], set[str]]:
     completed = _state_value(state, "adjudication_completed_part_count")
     primary_parts = _state_value(state, "primary_part_count")
     adjudication_parts = _state_value(state, "adjudication_part_count")
-    if not all(type(value) is int and value >= 0 for value in (completed, primary_parts, adjudication_parts)):
+    if not all(
+        type(value) is int and value >= 0
+        for value in (completed, primary_parts, adjudication_parts)
+    ):
         raise ValueError("state counts")
     status = _state_value(state, "status")
     status_value = getattr(status, "value", status)
-    journal_parts = range(1, completed + 2) if status_value in {"adjudication_submitted", "failed"} else range(1, completed + 1)
+    journal_parts = (
+        range(1, completed + 2)
+        if status_value in {"adjudication_submitted", "failed"}
+        else range(1, completed + 1)
+    )
     required = {
         STATE_NAME,
         "candidates.jsonl",
@@ -534,9 +546,20 @@ def _expected_inventory_names(state: object) -> tuple[set[str], set[str]]:
         *(f"primary-part-{part:04d}-requests.jsonl" for part in range(1, primary_parts + 1)),
         *(f"primary-part-{part:04d}-output.jsonl" for part in range(1, primary_parts + 1)),
         *(f"adjudication-part-{part:04d}-output.jsonl" for part in range(1, completed + 1)),
-        *(f".primary-part-{part:04d}-submission-{kind}.json" for part in range(1, primary_parts + 1) for kind in ("intent", "completed")),
-        *(f"adjudication-part-{part:04d}-requests.jsonl" for part in range(1, adjudication_parts + 1)),
-        *(f".adjudication-part-{part:04d}-submission-{kind}.json" for part in journal_parts for kind in ("intent", "completed")),
+        *(
+            f".primary-part-{part:04d}-submission-{kind}.json"
+            for part in range(1, primary_parts + 1)
+            for kind in ("intent", "completed")
+        ),
+        *(
+            f"adjudication-part-{part:04d}-requests.jsonl"
+            for part in range(1, adjudication_parts + 1)
+        ),
+        *(
+            f".adjudication-part-{part:04d}-submission-{kind}.json"
+            for part in journal_parts
+            for kind in ("intent", "completed")
+        ),
         "primary-verdicts.jsonl",
         "primary-parse-errors.json",
         "primary-decisions.jsonl",
@@ -586,18 +609,13 @@ def _inventory(
         if (
             set(extra) != {"state", "derived"}
             or not isinstance(phase69_derived, dict)
-            or any(
-                not isinstance(name, str) or name.endswith("/")
-                for name in phase69_derived
-            )
+            or any(not isinstance(name, str) or name.endswith("/") for name in phase69_derived)
         ):
             # The review-run contract is deliberately flat. Phase 69 records
             # every nested directory as a slash-suffixed derived entry, so
             # rejecting those entries also detects empty directories.
             raise ValueError
-        canonical, state = load_validated_run_state(
-            run, DEFAULT_SPEAKER_REVIEW_CONFIGURATION
-        )
+        canonical, state = load_validated_run_state(run, DEFAULT_SPEAKER_REVIEW_CONFIGURATION)
         if (
             canonical != run
             or not isinstance(state_payload, dict)
@@ -716,12 +734,8 @@ def _validate_phase72_predecessor(
         pre_contents.pop(".adjudication-part-0003-submission-intent.json", None)
         pre_contents.pop(".adjudication-part-0003-submission-completed.json", None)
         pre_contents[STATE_NAME] = _canonical(pre_payload)
-        phase72._validate_submission_predecessor(
-            phase_request, run, pre_contents, pre_state
-        )
-        result = phase72_contract.validate_aggregate(
-            receipt.get("result"), status="observed"
-        )
+        phase72._validate_submission_predecessor(phase_request, run, pre_contents, pre_state)
+        result = phase72_contract.validate_aggregate(receipt.get("result"), status="observed")
         clean_contents = dict(contents)
         clean_contents.pop(".adjudication-part-0003-submission-intent.json", None)
         clean_contents.pop(".adjudication-part-0003-submission-completed.json", None)
@@ -733,8 +747,7 @@ def _validate_phase72_predecessor(
             or result["adjudication_part_count"] != state.adjudication_part_count
             or result["adjudication_completed_part_count"] != 2
             or result["run_status"] != SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED.value
-            or _cost_micros(state.actual_primary_cost_usd)
-            != result["actual_primary_cost_microusd"]
+            or _cost_micros(state.actual_primary_cost_usd) != result["actual_primary_cost_microusd"]
             or result["estimated_adjudication_cost_microusd"]
             != intent["estimated_adjudication_cost_microusd"]
             or _sha(phase_auth_raw) != intent["authorization_sha256"]
@@ -797,12 +810,7 @@ def _pre_submission_snapshot(
 
 
 def _receipt_paths(run_id: str, part: int) -> tuple[Path, Path]:
-    if (
-        not isinstance(run_id, str)
-        or not run_id
-        or type(part) is not int
-        or part <= 0
-    ):
+    if not isinstance(run_id, str) or not run_id or type(part) is not int or part <= 0:
         raise ThirdAdjudicationSubmissionError("adjudication receipt path invalid")
     # Phase 72 authenticates the second completed part. This command is fixed
     # to target part three, so one run-scoped pair is sufficient.
@@ -824,12 +832,22 @@ def _validate_state_shape(state: SpeakerReviewRunState) -> None:
             inputs = state.adjudication_input_file_ids
             expected = count + 1 if submitted else count
             if (
-                type(count) is not int or type(total) is not int or count <= 0 or count >= total
-                or not isinstance(ids, tuple) or not isinstance(inputs, tuple)
-                or len(ids) != expected or len(inputs) != expected
-                or len(set(ids)) != len(ids) or len(set(inputs)) != len(inputs)
-                or not all(isinstance(value, str) and value == value.strip() and value for value in ids)
-                or not all(isinstance(value, str) and value == value.strip() and value for value in inputs)
+                type(count) is not int
+                or type(total) is not int
+                or count <= 0
+                or count >= total
+                or not isinstance(ids, tuple)
+                or not isinstance(inputs, tuple)
+                or len(ids) != expected
+                or len(inputs) != expected
+                or len(set(ids)) != len(ids)
+                or len(set(inputs)) != len(inputs)
+                or not all(
+                    isinstance(value, str) and value == value.strip() and value for value in ids
+                )
+                or not all(
+                    isinstance(value, str) and value == value.strip() and value for value in inputs
+                )
                 or state.adjudication_batch_id != ids[-1]
                 or state.adjudication_input_file_id != inputs[-1]
             ):
@@ -873,7 +891,9 @@ def _validate_completed_evidence(
                     "completion_window": BATCH_COMPLETION_WINDOW,
                 }
                 intent = _decode(contents[f".adjudication-part-{part:04d}-submission-intent.json"])
-                completed = _decode(contents[f".adjudication-part-{part:04d}-submission-completed.json"])
+                completed = _decode(
+                    contents[f".adjudication-part-{part:04d}-submission-completed.json"]
+                )
                 if (
                     intent.get("binding") != binding
                     or completed.get("binding") != binding
@@ -1044,11 +1064,7 @@ def _binding(
 def _state_binding_sha256(state: SpeakerReviewRunState) -> str:
     return _sha(
         _canonical(
-            {
-                key: value
-                for key, value in state.to_dict().items()
-                if key not in ROOT_STATE_MUTABLE
-            }
+            {key: value for key, value in state.to_dict().items() if key not in ROOT_STATE_MUTABLE}
         )
     )
 
@@ -1074,8 +1090,7 @@ def _validate_binding(value: object, request: Mapping[str, object]) -> dict[str,
         or type(value.get("third_adjudication_part_number")) is not int
         or value["adjudication_completed_part_count"] != 2
         or value["third_adjudication_part_number"] != 3
-        or value["third_adjudication_part_number"]
-        != value["adjudication_completed_part_count"] + 1
+        or value["third_adjudication_part_number"] != value["adjudication_completed_part_count"] + 1
         or not isinstance(value.get("pre_updated_at"), str)
         or not value["pre_updated_at"].strip()
     ):
@@ -1242,10 +1257,7 @@ def _container_environment_is_exact(
         **WORKER_STATIC_ENVIRONMENT,
         **_worker_environment(request, bindings),
     }
-    return (
-        actual == expected
-        and not FORBIDDEN_WORKER_ENVIRONMENT.intersection(actual)
-    )
+    return actual == expected and not FORBIDDEN_WORKER_ENVIRONMENT.intersection(actual)
 
 
 def _container_identity_is_exact(
@@ -1375,8 +1387,7 @@ def _container_identity_is_exact(
         expected_destination = expected_destination / run_id
         expected_source = expected_source / run_id
         return (
-            destinations.get(expected_destination.as_posix())
-            == (expected_source.as_posix(), True)
+            destinations.get(expected_destination.as_posix()) == (expected_source.as_posix(), True)
             and destinations.get(host.REVIEW_THIRD_ADJUDICATION_SECRET_TARGET, ("", True))[1]
             is False
             and destinations.get(host.REVIEW_THIRD_ADJUDICATION_TMP_TARGET) == ("", True)
@@ -1399,9 +1410,7 @@ def _container_identity_is_exact(
         return False
 
 
-def _cleanup_worker(
-    request: Mapping[str, object], runs: Path, bindings: Mapping[str, str]
-) -> None:
+def _cleanup_worker(request: Mapping[str, object], runs: Path, bindings: Mapping[str, str]) -> None:
     if not _container_identity_is_exact(request, runs, bindings):
         return
     try:
@@ -1468,9 +1477,7 @@ def _run_worker(
             output = pool.submit(_read_bounded, process.stdout)
             errors = pool.submit(_read_bounded, process.stderr)
             try:
-                code = process.wait(
-                    timeout=host.REVIEW_THIRD_ADJUDICATION_TIMEOUT_SECONDS - 60
-                )
+                code = process.wait(timeout=host.REVIEW_THIRD_ADJUDICATION_TIMEOUT_SECONDS - 60)
             except subprocess.TimeoutExpired as error:
                 _terminate_worker(process)
                 output.result(timeout=5)
@@ -1563,8 +1570,7 @@ def _validate_worker_result(
         or result["season_number"] != contract.SEASON_NUMBER
         or result["run_status"] != expected_run_status
         or result["adjudication_part_count"] != before.adjudication_part_count
-        or result["adjudication_completed_part_count"]
-        != before.adjudication_completed_part_count
+        or result["adjudication_completed_part_count"] != before.adjudication_completed_part_count
         or result["estimated_adjudication_cost_microusd"] != estimated
         or result["actual_primary_cost_microusd"] != actual
         or result["submitted_part_count"] != (0 if status == "reconciliation_required" else 1)
@@ -1590,12 +1596,9 @@ def _state_transition(
     if (
         before.status is not SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED
         or after.status is not SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED
-        or after.adjudication_completed_part_count
-        != before.adjudication_completed_part_count
-        or len(after.adjudication_batch_ids)
-        != len(before.adjudication_batch_ids) + 1
-        or len(after.adjudication_input_file_ids)
-        != len(before.adjudication_input_file_ids) + 1
+        or after.adjudication_completed_part_count != before.adjudication_completed_part_count
+        or len(after.adjudication_batch_ids) != len(before.adjudication_batch_ids) + 1
+        or len(after.adjudication_input_file_ids) != len(before.adjudication_input_file_ids) + 1
         or after.adjudication_batch_ids[:-1] != before.adjudication_batch_ids
         or after.adjudication_input_file_ids[:-1] != before.adjudication_input_file_ids
         or after.adjudication_batch_id != after.adjudication_batch_ids[-1]
@@ -1613,9 +1616,7 @@ def _post_validate(
     result_status: str,
 ) -> None:
     for name, raw in before_files.items():
-        if name != STATE_NAME and (
-            name not in after_files or _sha(after_files[name]) != _sha(raw)
-        ):
+        if name != STATE_NAME and (name not in after_files or _sha(after_files[name]) != _sha(raw)):
             raise ThirdAdjudicationSubmissionError("adjudication immutable evidence changed")
     added = set(after_files) - set(before_files)
     part = before.adjudication_completed_part_count + 1
@@ -1672,11 +1673,10 @@ def _validate_receipt(
 ) -> dict[str, object]:
     if not isinstance(value, dict) or set(value) != _ROOT_RECEIPT_KEYS:
         raise ThirdAdjudicationSubmissionError("adjudication receipt invalid")
-    if any(
-        value.get(key) != expected
-        for key, expected in intent.items()
-        if key != "status"
-    ) or value.get("status") != "receipt":
+    if (
+        any(value.get(key) != expected for key, expected in intent.items() if key != "status")
+        or value.get("status") != "receipt"
+    ):
         raise ThirdAdjudicationSubmissionError("adjudication receipt invalid")
     expected = _receipt_payload(intent, value.get("result", {}), contents)
     if value != expected:
@@ -1746,11 +1746,14 @@ def process_request(request: Mapping[str, object]) -> dict[str, object]:
             predecessor_contents, predecessor_state = _pre_submission_snapshot(
                 contents, state, replay_intent
             )
-        preparation_value, preparation_sha, phase72_intent_sha, phase72_receipt_sha, prior_estimate, prior_actual = (
-            _validate_phase72_predecessor(
-                request, run, predecessor_contents, predecessor_state
-            )
-        )
+        (
+            preparation_value,
+            preparation_sha,
+            phase72_intent_sha,
+            phase72_receipt_sha,
+            prior_estimate,
+            prior_actual,
+        ) = _validate_phase72_predecessor(request, run, predecessor_contents, predecessor_state)
         if _cost_micros(state.actual_primary_cost_usd) != prior_actual:
             raise ThirdAdjudicationSubmissionError("adjudication predecessor cost changed")
         estimated = _estimate_cost(contents, state)
@@ -1819,7 +1822,9 @@ def process_request(request: Mapping[str, object]) -> dict[str, object]:
                 estimated=estimated,
                 actual=prior_actual,
             )
-            after, after_artifacts, after_journals, after_outputs, after_derived, after_state = _post_inventory(run)
+            after, after_artifacts, after_journals, after_outputs, after_derived, after_state = (
+                _post_inventory(run)
+            )
             _post_validate(
                 contents,
                 after,
@@ -1892,7 +1897,9 @@ def process_request(request: Mapping[str, object]) -> dict[str, object]:
             estimated=estimated,
             actual=prior_actual,
         )
-        after, after_artifacts, after_journals, after_outputs, after_derived, after_state = _post_inventory(run)
+        after, after_artifacts, after_journals, after_outputs, after_derived, after_state = (
+            _post_inventory(run)
+        )
         _post_validate(
             contents,
             after,

@@ -361,6 +361,23 @@ egress worker cannot observe, download, parse, enter final review, promote, or
 ingest. See [ADR-0033](docs/adr/0033-private-third-adjudication-submission-boundary.md)
 and the [VPS third-adjudication submission runbook](docs/operations/private-speaker-review-third-adjudication-submission.md).
 
+Phase 74 adds the eleventh forced review command,
+`speaker-review-observe-third-adjudication-v1`, for exactly one read-only
+observation of Terra adjudication part three. The root boundary accepts only
+the authenticated Phase 73 submitted checkpoint (`completed_count == 2`,
+`part_count > 2`, and the complete batch/input ID prefix), then binds the full
+predecessor chain, immutable inventory, runtime identity, fresh authorization,
+and deterministic cost ceiling. The isolated egress worker reads the secret
+only after non-secret validation and invokes the generic observation primitive
+with the Phase 74 part-three constants, zero retries, and a finite timeout.
+Waiting never mutates the run; success downloads only part three and advances
+to `adjudication_part_completed` with `completed_count == 3`. Replay is
+provider-free and requires the authenticated root receipt; terminal ambiguity
+or a missing receipt stops closed for reconciliation. The boundary cannot
+parse output, observe part four, perform final review, promote, or ingest. See
+[ADR-0034](docs/adr/0034-private-third-adjudication-observation-boundary.md)
+and the [VPS third-adjudication observation runbook](docs/operations/private-speaker-review-third-adjudication-observation.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
