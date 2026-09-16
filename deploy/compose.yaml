@@ -485,6 +485,41 @@ services:
     restart: "no"
     command: ["python", "scripts/submit_third_private_speaker_review_adjudication_workspace.py"]
 
+  # Paid submission of exactly Terra adjudication part four after Phase 74
+  # authenticated observation of part three. The worker remains submit-only.
+  corpus-speaker-review-submit-fourth-adjudication:
+    profiles: [corpus-speaker-review-submit-fourth-adjudication]
+    image: *cinegraph-image
+    user: "10002:10002"
+    environment:
+      <<: *model-cache-environment
+      HF_HUB_OFFLINE: "1"
+      CINEGRAPH_ENVIRONMENT: development
+      CINEGRAPH_SPEAKER_REVIEW_RUNS_ROOT: /review-workspace/review-runs
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    networks:
+      - egress
+    secrets:
+      - source: openai_api_key
+        target: openai_api_key
+        uid: "10002"
+        gid: "10002"
+        mode: 0400
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: ${CINEGRAPH_SPEAKER_REVIEW_MEMORY_LIMIT:-1024m}
+    cpus: ${CINEGRAPH_SPEAKER_REVIEW_CPU_LIMIT:-1.0}
+    restart: "no"
+    command: ["python", "scripts/submit_fourth_private_speaker_review_adjudication_workspace.py"]
+
   # Read-only provider observation of exactly the next adjudication part.
   corpus-speaker-review-observe-next-adjudication:
     profiles: [corpus-speaker-review-observe-next-adjudication]

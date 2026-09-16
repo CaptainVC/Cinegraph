@@ -36,6 +36,13 @@ from scripts.private_speaker_review_first_adjudication_observation_host_contract
 from scripts.private_speaker_review_first_adjudication_observation_host_contract import (  # noqa: E402
     SUDOERS_CONTENT as FIRST_ADJUDICATION_OBSERVATION_SUDOERS_CONTENT,
 )
+from scripts.private_speaker_review_fourth_adjudication_host_contract import (  # noqa: E402
+    REVIEW_FOURTH_ADJUDICATION_HELPER_PATH,
+    REVIEW_FOURTH_ADJUDICATION_RECEIPTS_ROOT,
+)
+from scripts.private_speaker_review_fourth_adjudication_host_contract import (  # noqa: E402
+    SUDOERS_CONTENT as FOURTH_ADJUDICATION_SUDOERS_CONTENT,
+)
 from scripts.private_speaker_review_next_adjudication_host_contract import (  # noqa: E402
     REVIEW_NEXT_ADJUDICATION_HELPER_PATH,
     REVIEW_NEXT_ADJUDICATION_RECEIPTS_ROOT,
@@ -149,6 +156,9 @@ SOURCE_THIRD_ADJUDICATION_HELPER: Final = (
 SOURCE_THIRD_ADJUDICATION_OBSERVATION_HELPER: Final = (
     REPOSITORY_ROOT / "deploy/remote/observe-third-private-speaker-review-adjudication.sh"
 )
+SOURCE_FOURTH_ADJUDICATION_HELPER: Final = (
+    REPOSITORY_ROOT / "deploy/remote/submit-fourth-private-speaker-review-adjudication.sh"
+)
 FORBIDDEN_GROUP_NAMES: Final = frozenset(
     {"adm", "admin", "docker", "sudo", "wheel", "cinegraph-deploy", "cinegraph-corpus"}
 )
@@ -191,6 +201,7 @@ DIRECTORY_CONTRACT: Final = (
         0,
         0o700,
     ),
+    ExpectedPath(REVIEW_FOURTH_ADJUDICATION_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(SPEAKER_REVIEW_RUNS_ROOT, "directory", 0, 0, 0o700),
 )
 FILE_CONTRACT: Final = (
@@ -218,6 +229,7 @@ FILE_CONTRACT: Final = (
         0,
         0o755,
     ),
+    ExpectedPath(REVIEW_FOURTH_ADJUDICATION_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_SUDOERS_PATH, "file", 0, 0, 0o440),
     ExpectedPath(REVIEW_AUTHORIZED_KEYS, "file", 0, 0, 0o644),
 )
@@ -367,7 +379,8 @@ def _managed_content(public_key: str) -> dict[Path, bytes]:
         REVIEW_THIRD_ADJUDICATION_OBSERVATION_HELPER_PATH: _read_source(
             SOURCE_THIRD_ADJUDICATION_OBSERVATION_HELPER
         ),
-        REVIEW_SUDOERS_PATH: THIRD_ADJUDICATION_OBSERVATION_SUDOERS_CONTENT.encode(
+        REVIEW_FOURTH_ADJUDICATION_HELPER_PATH: _read_source(SOURCE_FOURTH_ADJUDICATION_HELPER),
+        REVIEW_SUDOERS_PATH: FOURTH_ADJUDICATION_SUDOERS_CONTENT.encode(
             "utf-8"
         ),
         REVIEW_AUTHORIZED_KEYS: authorized_key_entry(public_key).encode("utf-8"),
@@ -398,6 +411,7 @@ def _preflight_refresh_host_files(
                 REVIEW_NEXT_ADJUDICATION_OBSERVATION_HELPER_PATH,
                 REVIEW_THIRD_ADJUDICATION_HELPER_PATH,
                 REVIEW_THIRD_ADJUDICATION_OBSERVATION_HELPER_PATH,
+                REVIEW_FOURTH_ADJUDICATION_HELPER_PATH,
             }
             and not path.exists()
             and not path.is_symlink()
@@ -423,6 +437,7 @@ def _preflight_refresh_host_files(
             NEXT_ADJUDICATION_OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
             THIRD_ADJUDICATION_SUDOERS_CONTENT.encode("utf-8"),
             THIRD_ADJUDICATION_OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
+            FOURTH_ADJUDICATION_SUDOERS_CONTENT.encode("utf-8"),
         }:
             raise BootstrapError("review sudoers differs from the reviewed contract")
     _validate_sudoers_candidate(managed[REVIEW_SUDOERS_PATH])
@@ -477,6 +492,7 @@ def _ensure_host_files(public_key: str, *, apply: bool, refresh_review_code: boo
             REVIEW_NEXT_ADJUDICATION_OBSERVATION_HELPER_PATH,
             REVIEW_THIRD_ADJUDICATION_HELPER_PATH,
             REVIEW_THIRD_ADJUDICATION_OBSERVATION_HELPER_PATH,
+            REVIEW_FOURTH_ADJUDICATION_HELPER_PATH,
         ):
             if path not in managed:
                 continue
