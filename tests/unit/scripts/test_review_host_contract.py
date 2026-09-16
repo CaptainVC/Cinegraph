@@ -15,6 +15,9 @@ from scripts import (
     private_speaker_review_fourth_adjudication_host_contract as fourth_adjudication_contract,
 )
 from scripts import (
+    private_speaker_review_fourth_adjudication_observation_host_contract as fourth_adjudication_observation_contract,
+)
+from scripts import (
     private_speaker_review_next_adjudication_host_contract as next_adjudication_contract,
 )
 from scripts import (
@@ -65,6 +68,10 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     assert fourth_adjudication_contract.REVIEW_FOURTH_ADJUDICATION_COMMAND == (
         "speaker-review-submit-fourth-adjudication-v1"
     )
+    assert (
+        fourth_adjudication_observation_contract.REVIEW_FOURTH_ADJUDICATION_OBSERVATION_COMMAND
+        == "speaker-review-observe-fourth-adjudication-v1"
+    )
     assert contract.REVIEW_USER != contract.CORPUS_USER
     assert "cinegraph-corpus" not in contract.SUDOERS_CONTENT
     assert "cinegraph-deploy" not in contract.SUDOERS_CONTENT
@@ -89,6 +96,10 @@ def test_review_identity_is_dedicated_and_cannot_use_corpus_or_deploy_grants() -
     )
     assert (
         first_adjudication_observation_contract.REVIEW_FIRST_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT.parent
+        == contract.SPEAKER_REVIEW_ROOT
+    )
+    assert (
+        fourth_adjudication_observation_contract.REVIEW_FOURTH_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT.parent
         == contract.SPEAKER_REVIEW_ROOT
     )
     assert contract.MINIMUM_PYTHON_VERSION >= (3, 12)
@@ -130,6 +141,10 @@ def test_review_bootstrap_contract_covers_dedicated_paths_and_has_no_broad_sudo(
         in directories
     )
     assert fourth_adjudication_contract.REVIEW_FOURTH_ADJUDICATION_RECEIPTS_ROOT in directories
+    assert (
+        fourth_adjudication_observation_contract.REVIEW_FOURTH_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT
+        in directories
+    )
     assert contract.REVIEW_DISPATCH_PATH in files
     assert contract.REVIEW_HELPER_PATH in files
     assert contract.REVIEW_OBSERVATION_HELPER_PATH in files
@@ -152,6 +167,10 @@ def test_review_bootstrap_contract_covers_dedicated_paths_and_has_no_broad_sudo(
         in files
     )
     assert fourth_adjudication_contract.REVIEW_FOURTH_ADJUDICATION_HELPER_PATH in files
+    assert (
+        fourth_adjudication_observation_contract.REVIEW_FOURTH_ADJUDICATION_OBSERVATION_HELPER_PATH
+        in files
+    )
     assert contract.REVIEW_SUDOERS_PATH in files
     assert contract.REVIEW_AUTHORIZED_KEYS in files
     assert "NOPASSWD: ALL" not in contract.SUDOERS_CONTENT
@@ -171,7 +190,7 @@ def test_review_bootstrap_installs_latest_cumulative_sudoers(
     managed = bootstrap_review_host._managed_content("review-key")
 
     assert managed[bootstrap_review_host.REVIEW_SUDOERS_PATH] == (
-        fourth_adjudication_contract.SUDOERS_CONTENT.encode("utf-8")
+        fourth_adjudication_observation_contract.SUDOERS_CONTENT.encode("utf-8")
     )
 
 

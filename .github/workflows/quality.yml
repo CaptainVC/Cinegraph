@@ -229,6 +229,7 @@ jobs:
           deploy/remote/submit-third-private-speaker-review-adjudication.sh
           deploy/remote/observe-third-private-speaker-review-adjudication.sh
           deploy/remote/submit-fourth-private-speaker-review-adjudication.sh
+          deploy/remote/observe-fourth-private-speaker-review-adjudication.sh
       - name: Render and build Dev/Prod runtime
         shell: bash
         run: |

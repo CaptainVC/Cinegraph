@@ -392,6 +392,23 @@ starting Compose, or mutating the run. See
 [ADR-0035](docs/adr/0035-private-fourth-adjudication-submission-boundary.md)
 and the [VPS fourth-adjudication submission runbook](docs/operations/private-speaker-review-fourth-adjudication-submission.md).
 
+Phase 76 adds the thirteenth forced review command,
+`speaker-review-observe-fourth-adjudication-v1`, for exactly one read-only
+observation of Terra adjudication part four after Phase 75 has submitted it.
+The root boundary accepts only the authenticated Phase 75 submitted checkpoint
+(`completed_count == 3`, `part_count > 3`, exactly four unique batch/input IDs,
+and complete part-four submission journals), then binds the full predecessor
+chain, immutable inventory, runtime identity, fresh authorization, and cost
+ceiling. The isolated egress worker reads the secret only after non-secret
+validation and performs one generic observe-next-adjudication read. Waiting
+does not mutate the run; success downloads only part four and advances to
+`adjudication_part_completed` with `completed_count == 4`. Replay is
+provider-free and requires the authenticated root receipt; failed or ambiguous
+evidence stops closed for reconciliation. It cannot submit part five, enter
+final review, compute decisions, promote, ingest, or trigger human review. See
+[ADR-0036](docs/adr/0036-private-fourth-adjudication-observation-boundary.md)
+and the [VPS fourth-adjudication observation runbook](docs/operations/private-speaker-review-fourth-adjudication-observation.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
