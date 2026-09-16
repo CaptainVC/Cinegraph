@@ -155,7 +155,9 @@ def test_exactly_three_part_checkpoint_is_accepted_before_secret_access(
     contents: dict[str, bytes] = {}
     for name in required:
         raw = f"{name}\n".encode("ascii")
-        (tmp_path / name).write_bytes(raw)
+        path = tmp_path / name
+        path.write_bytes(raw)
+        path.chmod(0o600)
         contents[name] = raw
 
     artifacts: dict[str, bytes] = {}
