@@ -121,13 +121,15 @@ root.RECEIPTS_ROOT.mkdir()
 root._validate_authorization = lambda _: "a" * 64
 root._run_directory = lambda _: run
 prep = {{"config_sha": "c" * 64, "image": "ghcr.io/captainvc/cinegraph@sha256:" + "d" * 64, "release_sha": "e" * 40}}
-root._validate_phase74_predecessor = lambda *args: (prep, "b" * 64, "c" * 64, "d" * 64, 11545, 100000)
+estimate = root._estimate_cost(contents, state)
+assert estimate > 0
+root._validate_phase74_predecessor = lambda *args: (prep, "b" * 64, "c" * 64, "d" * 64, estimate, 100000)
 writes = []
 root._write_once = lambda path, value: writes.append(value)
 calls = []
 def worker(request, parent, bindings):
     calls.append(bindings)
-    return root._aggregate(request, state, status="reconciliation_required", estimated=11545, submitted=0)
+    return root._aggregate(request, state, status="reconciliation_required", estimated=estimate, submitted=0)
 root._run_worker = worker
 request = {{"archive_sha256": "a" * 64,
     "authorization_id": "123e4567-e89b-42d3-a456-426614174000",
