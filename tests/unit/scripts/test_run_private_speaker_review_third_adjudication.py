@@ -38,11 +38,7 @@ def _state(
         run_id=RUN_ID,
         status=status,
         created_at="2026-01-01T00:00:00+00:00",
-        updated_at=(
-            "2026-01-01T00:01:00+00:00"
-            if submitted
-            else "2026-01-01T00:00:00+00:00"
-        ),
+        updated_at=("2026-01-01T00:01:00+00:00" if submitted else "2026-01-01T00:00:00+00:00"),
         candidate_count=2,
         primary_model="gpt-5.6-luna",
         adjudication_model="gpt-5.6-terra",
@@ -66,8 +62,7 @@ def _files(state: SpeakerReviewRunState) -> dict[str, bytes]:
     value = {
         root.STATE_NAME: root._canonical(state.to_dict()),
         **{
-            f"adjudication-part-{part:04d}-requests.jsonl": b'{"body":{}}\n'
-            for part in range(1, 4)
+            f"adjudication-part-{part:04d}-requests.jsonl": b'{"body":{}}\n' for part in range(1, 4)
         },
         "adjudication-part-0001-output.jsonl": b"output-1\n",
         "adjudication-part-0002-output.jsonl": b"output-2\n",
@@ -170,8 +165,7 @@ def test_worker_arguments_bind_exact_run_and_all_six_digests(tmp_path: Path) -> 
     run_id = str(REQUEST["run_id"])
     assert (
         f"{(tmp_path / 'review-runs' / run_id).as_posix()}:"
-        f"{(root.host.REVIEW_THIRD_ADJUDICATION_RUNS_TARGET / run_id).as_posix()}:rw"
-        in arguments
+        f"{(root.host.REVIEW_THIRD_ADJUDICATION_RUNS_TARGET / run_id).as_posix()}:rw" in arguments
     )
 
 
@@ -184,18 +178,21 @@ def test_container_environment_is_exactly_bound_to_request_and_image() -> None:
         root.contract.ENV_EXPECTED_PRE_OUTPUT_SET_SHA256: "5" * 64,
         root.contract.ENV_EXPECTED_PRE_DERIVED_SET_SHA256: "6" * 64,
     }
-    image_environment = ["LANG=C.UTF-8", "PATH=/usr/local/bin:/usr/bin"]
+    image_environment = [
+        "LANG=C.UTF-8",
+        "PATH=/usr/local/bin:/usr/bin",
+        "PYTHONPATH=/app/src",
+    ]
     expected = {
         "LANG": "C.UTF-8",
         "PATH": "/usr/local/bin:/usr/bin",
+        "PYTHONPATH": "/app/src",
         **root.WORKER_STATIC_ENVIRONMENT,
         **root._worker_environment(REQUEST, bindings),
     }
     actual = [f"{name}={value}" for name, value in reversed(tuple(expected.items()))]
 
-    assert root._container_environment_is_exact(
-        actual, image_environment, REQUEST, bindings
-    )
+    assert root._container_environment_is_exact(actual, image_environment, REQUEST, bindings)
     assert not root._container_environment_is_exact(
         [*actual, "HTTP_PROXY=http://unexpected.invalid"],
         image_environment,
@@ -203,11 +200,7 @@ def test_container_environment_is_exactly_bound_to_request_and_image() -> None:
         bindings,
     )
     assert not root._container_environment_is_exact(
-        [
-            item
-            for item in actual
-            if not item.startswith(f"{root.contract.ENV_RUN_ID}=")
-        ],
+        [item for item in actual if not item.startswith(f"{root.contract.ENV_RUN_ID}=")],
         image_environment,
         REQUEST,
         bindings,
@@ -277,9 +270,7 @@ def test_fresh_process_submits_once_and_writes_intent_then_receipt(
     def run_worker(*_: object) -> dict[str, object]:
         nonlocal calls
         calls += 1
-        return root._aggregate(
-            REQUEST, after, status="submitted", estimated=200_000, submitted=1
-        )
+        return root._aggregate(REQUEST, after, status="submitted", estimated=200_000, submitted=1)
 
     monkeypatch.setattr(root, "_run_worker", run_worker)
 
@@ -374,9 +365,7 @@ def test_replay_rejects_stale_root_intent_before_worker(
 def test_worker_result_contract_and_post_inventory_are_fail_closed() -> None:
     before = _state()
     after = _state(SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED)
-    valid = root._aggregate(
-        REQUEST, after, status="submitted", estimated=200_000, submitted=1
-    )
+    valid = root._aggregate(REQUEST, after, status="submitted", estimated=200_000, submitted=1)
     with pytest.raises(root.ThirdAdjudicationSubmissionError, match="worker result"):
         root._validate_worker_result(
             {**valid, "adjudication_completed_part_count": 1},
@@ -451,9 +440,7 @@ def test_phase72_predecessor_reconstructs_exact_pre_observation_checkpoint(
         observed["pre_contents"] = predecessor_contents
         observed["pre_state"] = predecessor_state
 
-    monkeypatch.setattr(
-        root.phase72, "_validate_submission_predecessor", validate_submission
-    )
+    monkeypatch.setattr(root.phase72, "_validate_submission_predecessor", validate_submission)
     monkeypatch.setattr(
         root.phase72_contract,
         "validate_aggregate",
@@ -517,6 +504,4 @@ def test_root_intent_is_pinned_to_part_three() -> None:
     assert binding["third_adjudication_part_number"] == 3
     root._validate_binding(binding, REQUEST)
     with pytest.raises(root.ThirdAdjudicationSubmissionError):
-        root._validate_binding(
-            {**binding, "third_adjudication_part_number": 4}, REQUEST
-        )
+        root._validate_binding({**binding, "third_adjudication_part_number": 4}, REQUEST)
