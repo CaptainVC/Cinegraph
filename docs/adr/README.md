@@ -34,4 +34,5 @@
 - [ADR-0032: Private next-adjudication observation boundary](0032-private-next-adjudication-observation-boundary.md)
 - [ADR-0033: Private third-adjudication submission boundary](0033-private-third-adjudication-submission-boundary.md)
 - [ADR-0034: Private third-adjudication observation boundary](0034-private-third-adjudication-observation-boundary.md)
+- [ADR-0035: Private fourth-adjudication submission boundary](0035-private-fourth-adjudication-submission-boundary.md)
 - [ADR template](template.md)

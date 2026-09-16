@@ -378,6 +378,20 @@ parse output, observe part four, perform final review, promote, or ingest. See
 [ADR-0034](docs/adr/0034-private-third-adjudication-observation-boundary.md)
 and the [VPS third-adjudication observation runbook](docs/operations/private-speaker-review-third-adjudication-observation.md).
 
+Phase 75 adds the twelfth forced review command,
+`speaker-review-submit-fourth-adjudication-v1`, for exactly Terra adjudication
+part four after Phase 74 has authenticated observation of part three. It accepts
+only `adjudication_part_completed` with `completed_count == 3`, `part_count > 3`,
+exactly three prior batch/input IDs, and the complete Phase 74 receipt chain.
+The provider worker submits only part four, preserving the completed count at
+three; it cannot observe, parse, finalize, promote, or ingest. Exact journal
+replay is provider-free, while ambiguity fails closed for reconciliation. If
+Phase 74 already completed the entire three-part corpus, this command returns
+an aggregate-only `all_parts_completed` response without reading the secret,
+starting Compose, or mutating the run. See
+[ADR-0035](docs/adr/0035-private-fourth-adjudication-submission-boundary.md)
+and the [VPS fourth-adjudication submission runbook](docs/operations/private-speaker-review-fourth-adjudication-submission.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
