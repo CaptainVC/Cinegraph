@@ -18,6 +18,13 @@ from cinegraph.ingestion.speaker_review.workflow import save_run_state
 AUTHORIZATION_ID = "123e4567-e89b-42d3-a456-426614174000"
 
 
+@pytest.fixture(autouse=True)
+def _worker_identity(monkeypatch: pytest.MonkeyPatch) -> None:
+    if os.name == "posix":
+        monkeypatch.setattr(worker._primary_worker, "WORKER_UID", os.getuid())
+        monkeypatch.setattr(worker._primary_worker, "WORKER_GID", os.getgid())
+
+
 def _environment(run: Path) -> dict[str, str]:
     groups = worker._inventory(run)
     return {
