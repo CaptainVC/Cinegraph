@@ -25,7 +25,20 @@ def _worker_identity(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(worker._primary_worker, "WORKER_GID", os.getgid())
 
 
+def _set_private_workspace_permissions(run: Path) -> None:
+    if os.name != "posix":
+        return
+    run.chmod(0o700)
+    for current, directories, filenames in os.walk(run, followlinks=False):
+        root = Path(current)
+        for directory in directories:
+            (root / directory).chmod(0o700)
+        for filename in filenames:
+            (root / filename).chmod(0o600)
+
+
 def _environment(run: Path) -> dict[str, str]:
+    _set_private_workspace_permissions(run)
     groups = worker._inventory(run)
     return {
         contract.ENV_ARCHIVE_SHA256: "a" * 64,
