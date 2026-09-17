@@ -63,6 +63,21 @@ def _digest(files: Mapping[str, bytes]) -> str:
     return _primary_worker._set_digest(files)
 
 
+def _expected_directory_link_count(
+    identity: tuple[int, int, int, int, int],
+    directory: str,
+    created_directories: set[str],
+) -> int:
+    if os.name != "posix":
+        return identity[4]
+    created_children = sum(
+        1
+        for created in created_directories
+        if (created.rpartition("/")[0] or ".") == directory
+    )
+    return identity[4] + created_children
+
+
 def _inventory(run_directory: Path) -> dict[str, object]:
     try:
         root_before = run_directory.lstat()
@@ -415,20 +430,25 @@ def process(environment: Mapping[str, str] | None = None) -> bytes:
         raise AdjudicationResultProcessingWorkerError("processing evidence changed")
     before_directories = before["directories"]  # type: ignore[assignment]
     after_directories = after_inventory["directories"]  # type: ignore[assignment]
+    created_directories = set(after_directories) - set(before_directories)
     for name, identity in before_directories.items():
         observed = after_directories.get(name)
         if observed is None or (
             observed[0],
             observed[1],
             observed[4],
-        ) != (identity[0], identity[1], identity[4]):
+        ) != (
+            identity[0],
+            identity[1],
+            _expected_directory_link_count(identity, name, created_directories),
+        ):
             raise AdjudicationResultProcessingWorkerError("processing evidence changed")
     before_root = before["directory_identity"]  # type: ignore[assignment]
     after_root = after_inventory["directory_identity"]  # type: ignore[assignment]
-    if (before_root[0], before_root[1], before_root[4]) != (
-        after_root[0],
-        after_root[1],
-        after_root[4],
+    if (after_root[0], after_root[1], after_root[4]) != (
+        before_root[0],
+        before_root[1],
+        _expected_directory_link_count(before_root, ".", created_directories),
     ):
         raise AdjudicationResultProcessingWorkerError("processing evidence changed")
     if replay and before["state"] != after_inventory["state"]:
