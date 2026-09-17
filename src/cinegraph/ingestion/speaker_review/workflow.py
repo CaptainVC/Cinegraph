@@ -81,6 +81,9 @@ from cinegraph.ingestion.speaker_review.source_manifest import (
     speaker_review_filesystem_configuration,
     validate_run_directory,
 )
+from cinegraph.ingestion.subtitle_alignment.subtitle_parser import (
+    episode_key_from_subtitle_path,
+)
 from cinegraph.ports.llm.speaker_review_batch_gateway import (
     BatchSnapshot,
     BatchSubmission,
@@ -1041,6 +1044,870 @@ class SpeakerReviewWorkflow:
         save_run_state(run_directory, updated)
         return updated
 
+    def process_adjudication_results(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Process a complete adjudication checkpoint without provider access.
+
+        This is the provider-free boundary between adjudication observation and
+        the later final-review submission boundary.  Every input, application
+        journal, and existing derived artifact is validated before any output
+        is created.  Request parts for final review are create-once evidence;
+        this transition never submits them.
+        """
+
+        replay_statuses = {
+            SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED,
+            SpeakerReviewRunStatus.COMPLETED,
+        }
+        if state.status not in {
+            SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
+            *replay_statuses,
+        }:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.RUN_STATE_CONFLICT.format(
+                    status=state.status.value
+                )
+            )
+
+        self._validate_adjudication_processing_stage_shape(state)
+        try:
+            self._validate_complete_application_stage(
+                run_directory,
+                state,
+                stage="primary",
+                part_count=state.primary_part_count,
+                completed_count=state.primary_completed_part_count,
+                batch_ids=state.primary_batch_ids,
+                input_ids=state.primary_input_file_ids,
+            )
+            self._validate_complete_application_stage(
+                run_directory,
+                state,
+                stage="adjudication",
+                part_count=state.adjudication_part_count,
+                completed_count=state.adjudication_completed_part_count,
+                batch_ids=state.adjudication_batch_ids,
+                input_ids=state.adjudication_input_file_ids,
+            )
+            candidates = load_candidates(run_directory)
+            if len(candidates) != state.candidate_count or not candidates:
+                raise ValueError
+            candidates_by_id = {item.candidate_id: item for item in candidates}
+            if len(candidates_by_id) != len(candidates):
+                raise ValueError
+            primary_requests = build_primary_batch_requests(
+                candidates=candidates,
+                model=self._primary_model,
+                reasoning_effort=self._primary_reasoning_effort,
+                configuration=self._configuration,
+            )
+            self._validate_processing_request_parts(
+                run_directory,
+                stage="primary",
+                requests=primary_requests,
+                part_count=state.primary_part_count,
+            )
+            if state.estimated_primary_cost_usd != estimate_batch_cost_usd(
+                requests=primary_requests,
+                model=self._primary_model,
+                configuration=self._configuration,
+            ):
+                raise ValueError
+            primary_text = _combined_stage_output(
+                run_directory, "primary", state.primary_part_count
+            )
+            adjudication_text = _combined_stage_output(
+                run_directory, "adjudication", state.adjudication_part_count
+            )
+            self._validate_output_custom_ids(
+                run_directory,
+                stage="primary",
+                part_count=state.primary_part_count,
+            )
+            self._validate_output_custom_ids(
+                run_directory,
+                stage="adjudication",
+                part_count=state.adjudication_part_count,
+            )
+            primary_verdicts, primary_parse_errors = parse_batch_results(
+                output_jsonl=primary_text,
+                candidates=candidates_by_id,
+                configuration=self._configuration,
+            )
+            primary_decisions = decide_primary_consensus(
+                candidates=candidates,
+                verdicts=primary_verdicts,
+                configuration=self._configuration,
+            )
+            accepted_by_consensus = sum(
+                item.disposition is SpeakerReviewDisposition.CONSENSUS_ACCEPTED
+                for item in primary_decisions
+            )
+            if accepted_by_consensus != state.accepted_by_consensus:
+                raise ValueError
+            residual_ids = {
+                item.candidate_id
+                for item in primary_decisions
+                if item.disposition is SpeakerReviewDisposition.ADJUDICATION_REQUIRED
+            }
+            residual = tuple(
+                item for item in candidates if item.candidate_id in residual_ids
+            )
+            self._validate_processing_request_parts(
+                run_directory,
+                stage="adjudication",
+                requests=build_adjudication_batch_requests(
+                    candidates=residual,
+                    primary_verdicts=primary_verdicts,
+                    model=self._adjudication_model,
+                    reasoning_effort=self._adjudication_reasoning_effort,
+                    configuration=self._configuration,
+                ),
+                part_count=state.adjudication_part_count,
+            )
+            adjudication_verdicts, adjudication_parse_errors = parse_batch_results(
+                output_jsonl=adjudication_text,
+                candidates=candidates_by_id,
+                configuration=self._configuration,
+            )
+            final_decisions = apply_adjudication(
+                primary_decisions=primary_decisions,
+                adjudication_verdicts=adjudication_verdicts,
+                configuration=self._configuration,
+            )
+            if (
+                len(final_decisions) != len(candidates)
+                or {item.candidate_id for item in final_decisions}
+                != set(candidates_by_id)
+            ):
+                raise ValueError
+            primary_cost = actual_batch_output_cost_usd(
+                output_jsonl=primary_text,
+                configured_model=self._primary_model,
+                configuration=self._configuration,
+            )
+            adjudication_cost = actual_batch_output_cost_usd(
+                output_jsonl=adjudication_text,
+                configured_model=self._adjudication_model,
+                configuration=self._configuration,
+            )
+            if primary_cost != state.actual_primary_cost_usd:
+                raise ValueError
+            if not math.isfinite(adjudication_cost) or adjudication_cost < 0:
+                raise ValueError
+            if primary_cost + adjudication_cost > state.maximum_cost_usd:
+                raise ValueError
+            enforce_budget(
+                estimated_cost_usd=0.0,
+                already_spent_usd=primary_cost + adjudication_cost,
+                configuration=self._configuration,
+            )
+            self._enforce_primary_processing_budget(primary_cost, adjudication_cost)
+            accepted_by_adjudication = sum(
+                item.disposition is SpeakerReviewDisposition.ADJUDICATION_ACCEPTED
+                for item in final_decisions
+            )
+            needs_human = sum(
+                item.disposition is SpeakerReviewDisposition.NEEDS_HUMAN
+                for item in final_decisions
+            )
+            if (
+                accepted_by_adjudication < 0
+                or needs_human < 0
+                or accepted_by_adjudication + needs_human
+                != state.candidate_count - state.accepted_by_consensus
+            ):
+                raise ValueError
+            expected_derived = {
+                "primary-verdicts.jsonl": _jsonl_bytes(
+                    tuple(
+                        verdict.to_dict()
+                        for candidate_id in sorted(primary_verdicts)
+                        for verdict in primary_verdicts[candidate_id]
+                    )
+                ),
+                "primary-parse-errors.json": _json_bytes(list(primary_parse_errors)),
+                "primary-decisions.jsonl": _jsonl_bytes(
+                    tuple(item.to_dict() for item in primary_decisions)
+                ),
+                "adjudication-verdicts.jsonl": _jsonl_bytes(
+                    tuple(
+                        verdict.to_dict()
+                        for candidate_id in sorted(adjudication_verdicts)
+                        for verdict in adjudication_verdicts[candidate_id]
+                    )
+                ),
+                "adjudication-parse-errors.json": _json_bytes(
+                    list(adjudication_parse_errors)
+                ),
+                self._configuration.final_decisions_filename: _jsonl_bytes(
+                    tuple(item.to_dict() for item in final_decisions)
+                ),
+            }
+            primary_derived = {
+                name: content
+                for name, content in expected_derived.items()
+                if name.startswith("primary-")
+            }
+            self._validate_existing_derived(run_directory, primary_derived)
+            self._validate_or_write_derived(
+                run_directory,
+                {
+                    name: content
+                    for name, content in expected_derived.items()
+                    if not name.startswith("primary-")
+                },
+                replay=state.status in replay_statuses,
+            )
+        except (
+            TypeError,
+            ValueError,
+            KeyError,
+            OSError,
+            FileNotFoundError,
+            SpeakerReviewFilesystemError,
+        ) as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+
+        if state.status in replay_statuses:
+            expected_needs_human = needs_human
+            if state.status is SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED:
+                if state.actual_adjudication_cost_usd != adjudication_cost:
+                    raise RuntimeError(
+                        SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+                    )
+                try:
+                    self._validate_final_review_prepared_replay(
+                        run_directory,
+                        state,
+                        final_decisions,
+                        expected_needs_human,
+                    )
+                except (
+                    TypeError,
+                    ValueError,
+                    OSError,
+                    FileNotFoundError,
+                    SpeakerReviewFilesystemError,
+                ) as error:
+                    raise RuntimeError(
+                        SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+                    ) from error
+                return state
+            if (
+                expected_needs_human
+                or state.actual_adjudication_cost_usd != adjudication_cost
+                or state.accepted_by_adjudication != accepted_by_adjudication
+                or state.needs_human != 0
+            ):
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+                )
+            if any(run_directory.glob("final-review-part-*-requests.jsonl")):
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+                )
+            try:
+                self._validate_completed_replay_artifacts(
+                    run_directory, state, final_decisions
+                )
+            except (
+                TypeError,
+                ValueError,
+                KeyError,
+                OSError,
+                FileNotFoundError,
+                SpeakerReviewFilesystemError,
+            ) as error:
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+                ) from error
+            return state
+
+        try:
+            if not needs_human:
+                if any(run_directory.glob("final-review-part-*-requests.jsonl")):
+                    raise ValueError
+                updated = replace(
+                    state,
+                    status=SpeakerReviewRunStatus.COMPLETED,
+                    actual_adjudication_cost_usd=adjudication_cost,
+                    adjudication_completed_part_count=state.adjudication_part_count,
+                    accepted_by_adjudication=accepted_by_adjudication,
+                    needs_human=0,
+                    updated_at=_now(),
+                )
+                return self._finalize(run_directory, updated, final_decisions)
+
+            if any(
+                os.path.lexists(run_directory / name)
+                for name in (
+                    "review-ledger.json",
+                    "calibration-sample.json",
+                    self._configuration.reviewed_directory_name,
+                )
+            ):
+                raise ValueError
+
+            unresolved = tuple(
+                item
+                for item in candidates
+                if item.candidate_id
+                in {
+                    decision.candidate_id
+                    for decision in final_decisions
+                    if decision.disposition is SpeakerReviewDisposition.NEEDS_HUMAN
+                }
+            )
+            decisions_by_id = {item.candidate_id: item for item in final_decisions}
+            final_requests = build_final_review_batch_requests(
+                candidates=unresolved,
+                decisions=decisions_by_id,
+                model=self._final_review_model,
+                reasoning_effort=self._final_review_reasoning_effort,
+                configuration=self._configuration,
+            )
+            estimated_final_cost = estimate_batch_cost_usd(
+                requests=final_requests,
+                model=self._final_review_model,
+                configuration=self._configuration,
+            )
+            if (
+                not math.isfinite(estimated_final_cost)
+                or estimated_final_cost < 0
+                or primary_cost + adjudication_cost + estimated_final_cost
+                > state.maximum_cost_usd
+            ):
+                raise ValueError
+            enforce_budget(
+                estimated_cost_usd=estimated_final_cost,
+                already_spent_usd=primary_cost + adjudication_cost,
+                configuration=self._configuration,
+            )
+            self._enforce_primary_processing_budget(
+                primary_cost + adjudication_cost,
+                estimated_final_cost,
+            )
+            final_parts = partition_batch_requests(
+                requests=final_requests,
+                configuration=self._configuration,
+            )
+            expected_names = {
+                _request_part_path(run_directory, "final-review", index).name
+                for index in range(len(final_parts))
+            }
+            existing_names = {
+                path.name
+                for path in run_directory.glob("final-review-part-*-requests.jsonl")
+            }
+            if not existing_names.issubset(expected_names):
+                raise ValueError
+            _write_request_parts(run_directory, "final-review", final_parts)
+            updated = replace(
+                state,
+                status=SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED,
+                actual_adjudication_cost_usd=adjudication_cost,
+                adjudication_completed_part_count=state.adjudication_part_count,
+                accepted_by_adjudication=accepted_by_adjudication,
+                needs_human=needs_human,
+                final_review_model=self._final_review_model,
+                final_review_part_count=len(final_parts),
+                final_review_completed_part_count=0,
+                final_review_batch_id=None,
+                final_review_input_file_id=None,
+                final_review_batch_ids=(),
+                final_review_input_file_ids=(),
+                actual_final_review_cost_usd=0.0,
+                updated_at=_now(),
+            )
+            save_run_state(run_directory, updated)
+            return updated
+        except (
+            TypeError,
+            ValueError,
+            OSError,
+            FileExistsError,
+            SpeakerReviewFilesystemError,
+        ) as error:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            ) from error
+
+    def _validate_adjudication_processing_stage_shape(
+        self, state: SpeakerReviewRunState
+    ) -> None:
+        """Validate the immutable shape at the adjudication processing boundary."""
+
+        final_provider_empty = (
+            state.final_review_model == self._final_review_model
+            and state.actual_final_review_cost_usd == 0.0
+            and state.final_review_completed_part_count == 0
+            and state.final_review_batch_id is None
+            and state.final_review_input_file_id is None
+            and state.final_review_batch_ids == ()
+            and state.final_review_input_file_ids == ()
+            and state.final_review_retry_count == 0
+        )
+        common = (
+            type(state.schema_version) is int
+            and state.schema_version == self._configuration.schema_version
+            and state.primary_model == self._primary_model
+            and state.adjudication_model == self._adjudication_model
+            and state.final_review_model == self._final_review_model
+            and state.prompt_version == self._configuration.prompt_version
+            and math.isfinite(state.maximum_cost_usd)
+            and 0 < state.maximum_cost_usd <= self._configuration.maximum_run_cost_usd
+            and math.isfinite(self._maximum_authorized_cost_usd)
+            and 0 < self._maximum_authorized_cost_usd <= self._configuration.maximum_run_cost_usd
+            and math.isfinite(state.estimated_primary_cost_usd)
+            and 0
+            <= state.estimated_primary_cost_usd
+            <= min(state.maximum_cost_usd, self._maximum_authorized_cost_usd)
+            and math.isfinite(state.actual_primary_cost_usd)
+            and 0 <= state.actual_primary_cost_usd <= self._maximum_authorized_cost_usd
+            and type(state.candidate_count) is int
+            and state.candidate_count > 0
+            and type(state.primary_part_count) is int
+            and state.primary_part_count > 0
+            and state.primary_completed_part_count == state.primary_part_count
+            and state.accepted_by_consensus >= 0
+            and state.accepted_by_consensus <= state.candidate_count
+            and state.accepted_by_final_review == 0
+            and state.accepted_by_human == 0
+            and final_provider_empty
+        )
+        ids_ok = (
+            isinstance(state.primary_batch_ids, tuple)
+            and isinstance(state.primary_input_file_ids, tuple)
+            and len(state.primary_batch_ids) == state.primary_part_count
+            and len(state.primary_input_file_ids) == state.primary_part_count
+            and len(set(state.primary_batch_ids)) == state.primary_part_count
+            and len(set(state.primary_input_file_ids)) == state.primary_part_count
+            and all(
+                isinstance(item, str) and item and item == item.strip()
+                for item in (*state.primary_batch_ids, *state.primary_input_file_ids)
+            )
+            and state.primary_batch_id == state.primary_batch_ids[-1]
+            and state.primary_input_file_id == state.primary_input_file_ids[-1]
+        )
+        adjudication_count_ok = (
+            type(state.adjudication_part_count) is int
+            and state.adjudication_part_count > 0
+            and type(state.adjudication_completed_part_count) is int
+            and state.adjudication_completed_part_count == state.adjudication_part_count
+            and isinstance(state.adjudication_batch_ids, tuple)
+            and isinstance(state.adjudication_input_file_ids, tuple)
+            and len(state.adjudication_batch_ids) == state.adjudication_part_count
+            and len(state.adjudication_input_file_ids) == state.adjudication_part_count
+            and len(set(state.adjudication_batch_ids)) == state.adjudication_part_count
+            and len(set(state.adjudication_input_file_ids)) == state.adjudication_part_count
+            and set(state.primary_batch_ids).isdisjoint(state.adjudication_batch_ids)
+            and set(state.primary_input_file_ids).isdisjoint(
+                state.adjudication_input_file_ids
+            )
+            and all(
+                isinstance(item, str) and item and item == item.strip()
+                for item in (
+                    *state.adjudication_batch_ids,
+                    *state.adjudication_input_file_ids,
+                )
+            )
+            and state.adjudication_batch_id == state.adjudication_batch_ids[-1]
+            and state.adjudication_input_file_id
+            == state.adjudication_input_file_ids[-1]
+        )
+        if not common or not ids_ok or not adjudication_count_ok:
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+        if state.status is SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED:
+            valid = (
+                state.actual_adjudication_cost_usd == 0.0
+                and state.accepted_by_adjudication == 0
+                and state.needs_human == 0
+                and state.final_review_part_count == 0
+            )
+        elif state.status is SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED:
+            valid = (
+                math.isfinite(state.actual_adjudication_cost_usd)
+                and state.actual_adjudication_cost_usd >= 0
+                and state.accepted_by_adjudication >= 0
+                and state.needs_human > 0
+                and state.final_review_part_count > 0
+            )
+        else:
+            valid = (
+                math.isfinite(state.actual_adjudication_cost_usd)
+                and state.actual_adjudication_cost_usd >= 0
+                and state.accepted_by_adjudication >= 0
+                and state.needs_human == 0
+                and state.final_review_part_count == 0
+            )
+        total_valid = (
+            state.accepted_by_consensus
+            + state.accepted_by_adjudication
+            + state.needs_human
+            == state.candidate_count
+        )
+        if not valid or (
+            state.status is not SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED
+            and not total_valid
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED
+            )
+
+    def _validate_complete_application_stage(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+        *,
+        stage: str,
+        part_count: int,
+        completed_count: int,
+        batch_ids: tuple[str, ...],
+        input_ids: tuple[str, ...],
+    ) -> None:
+        if (
+            type(part_count) is not int
+            or part_count <= 0
+            or completed_count != part_count
+            or not isinstance(batch_ids, tuple)
+            or not isinstance(input_ids, tuple)
+            or len(batch_ids) != part_count
+            or len(input_ids) != part_count
+            or len(set(batch_ids)) != part_count
+            or len(set(input_ids)) != part_count
+            or not all(
+                isinstance(item, str) and item and item == item.strip()
+                for item in (*batch_ids, *input_ids)
+            )
+        ):
+            raise ValueError
+
+        for index in range(part_count):
+            request = _request_part_path(run_directory, stage, index)
+            request_bytes = _bounded_file_bytes(request)
+            intent = _read_submission_record(
+                _submission_path(run_directory, stage, index, "intent"),
+                completed=False,
+            )
+            completed = _read_submission_record(
+                _submission_path(run_directory, stage, index, "completed"),
+                completed=True,
+            )
+            binding = intent.get("binding") if intent is not None else None
+            if (
+                intent is None
+                or completed is None
+                or intent.get("status") != "intent"
+                or completed.get("status") not in {"validating", "completed", "failed"}
+                or completed.get("binding") != binding
+                or not isinstance(binding, dict)
+                or binding.get("schema_version") != SUBMISSION_SCHEMA_VERSION
+                or binding.get("request_sha256") != sha256(request_bytes).hexdigest()
+                or binding.get("run_id") != state.run_id
+                or binding.get("stage") != stage
+                or binding.get("part") != index + 1
+                or binding.get("prompt_version") != state.prompt_version
+                or binding.get("batch_endpoint") != self._configuration.batch_endpoint
+                or binding.get("completion_window")
+                != self._configuration.batch_completion_window
+                or completed.get("batch_id") != batch_ids[index]
+                or completed.get("input_file_id") != input_ids[index]
+            ):
+                raise ValueError
+            _bounded_file_bytes(
+                run_directory / f"{stage}-part-{index + 1:04d}-output.jsonl"
+            )
+        expected_requests = {
+            f"{stage}-part-{index + 1:04d}-requests.jsonl"
+            for index in range(part_count)
+        }
+        if {
+            path.name
+            for path in run_directory.glob(f"{stage}-part-*-requests.jsonl")
+        } != expected_requests:
+            raise ValueError
+        expected_journals = {
+            f".{stage}-part-{index + 1:04d}-submission-{kind}.json"
+            for index in range(part_count)
+            for kind in ("intent", "completed")
+        }
+        if {
+            path.name
+            for path in run_directory.glob(f".{stage}-part-*-submission-*.json")
+        } != expected_journals:
+            raise ValueError
+        pattern = f"{stage}-part-*-output.jsonl"
+        expected_outputs = {
+            f"{stage}-part-{index + 1:04d}-output.jsonl"
+            for index in range(part_count)
+        }
+        if {item.name for item in run_directory.glob(pattern)} != expected_outputs:
+            raise ValueError
+        if any(
+            item.name
+            not in {
+                f"{stage}-part-{index + 1:04d}-api-errors.jsonl"
+                for index in range(part_count)
+            }
+            for item in run_directory.glob(f"{stage}-part-*-api-errors.jsonl")
+        ):
+            raise ValueError
+
+    @staticmethod
+    def _validate_output_custom_ids(
+        run_directory: Path,
+        *,
+        stage: str,
+        part_count: int,
+    ) -> None:
+        expected: list[str] = []
+        observed: list[str] = []
+        for part_index in range(part_count):
+            part_expected: list[str] = []
+            part_observed: list[str] = []
+            request_path = _request_part_path(run_directory, stage, part_index)
+            for raw in _bounded_file_bytes(request_path).decode("utf-8").splitlines():
+                if raw.strip():
+                    payload = json.loads(raw)
+                    if not isinstance(payload, dict) or not isinstance(payload.get("custom_id"), str):
+                        raise ValueError
+                    part_expected.append(payload["custom_id"])
+            output_path = run_directory / f"{stage}-part-{part_index + 1:04d}-output.jsonl"
+            for raw in _bounded_file_bytes(output_path).decode("utf-8").splitlines():
+                if raw.strip():
+                    payload = json.loads(raw)
+                    if not isinstance(payload, dict) or not isinstance(payload.get("custom_id"), str):
+                        raise ValueError
+                    part_observed.append(payload["custom_id"])
+            error_path = run_directory / f"{stage}-part-{part_index + 1:04d}-api-errors.jsonl"
+            if os.path.lexists(error_path):
+                for raw in _bounded_file_bytes(error_path).decode("utf-8").splitlines():
+                    if raw.strip():
+                        payload = json.loads(raw)
+                        if not isinstance(payload, dict) or not isinstance(payload.get("custom_id"), str):
+                            raise ValueError
+                        part_observed.append(payload["custom_id"])
+            if (
+                len(part_expected) != len(set(part_expected))
+                or len(part_observed) != len(set(part_observed))
+                or set(part_observed) != set(part_expected)
+            ):
+                raise ValueError
+            expected.extend(part_expected)
+            observed.extend(part_observed)
+        if (
+            len(expected) != len(set(expected))
+            or len(observed) != len(set(observed))
+            or set(observed) != set(expected)
+        ):
+            raise ValueError
+
+    def _validate_processing_request_parts(
+        self,
+        run_directory: Path,
+        *,
+        stage: str,
+        requests: tuple[dict[str, object], ...],
+        part_count: int,
+    ) -> None:
+        parts = partition_batch_requests(
+            requests=requests,
+            configuration=self._configuration,
+        )
+        if len(parts) != part_count:
+            raise ValueError
+        expected_names = {
+            _request_part_path(run_directory, stage, index).name
+            for index in range(part_count)
+        }
+        actual_names = {
+            path.name for path in run_directory.glob(f"{stage}-part-*-requests.jsonl")
+        }
+        if actual_names != expected_names:
+            raise ValueError
+        for index, part in enumerate(parts):
+            if stable_file_snapshot(
+                _request_part_path(run_directory, stage, index),
+                max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+            ).content != _jsonl_bytes(part):
+                raise ValueError
+
+    def _validate_or_write_derived(
+        self,
+        run_directory: Path,
+        expected: dict[str, bytes],
+        *,
+        replay: bool,
+    ) -> None:
+        for name, content in expected.items():
+            path = run_directory / name
+            if replay:
+                if stable_file_snapshot(path, max_bytes=PRIVATE_ARTIFACT_MAX_BYTES).content != content:
+                    raise ValueError
+            else:
+                _write_text_if_new_or_unchanged(path, content.decode("utf-8"))
+
+    @staticmethod
+    def _validate_existing_derived(
+        run_directory: Path,
+        expected: dict[str, bytes],
+    ) -> None:
+        for name, content in expected.items():
+            if stable_file_snapshot(
+                run_directory / name,
+                max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+            ).content != content:
+                raise ValueError
+
+    def _validate_final_review_prepared_replay(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+        decisions: tuple[SpeakerReviewDecision, ...],
+        needs_human: int,
+    ) -> None:
+        if state.needs_human != needs_human or state.actual_adjudication_cost_usd < 0:
+            raise ValueError
+        unresolved = tuple(
+            item
+            for item in load_candidates(run_directory)
+            if item.candidate_id
+            in {
+                decision.candidate_id
+                for decision in decisions
+                if decision.disposition is SpeakerReviewDisposition.NEEDS_HUMAN
+            }
+        )
+        requests = build_final_review_batch_requests(
+            candidates=unresolved,
+            decisions={item.candidate_id: item for item in decisions},
+            model=self._final_review_model,
+            reasoning_effort=self._final_review_reasoning_effort,
+            configuration=self._configuration,
+        )
+        parts = partition_batch_requests(requests=requests, configuration=self._configuration)
+        estimated_cost = estimate_batch_cost_usd(
+            requests=requests,
+            model=self._final_review_model,
+            configuration=self._configuration,
+        )
+        if (
+            not math.isfinite(estimated_cost)
+            or estimated_cost < 0
+            or state.actual_total_cost_usd + estimated_cost > state.maximum_cost_usd
+        ):
+            raise ValueError
+        enforce_budget(
+            estimated_cost_usd=estimated_cost,
+            already_spent_usd=state.actual_total_cost_usd,
+            configuration=self._configuration,
+        )
+        self._enforce_primary_processing_budget(
+            state.actual_total_cost_usd,
+            estimated_cost,
+        )
+        if state.final_review_part_count != len(parts):
+            raise ValueError
+        expected = {
+            _request_part_path(run_directory, "final-review", index).name
+            for index in range(len(parts))
+        }
+        existing = {
+            path.name
+            for path in run_directory.glob("final-review-part-*-requests.jsonl")
+        }
+        if existing != expected:
+            raise ValueError
+        for index, requests_part in enumerate(parts):
+            encoded = _jsonl_bytes(requests_part)
+            if stable_file_snapshot(
+                _request_part_path(run_directory, "final-review", index),
+                max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+            ).content != encoded:
+                raise ValueError
+
+    def _validate_completed_replay_artifacts(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+        decisions: tuple[SpeakerReviewDecision, ...],
+    ) -> None:
+        candidates = load_candidates(run_directory)
+        source_texts = load_source_texts(
+            run_directory,
+            state.run_id,
+            self._configuration,
+        )
+        reviewed_root = run_directory / self._configuration.reviewed_directory_name
+        if (
+            not reviewed_root.is_dir()
+            or reviewed_root.is_symlink()
+            or not source_texts
+        ):
+            raise ValueError
+        expected_files: set[str] = set()
+        expected_directories = {reviewed_root.resolve()}
+        for source_filename in source_texts:
+            episode = episode_key_from_subtitle_path(Path(source_filename))
+            output_directory = reviewed_root / f"season-{episode.season:02d}"
+            expected_directories.add(output_directory.resolve())
+            expected_files.add(
+                (
+                    output_directory
+                    / source_filename.replace(
+                        ".script-aligned.srt", ".automated-reviewed.srt"
+                    )
+                ).relative_to(run_directory).as_posix()
+            )
+        actual_files: set[str] = set()
+        actual_directories: set[Path] = {reviewed_root.resolve()}
+        for current, directories, filenames in os.walk(
+            reviewed_root, followlinks=False
+        ):
+            current_path = Path(current)
+            if current_path.is_symlink():
+                raise ValueError
+            actual_directories.add(current_path.resolve())
+            for directory in directories:
+                child = current_path / directory
+                if child.is_symlink():
+                    raise ValueError
+                actual_directories.add(child.resolve())
+            for filename in filenames:
+                path = current_path / filename
+                stable_file_snapshot(path, max_bytes=PRIVATE_ARTIFACT_MAX_BYTES)
+                actual_files.add(path.relative_to(run_directory).as_posix())
+        if actual_files != expected_files or actual_directories != expected_directories:
+            raise ValueError
+        stable_file_snapshot(
+            run_directory / "review-ledger.json",
+            max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+        )
+        stable_file_snapshot(
+            run_directory / "calibration-sample.json",
+            max_bytes=PRIVATE_ARTIFACT_MAX_BYTES,
+        )
+        records = write_reviewed_outputs(
+            run_directory=run_directory,
+            source_texts=source_texts,
+            candidates=candidates,
+            decisions=decisions,
+            reviewer_models=(state.primary_model, state.adjudication_model),
+            prompt_version=state.prompt_version,
+            actual_cost_usd=state.actual_total_cost_usd,
+            configuration=self._configuration,
+        )
+        if len(records) != len(source_texts):
+            raise ValueError
+
     def submit_next_primary_part(
         self,
         run_directory: Path,
@@ -1957,6 +2824,7 @@ class SpeakerReviewWorkflow:
         if state.status not in {
             SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
             SpeakerReviewRunStatus.NEEDS_HUMAN,
+            SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED,
         }:
             raise RuntimeError(
                 SpeakerReviewErrorMessages.RUN_STATE_CONFLICT.format(
@@ -1973,6 +2841,65 @@ class SpeakerReviewWorkflow:
         }
         if not unresolved_ids:
             return self._finalize(run_directory, state, final_decisions)
+        if state.status is SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED:
+            try:
+                self._validate_adjudication_processing_stage_shape(state)
+                self._validate_final_review_prepared_replay(
+                    run_directory,
+                    state,
+                    final_decisions,
+                    state.needs_human,
+                )
+            except (
+                TypeError,
+                ValueError,
+                OSError,
+                FileNotFoundError,
+                SpeakerReviewFilesystemError,
+            ) as error:
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+                ) from error
+            if (
+                state.final_review_part_count <= 0
+                or state.final_review_batch_ids
+                or state.final_review_input_file_ids
+                or state.final_review_batch_id is not None
+                or state.final_review_input_file_id is not None
+                or state.actual_final_review_cost_usd != 0.0
+            ):
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+                )
+            expected_names = {
+                _request_part_path(run_directory, "final-review", index).name
+                for index in range(state.final_review_part_count)
+            }
+            existing_names = {
+                path.name
+                for path in run_directory.glob("final-review-part-*-requests.jsonl")
+            }
+            if existing_names != expected_names:
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
+                )
+            submission = self._submit_part(
+                run_directory=run_directory,
+                state=state,
+                stage="final-review",
+                part_index=0,
+            )
+            updated = replace(
+                state,
+                status=SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED,
+                updated_at=_now(),
+                final_review_batch_id=submission.batch_id,
+                final_review_input_file_id=submission.input_file_id,
+                final_review_batch_ids=(submission.batch_id,),
+                final_review_input_file_ids=(submission.input_file_id,),
+            )
+            save_run_state(run_directory, updated)
+            return updated
         candidates = tuple(
             item
             for item in load_candidates(run_directory)
@@ -2739,10 +3666,19 @@ def verdict_from_dict(payload: dict[str, object]) -> SpeakerReviewVerdict:
 
 
 def _write_jsonl(path: Path, items: tuple[dict[str, object], ...]) -> None:
-    content = "".join(
+    _write_text_if_new_or_unchanged(path, _jsonl_bytes(items).decode("utf-8"))
+
+
+def _jsonl_bytes(items: tuple[dict[str, object], ...]) -> bytes:
+    return "".join(
         json.dumps(item, ensure_ascii=False, sort_keys=True) + "\n" for item in items
-    )
-    _write_text_if_new_or_unchanged(path, content)
+    ).encode("utf-8")
+
+
+def _json_bytes(payload: object) -> bytes:
+    return (
+        json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+    ).encode("utf-8")
 
 
 def _write_request_parts(
