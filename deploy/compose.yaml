@@ -342,6 +342,35 @@ services:
     restart: "no"
     command: ["python", "scripts/process_private_speaker_review_results_workspace.py"]
 
+  # Provider-free processing of a fully observed adjudication result set.
+  # The root boundary supplies only digest-bound review-runs evidence; this
+  # worker has no network or provider credential and emits aggregate counts.
+  corpus-speaker-review-process-adjudication-results:
+    profiles: [corpus-speaker-review-process-adjudication-results]
+    image: *cinegraph-image
+    user: "10002:10002"
+    environment:
+      <<: *model-cache-environment
+      HF_HUB_OFFLINE: "1"
+      CINEGRAPH_ENVIRONMENT: development
+      CINEGRAPH_SPEAKER_REVIEW_RUNS_ROOT: /review-workspace/review-runs
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    network_mode: none
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: ${CINEGRAPH_SPEAKER_REVIEW_MEMORY_LIMIT:-1024m}
+    cpus: ${CINEGRAPH_SPEAKER_REVIEW_CPU_LIMIT:-1.0}
+    restart: "no"
+    command: ["python", "scripts/process_private_speaker_review_adjudication_results_workspace.py"]
+
   # Paid first adjudication submission.  Only the digest-selected review-runs
   # workspace and the OpenAI secret cross this egress boundary; source and
   # application state remain inaccessible to the worker.

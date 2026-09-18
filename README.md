@@ -409,6 +409,21 @@ final review, compute decisions, promote, ingest, or trigger human review. See
 [ADR-0036](docs/adr/0036-private-fourth-adjudication-observation-boundary.md)
 and the [VPS fourth-adjudication observation runbook](docs/operations/private-speaker-review-fourth-adjudication-observation.md).
 
+Phase 77 adds the provider-free adjudication-result processing checkpoint. The
+LangGraph operation `process-adjudication-results` accepts only a fully observed
+adjudication set (`completed_count == part_count > 0`), authenticates every
+request, submission journal, output, optional API-error artifact, model, cost,
+and custom ID, and deterministically recomputes the primary and adjudication
+evidence. Fully resolved runs are finalized locally; unresolved runs stop at
+the new `final_review_prepared` checkpoint with create-once final-review request
+parts. The isolated Compose worker has no network, provider credential, or
+provider-capable gateway, and its strict output contains aggregate counts only.
+It does not submit final review, promote corpus data, ingest data, or authorize
+human review. The root forced-command, authorization, and receipt boundary is a
+separate follow-up phase. See
+[ADR-0037](docs/adr/0037-provider-free-adjudication-result-processing.md) and
+the [adjudication-result processing runbook](docs/operations/private-speaker-review-adjudication-result-processing.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:

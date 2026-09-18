@@ -121,6 +121,14 @@ class RecordingSpeakerReviewWorkflow:
         self.calls.append("process_primary_results")
         return replace(state, status=SpeakerReviewRunStatus.ADJUDICATION_PREPARED)
 
+    def process_adjudication_results(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        self.calls.append("process_adjudication_results")
+        return replace(state, status=SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED)
+
     def submit_final_review(
         self,
         run_directory: Path,
@@ -421,6 +429,36 @@ def test_process_primary_results_graph_uses_verified_checkpoint_without_reload(
 
     assert state.status is SpeakerReviewRunStatus.ADJUDICATION_PREPARED
     assert workflow.calls == ["process_primary_results"]
+
+
+def test_process_adjudication_results_graph_uses_verified_checkpoint_without_reload(
+    tmp_path: Path,
+) -> None:
+    run_directory = tmp_path / "run"
+    checkpoint = replace(
+        run_state(SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED),
+        primary_completed_part_count=1,
+        primary_batch_id="batch-1",
+        primary_input_file_id="file-1",
+        primary_batch_ids=("batch-1",),
+        primary_input_file_ids=("file-1",),
+        adjudication_part_count=1,
+        adjudication_completed_part_count=1,
+        adjudication_batch_id="adjudication-batch-1",
+        adjudication_input_file_id="adjudication-file-1",
+        adjudication_batch_ids=("adjudication-batch-1",),
+        adjudication_input_file_ids=("adjudication-file-1",),
+    )
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.process_adjudication_results(
+        run_directory,
+        verified_run_state=checkpoint,
+    )
+
+    assert state.status is SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED
+    assert workflow.calls == ["process_adjudication_results"]
 
 
 def test_submit_next_primary_graph_ignores_unrelated_terminal_state(

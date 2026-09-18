@@ -36,4 +36,5 @@
 - [ADR-0034: Private third-adjudication observation boundary](0034-private-third-adjudication-observation-boundary.md)
 - [ADR-0035: Private fourth-adjudication submission boundary](0035-private-fourth-adjudication-submission-boundary.md)
 - [ADR-0036: Private fourth-adjudication observation boundary](0036-private-fourth-adjudication-observation-boundary.md)
+- [ADR-0037: Provider-free adjudication-result processing checkpoint](0037-provider-free-adjudication-result-processing.md)
 - [ADR template](template.md)
