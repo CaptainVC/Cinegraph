@@ -22,6 +22,13 @@ if os.fspath(_ROOT) not in sys.path:
 from scripts import bootstrap_corpus_host, bootstrap_dev_host  # noqa: E402
 from scripts.bootstrap_dev_host import BootstrapError, ExpectedPath  # noqa: E402
 from scripts.dev_host_contract import DEPLOY_HOME, SAFE_PATH, validate_fingerprint  # noqa: E402
+from scripts.private_speaker_review_adjudication_result_processing_host_contract import (  # noqa: E402
+    REVIEW_ADJUDICATION_RESULT_PROCESSING_HELPER_PATH,
+    REVIEW_ADJUDICATION_RESULT_PROCESSING_RECEIPTS_ROOT,
+)
+from scripts.private_speaker_review_adjudication_result_processing_host_contract import (  # noqa: E402
+    SUDOERS_CONTENT as ADJUDICATION_RESULT_PROCESSING_SUDOERS_CONTENT,
+)
 from scripts.private_speaker_review_first_adjudication_host_contract import (  # noqa: E402
     REVIEW_FIRST_ADJUDICATION_HELPER_PATH,
     REVIEW_FIRST_ADJUDICATION_RECEIPTS_ROOT,
@@ -145,6 +152,9 @@ SOURCE_NEXT_OBSERVATION_HELPER: Final = (
 SOURCE_PRIMARY_RESULT_PROCESSING_HELPER: Final = (
     REPOSITORY_ROOT / "deploy/remote/process-private-speaker-review-results.sh"
 )
+SOURCE_ADJUDICATION_RESULT_PROCESSING_HELPER: Final = (
+    REPOSITORY_ROOT / "deploy/remote/process-private-speaker-review-adjudication-results.sh"
+)
 SOURCE_FIRST_ADJUDICATION_HELPER: Final = (
     REPOSITORY_ROOT / "deploy/remote/submit-first-private-speaker-review-adjudication.sh"
 )
@@ -193,6 +203,7 @@ DIRECTORY_CONTRACT: Final = (
     ExpectedPath(REVIEW_OBSERVATION_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(REVIEW_NEXT_PRIMARY_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(REVIEW_PRIMARY_RESULT_PROCESSING_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(REVIEW_ADJUDICATION_RESULT_PROCESSING_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(REVIEW_FIRST_ADJUDICATION_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(
         REVIEW_FIRST_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT,
@@ -222,6 +233,7 @@ FILE_CONTRACT: Final = (
     ExpectedPath(REVIEW_NEXT_PRIMARY_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_NEXT_OBSERVATION_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH, "file", 0, 0, 0o755),
+    ExpectedPath(REVIEW_ADJUDICATION_RESULT_PROCESSING_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_FIRST_ADJUDICATION_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(
         REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH,
@@ -381,12 +393,17 @@ def _managed_content(public_key: str) -> dict[Path, bytes]:
         REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH: _read_source(
             SOURCE_PRIMARY_RESULT_PROCESSING_HELPER
         ),
+        REVIEW_ADJUDICATION_RESULT_PROCESSING_HELPER_PATH: _read_source(
+            SOURCE_ADJUDICATION_RESULT_PROCESSING_HELPER
+        ),
         REVIEW_FIRST_ADJUDICATION_HELPER_PATH: _read_source(SOURCE_FIRST_ADJUDICATION_HELPER),
         REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH: _read_source(
             SOURCE_FIRST_ADJUDICATION_OBSERVATION_HELPER
         ),
         REVIEW_NEXT_ADJUDICATION_HELPER_PATH: _read_source(SOURCE_NEXT_ADJUDICATION_HELPER),
-        REVIEW_NEXT_ADJUDICATION_OBSERVATION_HELPER_PATH: _read_source(SOURCE_NEXT_ADJUDICATION_OBSERVATION_HELPER),
+        REVIEW_NEXT_ADJUDICATION_OBSERVATION_HELPER_PATH: _read_source(
+            SOURCE_NEXT_ADJUDICATION_OBSERVATION_HELPER
+        ),
         REVIEW_THIRD_ADJUDICATION_HELPER_PATH: _read_source(SOURCE_THIRD_ADJUDICATION_HELPER),
         REVIEW_THIRD_ADJUDICATION_OBSERVATION_HELPER_PATH: _read_source(
             SOURCE_THIRD_ADJUDICATION_OBSERVATION_HELPER
@@ -395,9 +412,7 @@ def _managed_content(public_key: str) -> dict[Path, bytes]:
         REVIEW_FOURTH_ADJUDICATION_OBSERVATION_HELPER_PATH: _read_source(
             SOURCE_FOURTH_ADJUDICATION_OBSERVATION_HELPER
         ),
-        REVIEW_SUDOERS_PATH: FOURTH_ADJUDICATION_OBSERVATION_SUDOERS_CONTENT.encode(
-            "utf-8"
-        ),
+        REVIEW_SUDOERS_PATH: ADJUDICATION_RESULT_PROCESSING_SUDOERS_CONTENT.encode("utf-8"),
         REVIEW_AUTHORIZED_KEYS: authorized_key_entry(public_key).encode("utf-8"),
         REVIEW_DISPATCH_PATH: _read_source(SOURCE_DISPATCH),
     }
@@ -420,6 +435,7 @@ def _preflight_refresh_host_files(
                 REVIEW_NEXT_PRIMARY_HELPER_PATH,
                 REVIEW_NEXT_OBSERVATION_HELPER_PATH,
                 REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH,
+                REVIEW_ADJUDICATION_RESULT_PROCESSING_HELPER_PATH,
                 REVIEW_FIRST_ADJUDICATION_HELPER_PATH,
                 REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH,
                 REVIEW_NEXT_ADJUDICATION_HELPER_PATH,
@@ -447,6 +463,7 @@ def _preflight_refresh_host_files(
             OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
             LEGACY_SUDOERS_CONTENT.encode("utf-8"),
             PRIMARY_RESULT_PROCESSING_SUDOERS_CONTENT.encode("utf-8"),
+            ADJUDICATION_RESULT_PROCESSING_SUDOERS_CONTENT.encode("utf-8"),
             FIRST_ADJUDICATION_SUDOERS_CONTENT.encode("utf-8"),
             FIRST_ADJUDICATION_OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
             NEXT_ADJUDICATION_SUDOERS_CONTENT.encode("utf-8"),
@@ -503,6 +520,7 @@ def _ensure_host_files(public_key: str, *, apply: bool, refresh_review_code: boo
             REVIEW_NEXT_PRIMARY_HELPER_PATH,
             REVIEW_NEXT_OBSERVATION_HELPER_PATH,
             REVIEW_PRIMARY_RESULT_PROCESSING_HELPER_PATH,
+            REVIEW_ADJUDICATION_RESULT_PROCESSING_HELPER_PATH,
             REVIEW_FIRST_ADJUDICATION_HELPER_PATH,
             REVIEW_FIRST_ADJUDICATION_OBSERVATION_HELPER_PATH,
             REVIEW_NEXT_ADJUDICATION_HELPER_PATH,
