@@ -18,9 +18,11 @@ IDs must be complete, unique, and agree with their journals.
 
 The authorization ceiling must be positive and no greater than 5 USD in
 micro-USD. Processing also enforces the run's persisted maximum and the
-centralized speaker-review maximum. The root host boundary that will validate
-and consume this authorization is intentionally deferred to the next phase;
-do not expose the container command directly to an operator or SSH account.
+centralized speaker-review maximum. The root host boundary validates and
+atomically claims this authorization before the worker starts. A claim can be
+replayed only with the same canonical request and archive/run binding; changing
+any binding fails closed. Operators must use the pinned-SSH client and must not
+expose the container command directly.
 
 ## Isolated worker contract
 
@@ -50,10 +52,88 @@ completion counters, retry counters, and actual costs remain empty or zero.
 contains only status, part and candidate counts, decision counts, and integer
 micro-USD costs. Actual costs are conservatively rounded up to whole micro-USD,
 and the response repeats the request's exact micro-USD authorization ceiling;
-the future root coordinator must reject any total above that ceiling.
+the root coordinator independently rejects any total above that ceiling.
 
 Any missing, extra, changed, non-canonical, over-budget, symlinked, or
 inconsistent evidence fails closed. Preserve the run directory for explicit
 reconciliation; never fabricate a state file, request part, ledger, digest, or
-receipt. Final-review submission and the production VPS authorization/receipt
-boundary are separate operations.
+receipt. The root receipt contains only non-sensitive binding identifiers,
+authorization-claim and intent digests, six post-evidence digests and counts,
+the aggregate, and status. Final-review submission remains a separate
+operation.
+
+## VPS boundary (Phase 78)
+
+Invoke this transition only through the workstation client
+`scripts/private_speaker_review_adjudication_result_processing_client.py` and
+its pinned SSH command `speaker-review-process-adjudication-results-v1`. The
+forced dispatcher accepts no arguments and the root helper accepts no
+operator-supplied paths. It binds the current immutable release, source
+archive, run directory, six inventory digests, and the complete predecessor
+receipt chain before starting the coordinator.
+
+The coordinator claims the fresh authorization atomically and writes a
+minimal canonical receipt. A replay is accepted only when the authorization,
+request, archive, run, release, and predecessor binding are byte-identical.
+The isolated Compose worker uses a read-only source mount, an exact run-scoped
+writable mount, no network, no provider credentials, and bounded output. If a
+worker fails, the helper removes it only after its complete container identity
+matches the expected service, image, command, security settings, and mounts;
+otherwise it leaves the container for investigation. The boundary never
+submits final review, promotes a corpus, or ingests data.
+
+## Refresh and verify the VPS boundary
+
+After deploying the accepted release, install the new helper and finite sudo
+grant before using the command, then verify the complete host contract:
+
+```bash
+sudo python3 /opt/cinegraph/current/scripts/bootstrap_review_host.py \
+  --public-key-file <review-public-key> \
+  --expected-key-fingerprint <review-key-fingerprint> \
+  --corpus-public-key-file <corpus-public-key> \
+  --expected-corpus-key-fingerprint <corpus-key-fingerprint> \
+  --expected-deploy-key-fingerprint <deploy-key-fingerprint> \
+  --refresh-review-code
+
+sudo python3 /opt/cinegraph/current/scripts/bootstrap_review_host.py \
+  --public-key-file <review-public-key> \
+  --expected-key-fingerprint <review-key-fingerprint> \
+  --corpus-public-key-file <corpus-public-key> \
+  --expected-corpus-key-fingerprint <corpus-key-fingerprint> \
+  --expected-deploy-key-fingerprint <deploy-key-fingerprint> \
+  --check
+```
+
+Bootstrap accepts only reviewed finite predecessor policies or this Phase 78
+policy. It installs all helpers first, validates the finite sudoers file, and
+replaces the forced-command dispatcher last.
+
+## Authorize and invoke one run
+
+Create a fresh canonical authorization at
+`/opt/cinegraph/shared/private-corpus/dev/speaker-review/authorization/<uuid4>.json`
+owned by root with mode `0600`. It must contain exactly the request fields for
+operation `process_adjudication_results`, purpose `speaker_review`, schema
+version `1`, season `2`, the archive digest, run ID, fresh lowercase UUID4, and
+approved micro-USD ceiling. Do not reuse an authorization from any submission
+or observation operation.
+
+From the pinned workstation, invoke:
+
+```powershell
+uv run python scripts/process_private_speaker_review_adjudication_results.py `
+  --archive-sha256 <private-object-sha256> `
+  --run-id speaker-review-<16-lowercase-hex> `
+  --authorization-id <fresh-processing-uuid4> `
+  --maximum-authorized-cost-microusd <approved-cost-microusd> `
+  --identity <review-private-key> `
+  --known-hosts <pinned-known-hosts-file> `
+  --host <dev-host>
+```
+
+Repeat only the byte-identical request after an interruption. Never delete or
+edit a claim, intent, receipt, run artifact, journal, provider output, or
+derived file to make a retry pass. An ambiguous pending file, orphan record,
+changed predecessor, changed runtime, or mismatched terminal inventory requires
+explicit reconciliation.

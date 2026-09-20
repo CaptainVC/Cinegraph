@@ -424,6 +424,18 @@ separate follow-up phase. See
 [ADR-0037](docs/adr/0037-provider-free-adjudication-result-processing.md) and
 the [adjudication-result processing runbook](docs/operations/private-speaker-review-adjudication-result-processing.md).
 
+Phase 78 places that provider-free checkpoint behind the authenticated VPS
+boundary. The pinned review client can invoke only
+`speaker-review-process-adjudication-results-v1`; the root helper verifies the
+immutable release, source/archive/run binding, predecessor receipts, and the
+secretless no-network container identity before launching the coordinator.
+Authorization claims and receipts are atomic and replay-safe, and failed
+workers are cleaned up only when their complete expected identity matches.
+This boundary prepares or completes local final-review state but cannot submit
+final review, promote corpus data, or ingest it. See
+[ADR-0038](docs/adr/0038-private-adjudication-result-processing-boundary.md)
+and the [root adjudication-result processing runbook](docs/operations/private-speaker-review-adjudication-result-processing.md).
+
 Provision an environment file from a temporary labelled key file. This command
 copies only `OPENAI_API_KEY`, excludes Moonshot credentials, creates the destination
 with private permissions, and can delete the temporary server-side source:
