@@ -8,6 +8,8 @@ from cinegraph.common.speaker_review_cost_policy import (
     ESTIMATED_CHARACTERS_PER_TOKEN,
     MAXIMUM_RUN_COST_USD,
     MODEL_TOKEN_PRICES,
+    SPEAKER_REVIEW_PROMPT_VERSION,
+    SPEAKER_REVIEW_SCHEMA_VERSION,
 )
 from cinegraph.config.speaker_review_filesystem import RUN_DIRECTORY_NAME
 
@@ -76,9 +78,9 @@ class SpeakerReviewConfiguration:
 
 
 DEFAULT_SPEAKER_REVIEW_CONFIGURATION = SpeakerReviewConfiguration(
-    schema_version=5,
+    schema_version=SPEAKER_REVIEW_SCHEMA_VERSION,
     ledger_schema_version=5,
-    prompt_version="speaker-review-v1",
+    prompt_version=SPEAKER_REVIEW_PROMPT_VERSION,
     batch_endpoint=BATCH_ENDPOINT,
     batch_method="POST",
     response_schema_name="speaker_review_verdict",

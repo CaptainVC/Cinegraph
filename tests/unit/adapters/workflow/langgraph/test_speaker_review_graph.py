@@ -508,6 +508,20 @@ def test_final_review_graph_resumes_needs_human_run(tmp_path: Path) -> None:
     assert workflow.calls == ["load", "submit_final_review"]
 
 
+def test_final_review_graph_direct_routes_verified_state(tmp_path: Path) -> None:
+    run_directory = tmp_path / "run"
+    run_directory.mkdir()
+    state = run_state(SpeakerReviewRunStatus.FINAL_REVIEW_PREPARED)
+    save_run_state(run_directory, state)
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, updated = graph.final_review(run_directory, verified_run_state=state)
+
+    assert updated.status is SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED
+    assert workflow.calls == ["submit_final_review"]
+
+
 def test_retry_graph_targets_incomplete_final_verdicts(tmp_path: Path) -> None:
     run_directory = tmp_path / "run"
     run_directory.mkdir()
