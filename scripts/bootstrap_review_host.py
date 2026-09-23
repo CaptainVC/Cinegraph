@@ -36,6 +36,13 @@ from scripts.private_speaker_review_final_review_host_contract import (  # noqa:
 from scripts.private_speaker_review_final_review_host_contract import (  # noqa: E402
     SUDOERS_CONTENT as FINAL_REVIEW_SUDOERS_CONTENT,
 )
+from scripts.private_speaker_review_final_review_observation_host_contract import (  # noqa: E402
+    REVIEW_FINAL_REVIEW_OBSERVATION_HELPER_PATH,
+    REVIEW_FINAL_REVIEW_OBSERVATION_RECEIPTS_ROOT,
+)
+from scripts.private_speaker_review_final_review_observation_host_contract import (  # noqa: E402
+    SUDOERS_CONTENT as FINAL_REVIEW_OBSERVATION_SUDOERS_CONTENT,
+)
 from scripts.private_speaker_review_first_adjudication_host_contract import (  # noqa: E402
     REVIEW_FIRST_ADJUDICATION_HELPER_PATH,
     REVIEW_FIRST_ADJUDICATION_RECEIPTS_ROOT,
@@ -189,6 +196,9 @@ SOURCE_FOURTH_ADJUDICATION_OBSERVATION_HELPER: Final = (
 SOURCE_FINAL_REVIEW_HELPER: Final = (
     REPOSITORY_ROOT / "deploy/remote/submit-final-private-speaker-review.sh"
 )
+SOURCE_FINAL_REVIEW_OBSERVATION_HELPER: Final = (
+    REPOSITORY_ROOT / "deploy/remote/observe-final-private-speaker-review.sh"
+)
 FORBIDDEN_GROUP_NAMES: Final = frozenset(
     {"adm", "admin", "docker", "sudo", "wheel", "cinegraph-deploy", "cinegraph-corpus"}
 )
@@ -235,6 +245,7 @@ DIRECTORY_CONTRACT: Final = (
     ExpectedPath(REVIEW_FOURTH_ADJUDICATION_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(REVIEW_FOURTH_ADJUDICATION_OBSERVATION_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(REVIEW_FINAL_REVIEW_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
+    ExpectedPath(REVIEW_FINAL_REVIEW_OBSERVATION_RECEIPTS_ROOT, "directory", 0, 0, 0o700),
     ExpectedPath(SPEAKER_REVIEW_RUNS_ROOT, "directory", 0, 0, 0o700),
 )
 FILE_CONTRACT: Final = (
@@ -266,6 +277,7 @@ FILE_CONTRACT: Final = (
     ExpectedPath(REVIEW_FOURTH_ADJUDICATION_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_FOURTH_ADJUDICATION_OBSERVATION_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_FINAL_REVIEW_HELPER_PATH, "file", 0, 0, 0o755),
+    ExpectedPath(REVIEW_FINAL_REVIEW_OBSERVATION_HELPER_PATH, "file", 0, 0, 0o755),
     ExpectedPath(REVIEW_SUDOERS_PATH, "file", 0, 0, 0o440),
     ExpectedPath(REVIEW_AUTHORIZED_KEYS, "file", 0, 0, 0o644),
 )
@@ -427,7 +439,10 @@ def _managed_content(public_key: str) -> dict[Path, bytes]:
             SOURCE_FOURTH_ADJUDICATION_OBSERVATION_HELPER
         ),
         REVIEW_FINAL_REVIEW_HELPER_PATH: _read_source(SOURCE_FINAL_REVIEW_HELPER),
-        REVIEW_SUDOERS_PATH: FINAL_REVIEW_SUDOERS_CONTENT.encode("utf-8"),
+        REVIEW_FINAL_REVIEW_OBSERVATION_HELPER_PATH: _read_source(
+            SOURCE_FINAL_REVIEW_OBSERVATION_HELPER
+        ),
+        REVIEW_SUDOERS_PATH: FINAL_REVIEW_OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
         REVIEW_AUTHORIZED_KEYS: authorized_key_entry(public_key).encode("utf-8"),
         REVIEW_DISPATCH_PATH: _read_source(SOURCE_DISPATCH),
     }
@@ -459,6 +474,7 @@ def _preflight_refresh_host_files(
                 REVIEW_THIRD_ADJUDICATION_OBSERVATION_HELPER_PATH,
                 REVIEW_FOURTH_ADJUDICATION_HELPER_PATH,
                 REVIEW_FOURTH_ADJUDICATION_OBSERVATION_HELPER_PATH,
+                REVIEW_FINAL_REVIEW_OBSERVATION_HELPER_PATH,
             }
             and not path.exists()
             and not path.is_symlink()
@@ -488,6 +504,7 @@ def _preflight_refresh_host_files(
             FOURTH_ADJUDICATION_SUDOERS_CONTENT.encode("utf-8"),
             FOURTH_ADJUDICATION_OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
             FINAL_REVIEW_SUDOERS_CONTENT.encode("utf-8"),
+            FINAL_REVIEW_OBSERVATION_SUDOERS_CONTENT.encode("utf-8"),
         }:
             raise BootstrapError("review sudoers differs from the reviewed contract")
     _validate_sudoers_candidate(managed[REVIEW_SUDOERS_PATH])

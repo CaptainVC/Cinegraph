@@ -584,3 +584,11 @@ retries, finalizes, promotes, ingests, or submits part two. Replays are
 provider-free and intent-only ambiguity returns `reconciliation_required`.
 See the [final-review submission runbook](docs/operations/private-speaker-review-final-review-submission.md)
 and [ADR-0039](docs/adr/0039-private-final-review-submission-boundary.md).
+
+Phase 80 adds `speaker-review-observe-final-review-part-one-v1`. It checks the
+exact Phase79 submission receipt and Phase78 predecessor before one isolated
+part-one retrieval. Waiting is run-inventory preserving; success records the
+durable output with completed count one while retaining the submitted status.
+Exact receipt replay is provider-free. See the [final-review observation
+runbook](docs/operations/private-speaker-review-final-review-observation.md)
+and [ADR-0040](docs/adr/0040-private-final-review-observation-boundary.md).

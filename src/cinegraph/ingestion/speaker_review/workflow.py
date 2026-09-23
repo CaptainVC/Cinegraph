@@ -2372,6 +2372,86 @@ class SpeakerReviewWorkflow:
 
     observe_next_adjudication_part = observe_next_adjudication
 
+    def observe_final_review_part(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Observe only final-review part one, leaving interpretation downstream."""
+        error = SpeakerReviewErrorMessages.FINAL_REVIEW_OBSERVATION_RECONCILIATION_REQUIRED
+        output = run_directory / "final-review-part-0001-output.jsonl"
+        api_errors = run_directory / "final-review-part-0001-api-errors.jsonl"
+
+        def reconcile(cause: BaseException | None = None) -> RuntimeError:
+            result = RuntimeError(error)
+            if cause is not None:
+                result.__cause__ = cause
+            return result
+
+        if state.status is not SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED:
+            raise reconcile()
+        if (
+            type(state.final_review_part_count) is not int
+            or state.final_review_part_count < 1
+            or type(state.final_review_completed_part_count) is not int
+            or state.final_review_completed_part_count not in (0, 1)
+            or not isinstance(state.final_review_batch_ids, tuple)
+            or not isinstance(state.final_review_input_file_ids, tuple)
+            or len(state.final_review_batch_ids) != 1
+            or len(state.final_review_input_file_ids) != 1
+            or state.final_review_batch_id != state.final_review_batch_ids[0]
+            or state.final_review_input_file_id != state.final_review_input_file_ids[0]
+            or any(not isinstance(item, str) or not item or item != item.strip()
+                   for item in (*state.final_review_batch_ids, *state.final_review_input_file_ids))
+        ):
+            raise reconcile()
+
+        if state.final_review_completed_part_count == 1:
+            try:
+                _bounded_file_bytes(output)
+                if os.path.lexists(api_errors):
+                    _bounded_file_bytes(api_errors)
+                if any(os.path.lexists(run_directory / f"final-review-part-{part:04d}-{suffix}")
+                       for part in range(2, state.final_review_part_count + 1)
+                       for suffix in ("output.jsonl", "api-errors.jsonl")):
+                    raise OSError("later output exists")
+                return state
+            except Exception as cause:
+                raise reconcile(cause)
+
+        if os.path.lexists(output) or os.path.lexists(api_errors):
+            raise reconcile()
+        try:
+            snapshot = self._required_snapshot(state.final_review_batch_ids[0])
+            if snapshot.batch_id != state.final_review_batch_ids[0]:
+                raise reconcile()
+            if snapshot.status in self._configuration.terminal_batch_failure_statuses:
+                self._persist_failed_batch(run_directory, state, snapshot)
+                raise RuntimeError(SpeakerReviewErrorMessages.BATCH_TERMINAL_FAILURE.format(
+                    batch_id=snapshot.batch_id, status=snapshot.status
+                ))
+            if snapshot.status != self._configuration.successful_batch_status:
+                return state
+            self._download_completed_batch(
+                run_directory, _part_stage_name("final-review", 0), snapshot
+            )
+            updated = replace(
+                state,
+                final_review_completed_part_count=1,
+                updated_at=_now(),
+            )
+            save_run_state(run_directory, updated)
+            return updated
+        except RuntimeError as cause:
+            if str(cause) == error or str(cause).startswith("OpenAI Batch "):
+                raise
+            raise reconcile(cause)
+        except Exception as cause:
+            raise reconcile(cause)
+
+    observe_final_review_part_one = observe_final_review_part
+    observe_final_review = observe_final_review_part
+
     def _validate_next_adjudication_observation_checkpoint(
         self, run_directory: Path, state: SpeakerReviewRunState
     ) -> None:
@@ -3492,10 +3572,22 @@ class SpeakerReviewWorkflow:
         state: SpeakerReviewRunState,
         snapshot: BatchSnapshot,
     ) -> SpeakerReviewRunState:
+        evidence_path = run_directory / "terminal-api-errors.jsonl"
         if snapshot.error_file_id is not None:
             _write_text_if_new_or_unchanged(
-                run_directory / "terminal-api-errors.jsonl",
+                evidence_path,
                 self._gateway.download_file(snapshot.error_file_id),
+            )
+        else:
+            marker = {
+                "batch_id_sha256": sha256(snapshot.batch_id.encode("utf-8")).hexdigest(),
+                "schema_version": 1,
+                "status": snapshot.status,
+            }
+            _write_text_if_new_or_unchanged(
+                evidence_path,
+                json.dumps(marker, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+                + "\n",
             )
         updated = replace(
             state,
