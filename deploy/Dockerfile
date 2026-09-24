@@ -42,8 +42,10 @@ RUN groupadd --system --gid 10001 cinegraph \
        --create-home cinegraph \
     && mkdir -p /app /app/knowledge /home/cinegraph/.cache/fastembed \
        /home/cinegraph/.cache/huggingface/hub /home/cinegraph/.cache/huggingface/xet \
-       /home/cinegraph/.cache/model-download-work \
-    && chown -R cinegraph:cinegraph /app /home/cinegraph
+       /home/cinegraph/.cache/model-download-work /review-workspace/review-runs \
+    && chown -R cinegraph:cinegraph /app /home/cinegraph \
+    && chown 10002:10002 /review-workspace/review-runs \
+    && chmod 0700 /review-workspace/review-runs
 
 # The runtime only executes the locked virtual environment; remove the base
 # interpreter's package installers and bundled ensurepip wheels to reduce attack

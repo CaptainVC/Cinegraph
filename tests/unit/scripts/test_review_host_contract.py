@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from scripts import bootstrap_review_host
 from scripts import (
-    private_speaker_review_adjudication_result_processing_host_contract as adjudication_result_processing_contract,
+    private_speaker_review_final_review_host_contract as final_review_contract,
 )
 from scripts import (
     private_speaker_review_first_adjudication_host_contract as first_adjudication_contract,
@@ -193,7 +193,7 @@ def test_review_bootstrap_installs_latest_cumulative_sudoers(
     managed = bootstrap_review_host._managed_content("review-key")
 
     assert managed[bootstrap_review_host.REVIEW_SUDOERS_PATH] == (
-        adjudication_result_processing_contract.SUDOERS_CONTENT.encode("utf-8")
+        final_review_contract.SUDOERS_CONTENT.encode("utf-8")
     )
 
 
@@ -566,7 +566,7 @@ def test_review_refresh_replaces_only_reviewed_code_after_preflight(
             True,
         ),
         (
-            adjudication_result_processing_contract.SUDOERS_CONTENT.encode("utf-8"),
+            final_review_contract.SUDOERS_CONTENT.encode("utf-8"),
             True,
         ),
         (b"cinegraph-review ALL=(root) NOPASSWD: ALL\n", False),

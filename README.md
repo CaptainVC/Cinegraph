@@ -576,3 +576,11 @@ credentials.
 
 Architecture boundaries and phase workflow are recorded in [AGENTS.md](AGENTS.md),
 with decisions indexed in [docs/adr/README.md](docs/adr/README.md).
+
+Phase 79 adds the bounded paid `speaker-review-submit-final-review-v1` command.
+It submits only final-review part one from an authenticated Phase 78
+`final_review_prepared` checkpoint; it never observes, downloads, parses,
+retries, finalizes, promotes, ingests, or submits part two. Replays are
+provider-free and intent-only ambiguity returns `reconciliation_required`.
+See the [final-review submission runbook](docs/operations/private-speaker-review-final-review-submission.md)
+and [ADR-0039](docs/adr/0039-private-final-review-submission-boundary.md).

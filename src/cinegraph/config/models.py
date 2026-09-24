@@ -1,5 +1,11 @@
 from dataclasses import dataclass
 
+from cinegraph.common.speaker_review_cost_policy import (
+    SPEAKER_ADJUDICATION_MODEL,
+    SPEAKER_FINAL_REVIEW_MODEL,
+    SPEAKER_PRIMARY_REVIEW_MODEL,
+)
+
 
 @dataclass(frozen=True, slots=True)
 class ModelConfiguration:
@@ -22,9 +28,9 @@ DEFAULT_MODEL_CONFIGURATION = ModelConfiguration(
     main_model="gpt-5.6-terra",
     rag_answer_model="gpt-5.6-luna",
     recommendation_model="gpt-4.1-mini",
-    speaker_review_model="gpt-5.6-luna",
-    speaker_adjudication_model="gpt-5.6-terra",
-    speaker_final_review_model="gpt-5.6-sol",
+    speaker_review_model=SPEAKER_PRIMARY_REVIEW_MODEL,
+    speaker_adjudication_model=SPEAKER_ADJUDICATION_MODEL,
+    speaker_final_review_model=SPEAKER_FINAL_REVIEW_MODEL,
     speaker_review_reasoning_effort="low",
     speaker_adjudication_reasoning_effort="medium",
     speaker_final_review_reasoning_effort="high",

@@ -19,6 +19,7 @@ SpeakerReviewGraphOperation = Literal[
     "submit-first-adjudication",
     "submit-next-adjudication",
     "observe-first-adjudication",
+    "observe-next-adjudication",
     "process-primary-results",
     "process-adjudication-results",
     "advance",
@@ -230,12 +231,15 @@ class SpeakerReviewGraphWorkflow:
     def final_review(
         self,
         run_directory: Path,
+        *,
+        verified_run_state: SpeakerReviewRunState | None = None,
     ) -> tuple[Path, SpeakerReviewRunState]:
         return self._invoke(
             operation="final-review",
             corpus_root=None,
             seasons=(),
             run_directory=run_directory,
+            verified_run_state=verified_run_state,
         )
 
     def retry_incomplete(
@@ -317,6 +321,7 @@ class SpeakerReviewGraphWorkflow:
                 "submit_next_adjudication": "submit_next_adjudication",
                 "observe_first_adjudication": "observe_first_adjudication",
                 "observe_next_adjudication": "observe_next_adjudication",
+                "final_review": "final_review",
                 "process_primary_results": "process_primary_results",
                 "process_adjudication_results": "process_adjudication_results",
             },
@@ -394,6 +399,8 @@ class SpeakerReviewGraphWorkflow:
             and state["run_state"] is not None
         ):
             return "submit_next_adjudication"
+        if state["operation"] == "final-review" and state["run_state"] is not None:
+            return "final_review"
         if (
             state["operation"] == "observe-first-adjudication"
             and state["run_state"] is not None

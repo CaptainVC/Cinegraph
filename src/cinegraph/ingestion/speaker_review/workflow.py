@@ -163,6 +163,7 @@ class SpeakerReviewWorkflow:
         expected_next_primary_request_sha256: str | None = None,
         expected_first_adjudication_request_sha256: str | None = None,
         expected_next_adjudication_request_sha256: str | None = None,
+        expected_final_review_request_sha256: str | None = None,
         maximum_authorized_cost_usd: float | None = None,
     ) -> None:
         self._gateway = gateway
@@ -182,6 +183,7 @@ class SpeakerReviewWorkflow:
         self._expected_next_adjudication_request_sha256 = (
             expected_next_adjudication_request_sha256
         )
+        self._expected_final_review_request_sha256 = expected_final_review_request_sha256
         self._maximum_authorized_cost_usd = (
             configuration.maximum_run_cost_usd
             if maximum_authorized_cost_usd is None
@@ -3366,6 +3368,15 @@ class SpeakerReviewWorkflow:
         ):
             raise RuntimeError(
                 SpeakerReviewErrorMessages.NEXT_ADJUDICATION_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        if (
+            stage == "final-review"
+            and part_index == 0
+            and self._expected_final_review_request_sha256 is not None
+            and request_hash != self._expected_final_review_request_sha256
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
             )
         binding = {
             "schema_version": SUBMISSION_SCHEMA_VERSION,
