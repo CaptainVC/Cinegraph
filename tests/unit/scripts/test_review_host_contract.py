@@ -9,6 +9,12 @@ from scripts import (
     private_speaker_review_final_review_host_contract as final_review_contract,
 )
 from scripts import (
+    private_speaker_review_final_review_observation_contract as final_review_observation_wire_contract,
+)
+from scripts import (
+    private_speaker_review_final_review_observation_host_contract as final_review_observation_contract,
+)
+from scripts import (
     private_speaker_review_first_adjudication_host_contract as first_adjudication_contract,
 )
 from scripts import (
@@ -193,8 +199,12 @@ def test_review_bootstrap_installs_latest_cumulative_sudoers(
     managed = bootstrap_review_host._managed_content("review-key")
 
     assert managed[bootstrap_review_host.REVIEW_SUDOERS_PATH] == (
-        final_review_contract.SUDOERS_CONTENT.encode("utf-8")
+        final_review_observation_contract.SUDOERS_CONTENT.encode("utf-8")
     )
+    assert (
+        final_review_contract.SUDOERS_CONTENT in final_review_observation_contract.SUDOERS_CONTENT
+    )
+    assert bootstrap_review_host.REVIEW_FINAL_REVIEW_OBSERVATION_HELPER_PATH in managed
 
 
 def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
@@ -218,6 +228,9 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
     first_adjudication_observation_helper = Path(
         "deploy/remote/observe-first-private-speaker-review-adjudication.sh"
     ).read_text(encoding="utf-8")
+    final_review_observation_helper = Path(
+        "deploy/remote/observe-final-private-speaker-review.sh"
+    ).read_text(encoding="utf-8")
     assert "[[ $# -eq 0 ]]" in dispatch
     assert '[[ "$(id -un)" == "cinegraph-review" ]]' in dispatch
     assert "speaker-review-submit-primary-v1)" in dispatch
@@ -227,6 +240,15 @@ def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:
     assert "speaker-review-process-primary-results-v1)" in dispatch
     assert "speaker-review-submit-first-adjudication-v1)" in dispatch
     assert "speaker-review-observe-first-adjudication-v1)" in dispatch
+    assert f"{final_review_observation_wire_contract.COMMAND})" in dispatch
+    assert (
+        "sudo -n "
+        f"{final_review_observation_contract.REVIEW_FINAL_REVIEW_OBSERVATION_HELPER_PATH.as_posix()}"
+        in dispatch
+    )
+    assert 'python3 -I -S -B "$processor"' in final_review_observation_helper
+    assert 'exec 7>"$SPEAKER_REVIEW_LOCK"' in final_review_observation_helper
+    assert "OPENAI_API_KEY" not in final_review_observation_helper
     assert "sudo -n /usr/local/sbin/cinegraph-submit-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-observe-private-speaker-review" in dispatch
     assert "sudo -n /usr/local/sbin/cinegraph-submit-next-private-speaker-review" in dispatch

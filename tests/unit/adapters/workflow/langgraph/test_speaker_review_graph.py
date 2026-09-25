@@ -113,6 +113,12 @@ class RecordingSpeakerReviewWorkflow:
             adjudication_completed_part_count=state.adjudication_completed_part_count + 1,
         )
 
+    def observe_final_review_part_one(
+        self, run_directory: Path, state: SpeakerReviewRunState
+    ) -> SpeakerReviewRunState:
+        self.calls.append("observe_final_review_part_one")
+        return replace(state, final_review_completed_part_count=1)
+
     def process_primary_results(
         self,
         run_directory: Path,
@@ -405,6 +411,30 @@ def test_observe_next_adjudication_graph_routes_part_two_and_stops() -> None:
     assert state.status is SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED
     assert state.adjudication_completed_part_count == 2
     assert workflow.calls == ["observe_next_adjudication"]
+
+
+def test_observe_final_review_part_one_graph_routes_exact_operation() -> None:
+    run_directory = Path("run")
+    checkpoint = replace(
+        run_state(SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED),
+        final_review_part_count=2,
+        final_review_completed_part_count=0,
+        final_review_batch_id="final-1",
+        final_review_input_file_id="input-1",
+        final_review_batch_ids=("final-1",),
+        final_review_input_file_ids=("input-1",),
+    )
+    workflow = RecordingSpeakerReviewWorkflow(run_directory)
+    graph = SpeakerReviewGraphWorkflow(workflow)  # type: ignore[arg-type]
+
+    _, state = graph.observe_final_review_part_one(
+        run_directory,
+        verified_run_state=checkpoint,
+    )
+
+    assert state.status is SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED
+    assert state.final_review_completed_part_count == 1
+    assert workflow.calls == ["observe_final_review_part_one"]
 
 
 def test_process_primary_results_graph_uses_verified_checkpoint_without_reload(

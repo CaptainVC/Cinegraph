@@ -40,6 +40,9 @@ class SpeakerReviewErrorMessages:
     ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED = (
         "First adjudication-part observation requires operator reconciliation before retrying."
     )
+    FINAL_REVIEW_OBSERVATION_RECONCILIATION_REQUIRED = (
+        "Final-review part-one observation requires operator reconciliation before retrying."
+    )
     SPEAKER_REVIEW_CORPUS_PATH_INVALID = (
         "The speaker-review corpus path is invalid or not a physical private path."
     )
