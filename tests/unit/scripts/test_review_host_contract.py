@@ -32,6 +32,9 @@ from scripts import (
 from scripts import (
     private_speaker_review_next_adjudication_observation_host_contract as next_adjudication_observation_contract,
 )
+from scripts import (
+    private_speaker_review_next_final_review_host_contract as next_final_review_contract,
+)
 from scripts import private_speaker_review_next_primary_host_contract as next_contract
 from scripts import (
     private_speaker_review_next_primary_observation_host_contract as next_observation_contract,
@@ -199,12 +202,13 @@ def test_review_bootstrap_installs_latest_cumulative_sudoers(
     managed = bootstrap_review_host._managed_content("review-key")
 
     assert managed[bootstrap_review_host.REVIEW_SUDOERS_PATH] == (
-        final_review_observation_contract.SUDOERS_CONTENT.encode("utf-8")
+        next_final_review_contract.SUDOERS_CONTENT.encode("utf-8")
     )
     assert (
         final_review_contract.SUDOERS_CONTENT in final_review_observation_contract.SUDOERS_CONTENT
     )
     assert bootstrap_review_host.REVIEW_FINAL_REVIEW_OBSERVATION_HELPER_PATH in managed
+    assert next_final_review_contract.REVIEW_NEXT_FINAL_REVIEW_HELPER_PATH in managed
 
 
 def test_review_dispatch_and_helper_are_fixed_and_fail_closed() -> None:

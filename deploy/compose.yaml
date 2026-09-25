@@ -693,6 +693,41 @@ services:
     restart: "no"
     command: ["python", "scripts/submit_final_private_speaker_review_workspace.py"]
 
+  # Paid submission of exactly final-review part two after the authenticated
+  # Phase80 part-one observation. No later part can be selected by this worker.
+  corpus-speaker-review-submit-next-final-review:
+    profiles: [corpus-speaker-review-submit-next-final-review]
+    image: *cinegraph-image
+    user: "10002:10002"
+    environment:
+      <<: *model-cache-environment
+      HF_HUB_OFFLINE: "1"
+      CINEGRAPH_ENVIRONMENT: development
+      CINEGRAPH_SPEAKER_REVIEW_RUNS_ROOT: /review-workspace/review-runs
+      OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+    networks:
+      - egress
+    secrets:
+      - source: openai_api_key
+        target: openai_api_key
+        uid: "10002"
+        gid: "10002"
+        mode: 0400
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: ${CINEGRAPH_SPEAKER_REVIEW_MEMORY_LIMIT:-1024m}
+    cpus: ${CINEGRAPH_SPEAKER_REVIEW_CPU_LIMIT:-1.0}
+    restart: "no"
+    command: ["python", "scripts/submit_next_final_private_speaker_review_workspace.py"]
+
   # One final-review part-one retrieval. The root coordinator supplies only
   # the exact submitted run and Phase79 digest bindings to this isolated worker.
   corpus-speaker-review-observe-final-review:

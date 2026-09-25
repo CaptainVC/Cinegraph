@@ -40,4 +40,5 @@
 - [ADR-0038: Root adjudication-result processing boundary](0038-private-adjudication-result-processing-boundary.md)
 - [ADR-0039: Private final-review submission boundary](0039-private-final-review-submission-boundary.md)
 - [ADR-0040: Private final-review observation boundary](0040-private-final-review-observation-boundary.md)
+- [ADR-0041: Private next final-review submission boundary](0041-private-next-final-review-submission-boundary.md)
 - [ADR template](template.md)

@@ -37,6 +37,9 @@ class SpeakerReviewErrorMessages:
     NEXT_ADJUDICATION_SUBMISSION_RECONCILIATION_REQUIRED = (
         "Next adjudication-part submission requires a valid completed-part checkpoint."
     )
+    NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED = (
+        "Next final-review-part submission requires a valid completed-part checkpoint."
+    )
     ADJUDICATION_OBSERVATION_RECONCILIATION_REQUIRED = (
         "First adjudication-part observation requires operator reconciliation before retrying."
     )

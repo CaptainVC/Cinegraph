@@ -592,3 +592,11 @@ durable output with completed count one while retaining the submitted status.
 Exact receipt replay is provider-free. See the [final-review observation
 runbook](docs/operations/private-speaker-review-final-review-observation.md)
 and [ADR-0040](docs/adr/0040-private-final-review-observation-boundary.md).
+
+Phase 81 adds `speaker-review-submit-next-final-review-v1` for the authenticated
+second final-review batch part. It requires the exact Phase79 authorization and
+submission chain plus the successful Phase80 observation, keeps the completed
+count at one until the provider transition is durable, and uses an isolated
+egress worker with provider-free replay and reconciliation for ambiguous state.
+See the [next final-review submission runbook](docs/operations/private-speaker-review-next-final-review-submission.md)
+and [ADR-0041](docs/adr/0041-private-next-final-review-submission-boundary.md).

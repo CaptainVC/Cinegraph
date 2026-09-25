@@ -18,6 +18,7 @@ SpeakerReviewGraphOperation = Literal[
     "submit-next-primary",
     "submit-first-adjudication",
     "submit-next-adjudication",
+    "submit-next-final-review",
     "observe-first-adjudication",
     "observe-next-adjudication",
     "observe-final-review-part",
@@ -149,6 +150,24 @@ class SpeakerReviewGraphWorkflow:
         )
 
     submit_next_adjudication_part = submit_next_adjudication
+
+    def submit_next_final_review(
+        self,
+        run_directory: Path,
+        *,
+        verified_run_state: SpeakerReviewRunState | None = None,
+    ) -> tuple[Path, SpeakerReviewRunState]:
+        """Submit exactly one next final-review part and stop the graph."""
+
+        return self._invoke(
+            operation="submit-next-final-review",
+            corpus_root=None,
+            seasons=(),
+            run_directory=run_directory,
+            verified_run_state=verified_run_state,
+        )
+
+    submit_next_final_review_part = submit_next_final_review
 
     def observe_first_adjudication(
         self,
@@ -310,6 +329,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_node("submit_next_primary", self._submit_next_primary)
         graph.add_node("submit_first_adjudication", self._submit_first_adjudication)
         graph.add_node("submit_next_adjudication", self._submit_next_adjudication)
+        graph.add_node("submit_next_final_review", self._submit_next_final_review)
         graph.add_node("observe_first_adjudication", self._observe_first_adjudication)
         graph.add_node("observe_next_adjudication", self._observe_next_adjudication)
         graph.add_node("observe_final_review_part", self._observe_final_review_part)
@@ -330,6 +350,7 @@ class SpeakerReviewGraphWorkflow:
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
                 "submit_next_adjudication": "submit_next_adjudication",
+                "submit_next_final_review": "submit_next_final_review",
                 "observe_first_adjudication": "observe_first_adjudication",
                 "observe_next_adjudication": "observe_next_adjudication",
                 "observe_final_review_part": "observe_final_review_part",
@@ -347,6 +368,7 @@ class SpeakerReviewGraphWorkflow:
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
                 "submit_next_adjudication": "submit_next_adjudication",
+                "submit_next_final_review": "submit_next_final_review",
                 "observe_first_adjudication": "observe_first_adjudication",
                 "observe_next_adjudication": "observe_next_adjudication",
                 "observe_final_review_part": "observe_final_review_part",
@@ -368,6 +390,7 @@ class SpeakerReviewGraphWorkflow:
                 "submit_next_primary": "submit_next_primary",
                 "submit_first_adjudication": "submit_first_adjudication",
                 "submit_next_adjudication": "submit_next_adjudication",
+                "submit_next_final_review": "submit_next_final_review",
                 "observe_first_adjudication": "observe_first_adjudication",
                 "observe_next_adjudication": "observe_next_adjudication",
                 "observe_final_review_part": "observe_final_review_part",
@@ -385,6 +408,7 @@ class SpeakerReviewGraphWorkflow:
         graph.add_edge("submit_next_primary", END)
         graph.add_edge("submit_first_adjudication", END)
         graph.add_edge("submit_next_adjudication", END)
+        graph.add_edge("submit_next_final_review", END)
         graph.add_edge("observe_first_adjudication", END)
         graph.add_edge("observe_next_adjudication", END)
         graph.add_edge("observe_final_review_part", END)
@@ -414,6 +438,11 @@ class SpeakerReviewGraphWorkflow:
             and state["run_state"] is not None
         ):
             return "submit_next_adjudication"
+        if (
+            state["operation"] == "submit-next-final-review"
+            and state["run_state"] is not None
+        ):
+            return "submit_next_final_review"
         if state["operation"] == "final-review" and state["run_state"] is not None:
             return "final_review"
         if state["operation"] == "observe-final-review-part" and state["run_state"] is not None:
@@ -520,6 +549,11 @@ class SpeakerReviewGraphWorkflow:
             }
         ):
             return "submit_next_adjudication"
+        if (
+            state["operation"] == "submit-next-final-review"
+            and run_state.status is SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED
+        ):
+            return "submit_next_final_review"
         if state["operation"] == "observe-first-adjudication" and run_state.status in {
             SpeakerReviewRunStatus.ADJUDICATION_SUBMITTED,
             SpeakerReviewRunStatus.ADJUDICATION_PART_COMPLETED,
@@ -635,6 +669,18 @@ class SpeakerReviewGraphWorkflow:
         run_directory, run_state = self._required_run_context(state)
         return {
             "run_state": self._workflow.submit_next_adjudication_part(
+                run_directory,
+                run_state,
+            )
+        }
+
+    def _submit_next_final_review(
+        self,
+        state: SpeakerReviewGraphState,
+    ) -> dict[str, SpeakerReviewRunState]:
+        run_directory, run_state = self._required_run_context(state)
+        return {
+            "run_state": self._workflow.submit_next_final_review_part(
                 run_directory,
                 run_state,
             )

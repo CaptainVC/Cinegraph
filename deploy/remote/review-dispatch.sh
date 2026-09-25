@@ -100,6 +100,9 @@ case "${SSH_ORIGINAL_COMMAND-}" in
     speaker-review-observe-final-review-part-one-v1)
         exec sudo -n /usr/local/sbin/cinegraph-observe-final-private-speaker-review
         ;;
+    speaker-review-submit-next-final-review-v1)
+        exec sudo -n /usr/local/sbin/cinegraph-submit-next-final-private-speaker-review
+        ;;
     *)
         fail
         ;;
