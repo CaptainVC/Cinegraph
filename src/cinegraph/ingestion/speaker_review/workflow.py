@@ -163,6 +163,7 @@ class SpeakerReviewWorkflow:
         expected_next_primary_request_sha256: str | None = None,
         expected_first_adjudication_request_sha256: str | None = None,
         expected_next_adjudication_request_sha256: str | None = None,
+        expected_next_final_review_request_sha256: str | None = None,
         expected_final_review_request_sha256: str | None = None,
         maximum_authorized_cost_usd: float | None = None,
     ) -> None:
@@ -182,6 +183,9 @@ class SpeakerReviewWorkflow:
         )
         self._expected_next_adjudication_request_sha256 = (
             expected_next_adjudication_request_sha256
+        )
+        self._expected_next_final_review_request_sha256 = (
+            expected_next_final_review_request_sha256
         )
         self._expected_final_review_request_sha256 = expected_final_review_request_sha256
         self._maximum_authorized_cost_usd = (
@@ -2053,6 +2057,457 @@ class SpeakerReviewWorkflow:
 
     submit_next_adjudication_part = submit_next_adjudication
 
+    def submit_next_final_review_part(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> SpeakerReviewRunState:
+        """Submit exactly one next final-review part from a completed checkpoint.
+
+        Final-review observation and verdict interpretation are deliberately
+        separate operations.  This transition only validates the completed
+        prefix, submits the next prebuilt request through the create-once
+        journal, and leaves the run in ``FINAL_REVIEW_SUBMITTED`` with the
+        completed count and cost unchanged.  A matching completed journal is
+        replayed without contacting the provider, including recovery after a
+        state-file write failure.
+        """
+
+        error_message = (
+            SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+        )
+        if state.status is not SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED:
+            raise RuntimeError(error_message)
+        if state.final_review_completed_part_count == state.final_review_part_count:
+            try:
+                self._validate_final_review_all_parts_noop(run_directory, state)
+            except RuntimeError as cause:
+                if str(cause) == error_message:
+                    raise
+                raise RuntimeError(error_message) from cause
+            except (OSError, TypeError, ValueError) as cause:
+                raise RuntimeError(error_message) from cause
+            return state
+
+        completed_count = state.final_review_completed_part_count
+        try:
+            if self._final_review_state_has_next_submission(state):
+                self._validate_next_final_review_replay(run_directory, state)
+                return state
+
+            self._validate_next_final_review_checkpoint(run_directory, state)
+            submission = self._submit_part(
+                run_directory=run_directory,
+                state=state,
+                stage="final-review",
+                part_index=completed_count,
+            )
+            self._validate_final_review_submission_ids(state, submission)
+        except RuntimeError as cause:
+            if str(cause) == error_message:
+                raise
+            raise RuntimeError(error_message) from cause
+        except (OSError, TypeError, ValueError) as cause:
+            raise RuntimeError(error_message) from cause
+        batch_ids = state.final_review_batch_ids
+        input_file_ids = state.final_review_input_file_ids
+        updated = replace(
+            state,
+            status=SpeakerReviewRunStatus.FINAL_REVIEW_SUBMITTED,
+            updated_at=_now(),
+            final_review_batch_id=submission.batch_id,
+            final_review_input_file_id=submission.input_file_id,
+            final_review_batch_ids=(*batch_ids, submission.batch_id),
+            final_review_input_file_ids=(*input_file_ids, submission.input_file_id),
+            actual_final_review_cost_usd=0.0,
+        )
+        save_run_state(run_directory, updated)
+        return updated
+
+    def _final_review_state_has_next_submission(
+        self,
+        state: SpeakerReviewRunState,
+    ) -> bool:
+        completed_count = state.final_review_completed_part_count
+        return (
+            isinstance(state.final_review_batch_ids, tuple)
+            and isinstance(state.final_review_input_file_ids, tuple)
+            and len(state.final_review_batch_ids) == completed_count + 1
+            and len(state.final_review_input_file_ids) == completed_count + 1
+        )
+
+    def _validate_next_final_review_checkpoint(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> None:
+        """Validate the exact final-review prefix before provider access."""
+
+        completed_count = state.final_review_completed_part_count
+        part_count = state.final_review_part_count
+        ids = state.final_review_batch_ids
+        input_ids = state.final_review_input_file_ids
+        if (
+            type(part_count) is not int
+            or part_count <= 0
+            or type(completed_count) is not int
+            or completed_count <= 0
+            or completed_count >= part_count
+            or state.actual_final_review_cost_usd != 0.0
+            or not isinstance(ids, tuple)
+            or not isinstance(input_ids, tuple)
+            or len(ids) != completed_count
+            or len(input_ids) != completed_count
+            or len(set(ids)) != completed_count
+            or len(set(input_ids)) != completed_count
+            or not all(
+                isinstance(value, str) and value and value == value.strip()
+                for value in (*ids, *input_ids)
+            )
+            or state.final_review_batch_id != ids[-1]
+            or state.final_review_input_file_id != input_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        self._validate_final_review_id_sets(state, ids, input_ids)
+
+        self._validate_next_final_review_checkpoint_parts(
+            run_directory,
+            state,
+            completed_count,
+            ids,
+            input_ids,
+        )
+        next_request = _request_part_path(
+            run_directory, "final-review", completed_count
+        )
+        next_bytes = _bounded_file_bytes(next_request)
+        if (
+            self._expected_next_final_review_request_sha256 is not None
+            and sha256(next_bytes).hexdigest()
+            != self._expected_next_final_review_request_sha256
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        self._validate_final_review_future_evidence(
+            run_directory,
+            completed_count,
+            part_count,
+        )
+
+    def _validate_next_final_review_replay(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> None:
+        """Validate a submitted next-part state without contacting a provider."""
+
+        completed_count = state.final_review_completed_part_count
+        part_count = state.final_review_part_count
+        ids = state.final_review_batch_ids
+        input_ids = state.final_review_input_file_ids
+        if (
+            type(part_count) is not int
+            or part_count <= 0
+            or type(completed_count) is not int
+            or completed_count <= 0
+            or completed_count >= part_count
+            or state.actual_final_review_cost_usd != 0.0
+            or not isinstance(ids, tuple)
+            or not isinstance(input_ids, tuple)
+            or len(ids) != completed_count + 1
+            or len(input_ids) != completed_count + 1
+            or len(set(ids)) != len(ids)
+            or len(set(input_ids)) != len(input_ids)
+            or not all(
+                isinstance(value, str) and value and value == value.strip()
+                for value in (*ids, *input_ids)
+            )
+            or state.final_review_batch_id != ids[-1]
+            or state.final_review_input_file_id != input_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        self._validate_final_review_id_sets(state, ids, input_ids)
+        self._validate_next_final_review_checkpoint_parts(
+            run_directory,
+            state,
+            completed_count,
+            ids[:-1],
+            input_ids[:-1],
+        )
+        next_bytes = _bounded_file_bytes(
+            _request_part_path(run_directory, "final-review", completed_count)
+        )
+        binding = self._submission_binding(
+            state=state,
+            stage="final-review",
+            part_index=completed_count,
+            request_bytes=next_bytes,
+        )
+        intent = _read_submission_record(
+            _submission_path(run_directory, "final-review", completed_count, "intent"),
+            completed=False,
+        )
+        completed = _read_submission_record(
+            _submission_path(
+                run_directory, "final-review", completed_count, "completed"
+            ),
+            completed=True,
+        )
+        if (
+            intent is None
+            or completed is None
+            or intent.get("binding") != binding
+            or completed.get("binding") != binding
+            or completed.get("batch_id") != ids[-1]
+            or completed.get("input_file_id") != input_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        if (
+            self._expected_next_final_review_request_sha256 is not None
+            and sha256(next_bytes).hexdigest()
+            != self._expected_next_final_review_request_sha256
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        self._validate_final_review_future_evidence(
+            run_directory,
+            completed_count,
+            part_count,
+        )
+
+    def _validate_next_final_review_checkpoint_parts(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+        completed_count: int,
+        ids: tuple[str, ...],
+        input_ids: tuple[str, ...],
+    ) -> None:
+        for part_index in range(completed_count):
+            request_bytes = _bounded_file_bytes(
+                _request_part_path(run_directory, "final-review", part_index)
+            )
+            intent = _read_submission_record(
+                _submission_path(run_directory, "final-review", part_index, "intent"),
+                completed=False,
+            )
+            completed = _read_submission_record(
+                _submission_path(
+                    run_directory, "final-review", part_index, "completed"
+                ),
+                completed=True,
+            )
+            binding = intent.get("binding") if intent is not None else None
+            expected_binding = self._submission_binding(
+                state=state,
+                stage="final-review",
+                part_index=part_index,
+                request_bytes=request_bytes,
+            )
+            output = run_directory / (
+                f"final-review-part-{part_index + 1:04d}-output.jsonl"
+            )
+            api_errors = run_directory / (
+                f"final-review-part-{part_index + 1:04d}-api-errors.jsonl"
+            )
+            if (
+                intent is None
+                or completed is None
+                or intent.get("status") != "intent"
+                or completed.get("status") not in {"validating", "completed", "failed"}
+                or completed.get("binding") != binding
+                or binding != expected_binding
+                or completed.get("batch_id") != ids[part_index]
+                or completed.get("input_file_id") != input_ids[part_index]
+            ):
+                raise RuntimeError(
+                    SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+                )
+            _bounded_file_bytes(output)
+            if os.path.lexists(api_errors):
+                _bounded_file_bytes(api_errors)
+
+    @staticmethod
+    def _validate_final_review_future_evidence(
+        run_directory: Path,
+        first_uncompleted_part: int,
+        part_count: int,
+    ) -> None:
+        for part_index in range(first_uncompleted_part, part_count):
+            for suffix in ("output.jsonl", "api-errors.jsonl"):
+                if os.path.lexists(
+                    run_directory
+                    / f"final-review-part-{part_index + 1:04d}-{suffix}"
+                ):
+                    raise RuntimeError(
+                        SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+                    )
+
+    def _validate_final_review_all_parts_noop(
+        self,
+        run_directory: Path,
+        state: SpeakerReviewRunState,
+    ) -> None:
+        """Validate a fully observed prefix before returning the identity state."""
+
+        completed_count = state.final_review_completed_part_count
+        if (
+            type(state.final_review_part_count) is not int
+            or state.final_review_part_count <= 0
+            or type(completed_count) is not int
+            or completed_count != state.final_review_part_count
+            or state.actual_final_review_cost_usd != 0.0
+            or not isinstance(state.final_review_batch_ids, tuple)
+            or not isinstance(state.final_review_input_file_ids, tuple)
+            or len(state.final_review_batch_ids) != completed_count
+            or len(state.final_review_input_file_ids) != completed_count
+            or len(set(state.final_review_batch_ids)) != completed_count
+            or len(set(state.final_review_input_file_ids)) != completed_count
+            or not all(
+                isinstance(value, str)
+                and value
+                and value == value.strip()
+                for value in (
+                    *state.final_review_batch_ids,
+                    *state.final_review_input_file_ids,
+                )
+            )
+            or state.final_review_batch_id != state.final_review_batch_ids[-1]
+            or state.final_review_input_file_id != state.final_review_input_file_ids[-1]
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+        self._validate_final_review_id_sets(
+            state,
+            state.final_review_batch_ids,
+            state.final_review_input_file_ids,
+        )
+        self._validate_next_final_review_checkpoint_parts(
+            run_directory,
+            state,
+            completed_count,
+            state.final_review_batch_ids,
+            state.final_review_input_file_ids,
+        )
+        expected_requests = {
+            f"final-review-part-{part + 1:04d}-requests.jsonl"
+            for part in range(completed_count)
+        }
+        expected_journals = {
+            f".final-review-part-{part + 1:04d}-submission-{kind}.json"
+            for part in range(completed_count)
+            for kind in ("intent", "completed")
+        }
+        expected_outputs = {
+            f"final-review-part-{part + 1:04d}-output.jsonl"
+            for part in range(completed_count)
+        }
+        expected_api_errors = {
+            f"final-review-part-{part + 1:04d}-api-errors.jsonl"
+            for part in range(completed_count)
+        }
+        if (
+            {
+                path.name
+                for path in run_directory.glob("final-review-part-*-requests.jsonl")
+            }
+            != expected_requests
+            or {
+                path.name
+                for path in run_directory.glob(
+                    ".final-review-part-*-submission-*.json"
+                )
+            }
+            != expected_journals
+            or {
+                path.name
+                for path in run_directory.glob("final-review-part-*-output.jsonl")
+            }
+            != expected_outputs
+            or any(
+                path.name not in expected_api_errors
+                for path in run_directory.glob("final-review-part-*-api-errors.jsonl")
+            )
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+
+    def _validate_final_review_submission_ids(
+        self,
+        state: SpeakerReviewRunState,
+        submission: BatchSubmission,
+    ) -> None:
+        self._validate_final_review_id_sets(
+            state,
+            (*state.final_review_batch_ids, submission.batch_id),
+            (*state.final_review_input_file_ids, submission.input_file_id),
+        )
+
+    @staticmethod
+    def _validate_final_review_id_sets(
+        state: SpeakerReviewRunState,
+        final_batch_ids: tuple[str, ...],
+        final_input_ids: tuple[str, ...],
+    ) -> None:
+        """Reject duplicate final IDs and collisions with earlier stages."""
+
+        primary_batch_ids = (*state.primary_batch_ids, state.primary_batch_id)
+        adjudication_batch_ids = (
+            *state.adjudication_batch_ids,
+            state.adjudication_batch_id,
+        )
+        primary_input_ids = (*state.primary_input_file_ids, state.primary_input_file_id)
+        adjudication_input_ids = (
+            *state.adjudication_input_file_ids,
+            state.adjudication_input_file_id,
+        )
+        all_stage_batch_ids = tuple(
+            value
+            for value in (*primary_batch_ids, *adjudication_batch_ids)
+            if value is not None
+        )
+        all_stage_input_ids = tuple(
+            value
+            for value in (*primary_input_ids, *adjudication_input_ids)
+            if value is not None
+        )
+        values = (
+            *final_batch_ids,
+            *final_input_ids,
+            *all_stage_batch_ids,
+            *all_stage_input_ids,
+        )
+        if (
+            not isinstance(final_batch_ids, tuple)
+            or not isinstance(final_input_ids, tuple)
+            or not isinstance(state.primary_batch_ids, tuple)
+            or not isinstance(state.primary_input_file_ids, tuple)
+            or not isinstance(state.adjudication_batch_ids, tuple)
+            or not isinstance(state.adjudication_input_file_ids, tuple)
+            or any(
+                value is not None
+                and (not isinstance(value, str) or not value or value != value.strip())
+                for value in values
+            )
+            or len(set(final_batch_ids)) != len(final_batch_ids)
+            or len(set(final_input_ids)) != len(final_input_ids)
+            or set(final_batch_ids).intersection(all_stage_batch_ids)
+            or set(final_input_ids).intersection(all_stage_input_ids)
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
+
     def _validate_next_adjudication_checkpoint(
         self,
         run_directory: Path,
@@ -3458,6 +3913,15 @@ class SpeakerReviewWorkflow:
             raise RuntimeError(
                 SpeakerReviewErrorMessages.BATCH_SUBMISSION_RECONCILIATION_REQUIRED
             )
+        if (
+            stage == "final-review"
+            and part_index > 0
+            and self._expected_next_final_review_request_sha256 is not None
+            and request_hash != self._expected_next_final_review_request_sha256
+        ):
+            raise RuntimeError(
+                SpeakerReviewErrorMessages.NEXT_FINAL_REVIEW_SUBMISSION_RECONCILIATION_REQUIRED
+            )
         binding = {
             "schema_version": SUBMISSION_SCHEMA_VERSION,
             "request_sha256": request_hash,
@@ -3526,6 +3990,25 @@ class SpeakerReviewWorkflow:
             },
         )
         return submission
+
+    def _submission_binding(
+        self,
+        *,
+        state: SpeakerReviewRunState,
+        stage: str,
+        part_index: int,
+        request_bytes: bytes,
+    ) -> dict[str, object]:
+        return {
+            "schema_version": SUBMISSION_SCHEMA_VERSION,
+            "request_sha256": sha256(request_bytes).hexdigest(),
+            "run_id": state.run_id,
+            "stage": stage,
+            "part": part_index + 1,
+            "prompt_version": state.prompt_version,
+            "batch_endpoint": self._configuration.batch_endpoint,
+            "completion_window": self._configuration.batch_completion_window,
+        }
 
     def _required_snapshot(self, batch_id: str | None) -> BatchSnapshot:
         if batch_id is None:
